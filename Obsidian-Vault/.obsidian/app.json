@@ -1,0 +1,9 @@
+{
+  "rightToLeft": true,
+  "strictLineBreaks": false,
+  "showFrontmatter": false,
+  "readableLineLength": true,
+  "alwaysUpdateLinks": true,
+  "newFileLocation": "current",
+  "attachmentFolderPath": "99-Attachments"
+}

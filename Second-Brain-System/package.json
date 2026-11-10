@@ -1,0 +1,15 @@
+{
+  "name": "second-brain-system",
+  "version": "1.0.0",
+  "description": "نظام العقل الثاني والمساعد الذكي والخزنة المشفرة وبوابة الطوارئ العائلية (Second Brain)",
+  "type": "module",
+  "scripts": {
+    "start": "node src/features/dashboard-app/desktop-server.ts",
+    "test": "node tests/run-all-tests.ts",
+    "scan:code": "node src/tools/code-registry-scanner.ts",
+    "mcp": "node src/tools/mcp-memory-server.ts"
+  },
+  "engines": {
+    "node": ">=22.6.0"
+  }
+}

@@ -1,0 +1,15 @@
+{
+	"nodes":[
+		{"id":"node-center","type":"text","text":"# 🛡️ العقل المركزي (Second Brain Core)\nغرفة القيادة الموحدة للمشاريع، الخزنة السرية، ذاكرة الذكاء الاصطناعي، وبوابة الطوارئ العائلية.","x":0,"y":0,"width":380,"height":170,"color":"5"},
+		{"id":"node-profile","type":"file","file":"01-Commander-Profile/About-Commander.md","x":-480,"y":-220,"width":360,"height":220,"color":"4"},
+		{"id":"node-projects","type":"file","file":"02-Projects/Projects-Index.md","x":480,"y":-220,"width":360,"height":220,"color":"6"},
+		{"id":"node-ai-memory","type":"file","file":"03-AI-Shared-Memory/Memory-Index.md","x":-480,"y":160,"width":360,"height":220,"color":"3"},
+		{"id":"node-family-guide","type":"file","file":"04-Family-Emergency-Guide/00-رسالة-ودليل-البداية-لزوجتي.md","x":480,"y":160,"width":360,"height":220,"color":"2"}
+	],
+	"edges":[
+		{"id":"edge-1","fromNode":"node-center","fromSide":"left","toNode":"node-profile","toSide":"right","label":"هوية القائد وقواعده"},
+		{"id":"edge-2","fromNode":"node-center","fromSide":"right","toNode":"node-projects","toSide":"left","label":"رادار المشاريع والملفات الحرجة"},
+		{"id":"edge-3","fromNode":"node-center","fromSide":"left","toNode":"node-ai-memory","toSide":"right","label":"ذاكرة Antigravity & Claude"},
+		{"id":"edge-4","fromNode":"node-center","fromSide":"right","toNode":"node-family-guide","toSide":"left","label":"بروتوكول الطوارئ لزوجتي"}
+	]
+}

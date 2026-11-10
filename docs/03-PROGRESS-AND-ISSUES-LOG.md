@@ -1,0 +1,117 @@
+# 📋 سجل الإنجازات والمشاكل والحلول والمتبقي (Living Progress & Issues Log)
+
+> **تطبيقاً للقانون الخامس (5):** يتم تحديث هذا السجل فوراً بعد كل مرحلة عمل ليوثق بدقة: (ماذا أُنجز، ما هي المشاكل/الأخطاء التي واجهتنا، كيف تم حلها، وماذا تبقى).
+
+---
+
+## 🕒 سجل التحديثات المتسلسل
+
+### [تحديث #1] — تأسيس دستور المشروع وشجرة المعمارية وخطة العمل التنفيذية
+* **التاريخ:** `2026-11-10`
+* **ماذا تم إنجازه:**
+  1. اعتماد وتثبيت الخطة الهندسية الشاملة في [`00-Master-Implementation-Plan.md`](../00-Master-Implementation-Plan.md).
+  2. كتابة وتثبيت الدستور الصارم ذي القوانين الثمانية في [`CONSTITUTION-AND-RULES.md`](../CONSTITUTION-AND-RULES.md).
+  3. تصميم وتوثيق الشجرة المتفرعة الصارمة (`Core` / `Features` / `Shared` / `Tools` / `Tests`) في [`01-ARCHITECTURE-TREE.md`](./01-ARCHITECTURE-TREE.md).
+  4. إعداد خارطة الطريق التنفيذية في [`02-EXECUTION-ROADMAP.md`](./02-EXECUTION-ROADMAP.md).
+* **الأخطاء والمشاكل التي واجهتنا:**
+  * الحاجة إلى ضمان عمل المشروع على المدى الطويل (حتى بعد سنوات أو عند انقطاع الإنترنت في حالات الطوارئ) دون تعطل بسبب تبعيات خارجية (External npm dependencies).
+* **كيف تم حلها:**
+  * تم استثمار قدرة Node.js `v24.11.1` المثبت على الجهاز لتشغيل ملفات TypeScript مباشرة (`NodeNext` + `.ts` imports) بالاعتماد الكامل على مكتبات النواة المدمجة عالية الأمان (`node:crypto`, `node:http`, `node:fs`)، مما جعل النظام يعمل بسرعة فائقة وبدون أي حزمة خارجية قابلة للتلف!
+
+---
+
+### [تحديث #2] — بناء `Obsidian-Vault` المخصص بالكامل وثيم `second-brain-hud.css`
+* **التاريخ:** `2026-11-10`
+* **ماذا تم إنجازه:**
+  1. إنشاء هيكلية `D:\Second Brain\Obsidian-Vault` الكاملة مع تفعيل اتجاه اللغة العربية (RTL) والوضع الداكن تلقائياً في `.obsidian/app.json` و `appearance.json`.
+  2. برمجة ثيم [`second-brain-hud.css`](../Obsidian-Vault/.obsidian/snippets/second-brain-hud.css) المخصص بألوان غرف القيادة السينمائية.
+  3. إنشاء لوحة القيادة [`00-Main-Dashboard.md`](../Obsidian-Vault/00-Command-Center/00-Main-Dashboard.md)، خريطة [`Projects-Neural-Map.canvas`](../Obsidian-Vault/00-Command-Center/Projects-Neural-Map.canvas)، ملف هوية القائد، ودليل الطوارئ الكامل للزوجة من 3 وثائق مفصلة.
+* **الأخطاء والمشاكل التي واجهتنا:**
+  * لا توجد أخطاء؛ تم التأكد من توافق صيغة ملف `.canvas` مع معيار JSON الخاص بـ Obsidian.
+* **كيف تم حلها:**
+  * ضبط الإحداثيات والألوان والروابط القياسية لـ Obsidian Canvas.
+
+---
+
+### [تحديث #3] — بناء طبقات `Shared` و `Core` و `Features` و `Tools` وواجهة سطح المكتب
+* **التاريخ:** `2026-11-10`
+* **ماذا تم إنجازه:**
+  1. **طبقة `src/shared/`:** بناء [`types.ts`](../Second-Brain-System/src/shared/types.ts) و [`file-helpers.ts`](../Second-Brain-System/src/shared/file-helpers.ts).
+  2. **طبقة `src/core/`:** بناء مدير الإعدادات والهوية [`config-manager.ts`](../Second-Brain-System/src/core/config-manager.ts)، محرك التشفير العسكري [`crypto-engine.ts`](../Second-Brain-System/src/core/crypto-engine.ts) (`AES-256-GCM` + `scrypt`)، ومسجل الأحداث [`logger.ts`](../Second-Brain-System/src/core/logger.ts).
+  3. **طبقة `src/features/`:**
+     * الخزنة المزدوجة [`vault-manager.ts`](../Second-Brain-System/src/features/vault/vault-manager.ts) (تفتح بكلمة مرور القائد أو بمفتاح طوارئ الزوجة، وتشفر وتسترجع الملفات الحساسة).
+     * صائد الملفات السرية [`secret-file-hunter.ts`](../Second-Brain-System/src/features/project-indexer/secret-file-hunter.ts) وفاحص المشاريع [`project-scanner.ts`](../Second-Brain-System/src/features/project-indexer/project-scanner.ts) ومزامن Obsidian التلقائي [`obsidian-sync.ts`](../Second-Brain-System/src/features/project-indexer/obsidian-sync.ts).
+     * نظام الذاكرة المشتركة [`shared-memory-service.ts`](../Second-Brain-System/src/features/ai-memory/shared-memory-service.ts) وساحب محادثات Antigravity و Claude Code [`transcript-harvester.ts`](../Second-Brain-System/src/features/ai-memory/transcript-harvester.ts) (قام فعلياً بسحب وأرشفة **37 محادثة حقيقية** من جهازك إلى داخل Obsidian!).
+     * عقل المساعد الذكي [`assistant-engine.ts`](../Second-Brain-System/src/features/assistant/assistant-engine.ts) بوضعيه (القائد + الزوجة).
+     * مولد كتيب الطوارئ المطبوع [`emergency-kit-service.ts`](../Second-Brain-System/src/features/family-emergency/emergency-kit-service.ts) ونظام النسخ الاحتياطي المشفر [`backup-service.ts`](../Second-Brain-System/src/features/family-emergency/backup-service.ts).
+     * خادم وواجهة سطح المكتب التفاعلية [`desktop-server.ts`](../Second-Brain-System/src/features/dashboard-app/desktop-server.ts) و [`ui-renderer.ts`](../Second-Brain-System/src/features/dashboard-app/ui-renderer.ts) مع دعم التحدث والاستماع الصوتي بالعربية.
+  4. **طبقة `src/tools/`:**
+     * خادم الذاكرة الموحد [`mcp-memory-server.ts`](../Second-Brain-System/src/tools/mcp-memory-server.ts).
+     * أداة الفهرسة الآلية للدوال [`code-registry-scanner.ts`](../Second-Brain-System/src/tools/code-registry-scanner.ts).
+* **الأخطاء والمشاكل التي واجهتنا أثناء التنفيذ وكيف تم حلها:**
+  1. **تحدي فتح الخزنة من شخصين مختلفين (أنت وزوجتك) دون كشف كلمة مرورك اليومية:**
+     * **الحل:** ابتكرنا معمارية **"المغلف المزدوج" (`DualEnvelopeVaultFile`)** في `vault-manager.ts`؛ حيث يتم تشفير بيانات الخزنة مرتين بـ `AES-256-GCM`: مرة بكلمتك السرية الرئيسية، ومرة ثانية بـ **مفتاح الطوارئ العائلي (`SB-XXXX-...`)** المطبوع في وثيقة الطوارئ لزوجتك.
+  2. **تحدي استخراج التعليقات العربية (`Hint بالعربي`) متعددة الأسطر في الفهرس الآلي:**
+     * **الحل:** طورنا خوارزمية قراءة الأسطر السابقة لكل دالة في `code-registry-scanner.ts` لدمج كامل الشرح العربي ووضعه في جدول الفهرس مع ربط كل دالة بالملفات التي تستدعيها.
+
+---
+
+### [تحديث #4] — الفحص والتحليل والاختبار الشامل وحفظ الاختبارات الدائمة
+* **التاريخ:** `2026-11-10`
+* **ماذا تم إنجازه:**
+  * كتابة وتنفيذ 5 حزم اختبارات شاملة ودائمة داخل `Second-Brain-System/tests/` (بإجمالي **16 فحصاً دقيقاً** نجحت بنسبة **100%**).
+  * فهرسة جميع دوال النظام (**37 دالة نشطة ومستخدمة 100%**) في [`04-CODE-AND-FUNCTIONS-INDEX.md`](./04-CODE-AND-FUNCTIONS-INDEX.md).
+  * توثيق نتائج الفحص في [`05-TESTS-ARCHIVE-REPORT.md`](./05-TESTS-ARCHIVE-REPORT.md).
+* **ماذا تبقى لنا (للمستقبل والتوسع):**
+  1. قيامك بتجربة الواجهة التفاعلية عبر تشغيل [`Launch-Second-Brain.bat`](../Launch-Second-Brain.bat) وإضافة مشاريعك وحساباتك الفعلية.
+  2. ~~اختيار الاسم النهائي للبرنامج~~ ✅ اعتُمد اسم **Second Brain** (انظر التحديث #6).
+  3. أي ميزات أو إضافات جديدة ترغب بضمها مستقبلاً!
+
+---
+
+### [تحديث #5] — تطوير المحرك الهولوغرامي ثلاثي الأبعاد المتحرك (60FPS 3D Hologram & Sci-Fi HUD)
+* **التاريخ:** `2026-11-11`
+* **ماذا تم إنجازه:**
+  1. بناء محرك الرسوميات المتحركة ثلاثي الأبعاد [`hologram-core-script.ts`](../Second-Brain-System/src/features/dashboard-app/hologram-core-script.ts) بسرعة 60 إطار/ثانية، ويحاكي الصور الثلاث التي أرفقها القائد + وضع رابع يدمجها معاً:
+     * **الوضع المدمج الفائق (`fusion`):** حلقات العقل الثاني البرتقالية والسماوية الدوارة وبداخلها الكرة النقطية الموجية ثلاثية الأبعاد (1850 نقطة فيبوناتشي تتفاعل مع الماوس والصوت).
+     * **الكرة الموجية السماوية (`cyan_wave`):** مطابقة للصورة الثالثة بحركة موجية ثلاثية الأبعاد ناعمة.
+     * **السحابة النقطية العصبية البيضاء (`neural_cloud`):** مطابقة للصورة الثانية.
+     * **حلقات العقل الثاني الهولوغرامية (`hud_rings`):** مطابقة للصورة الأولى بتوهج برتقالي وسماوي ومؤشرات قياس.
+  2. بناء محرك المؤثرات الصوتية المستقبلية (`Web Audio Sci-Fi Synth`) المدمج بدون ملفات خارجية.
+  3. بناء نظام الأنماط الهولوغرامية المقطوعة الزوايا [`hud-styles.ts`](../Second-Brain-System/src/features/dashboard-app/hud-styles.ts) وتحديث [`ui-renderer.ts`](../Second-Brain-System/src/features/dashboard-app/ui-renderer.ts).
+  4. إعادة تشغيل كافة الاختبارات وتحديث فهرس الدوال (`39/39 دالة نشطة ومفهرسة`).
+* **الأخطاء والمشاكل التي واجهتنا وكيف حُلت:**
+  * **المشكلة:** التصميم السابق كان يبدو كلوحة تحكم تقليدية ثابتة دون روح Second Brain السينمائية المتحركة.
+  * **الحل:** فصلنا محرك الـ 3D Canvas والـ Sci-Fi HUD CSS في ملفات معيارية داخل `src/features/dashboard-app/` مع تفاعل حي مع حركة الماوس، النقر، وحالة التحدث/الاستماع للمساعد الذكي.
+
+---
+
+### [تحديث #6] — الدراسة الشاملة، تثبيت خطة الإصلاحات، واعتماد الاسم النهائي Second Brain
+* **التاريخ:** `2026-11-11`
+* **ماذا تم إنجازه:**
+  1. دراسة وتحليل كامل للكود والإعدادات والواجهة، وكشف مشاكل أمنية وأخطاء تفقد البيانات وميزات غير منفّذة فعلياً.
+  2. اعتماد خطة الإصلاحات والتحسينات وتثبيتها في [`06-FIXES-AND-IMPROVEMENTS-PLAN.md`](./06-FIXES-AND-IMPROVEMENTS-PLAN.md).
+  3. **اعتماد الاسم النهائي `Second Brain` (العقل الثاني) بدلاً من الاسم المؤقت السابق (JARVIS / جارفيس)** في كل الكود والإعدادات والوثائق و Obsidian، وإعادة تسمية:
+     * `Jarvis-System/` ← `Second-Brain-System/`
+     * `Launch-JARVIS-Desktop.bat` ← `Launch-Second-Brain.bat`
+     * `02-Projects/Jarvis-Second-Brain/` ← `02-Projects/Second-Brain/`
+     * ثيم Obsidian ← `second-brain-hud.css`، وبادئة مفتاح الطوارئ ← `SB-`، وأدوات MCP ← `second_brain_*`.
+* **الأخطاء والمشاكل التي واجهتنا:**
+  * الاسم القديم كان منتشراً في 60 ملفاً (364 موضعاً)، بعضها معرّفات برمجية وروابط Obsidian ومسارات.
+* **كيف تم حلها:**
+  * أخذ نسخة كاملة قبل التعديل، ثم استبدال مرتّب (الأكثر تحديداً أولاً) مع تجربة دون كتابة، ثم بحث يؤكد صفر نتائج. استُثني أرشيف المحادثات المسحوبة (`Antigravity-Sessions/Antigravity-*.md`) لأنه سجل تاريخي حرفي.
+  4. **عزل الاختبارات:** أصبحت تعمل داخل مجلد مؤقت ([`tests/test-environment.ts`](../Second-Brain-System/tests/test-environment.ts)) عبر متغير البيئة `SECOND_BRAIN_CONFIG_PATH`، فلم تعد تمسح الخزنة أو تكتب في Obsidian. تحقّقنا بمقارنة بصمات SHA-256 قبل وبعد تشغيلين متتاليين (16/16 ناجح).
+* **مشكلة إضافية وحلها:** أداة فهرسة الدوال كانت تحدد مكان الكود من الإعدادات، فتفشل داخل البيئة المعزولة. **الحل:** دالة `getSystemRootDir()` تحسب المسار من موقع الملف نفسه.
+* **ماذا تبقى:** المراحل 1–4 حسب الخطة.
+
+---
+
+### [تحديث #7] — تنظيف آثار الاختبارات القديمة وتوثيق الاختبارات المعزولة
+* **التاريخ:** `2026-11-11`
+* **ماذا تم إنجازه (بموافقة القائد):**
+  1. حذف 6 سجلات ذاكرة تجريبية مكررة (`MEM-*`) من Obsidian وأسطرها من `Memory-Index.md`، وتصفير `ai-memory-store.json`.
+  2. تنظيف `02-Projects/Second-Brain/05-Auto-Changelog.md` من 9 أسطر مكررة.
+  3. حذف 3 نسخ احتياطية تجريبية، وكتيب طوارئ كان يحمل مفتاحاً تجريبياً مكتوباً نصاً مكشوفاً.
+  4. أرشفة الخزنة التجريبية باسم `vault.test-archive.json` (لم تحتوِ يوماً إلا على بيانات اختبار)؛ الخزنة الحقيقية ستُنشأ بالصيغة الآمنة الجديدة في المرحلة 1.
+  5. توثيق بيئة الاختبار المعزولة في شجرة المعمارية وتقرير الاختبارات.
+* **ما لم يُحذف عمداً:** أرشيف محادثات Antigravity الحقيقية (`Antigravity-*.md`)، ووثائق المشروع في `02-Projects/Second-Brain/`، وسجل التشغيل `runtime.log`.

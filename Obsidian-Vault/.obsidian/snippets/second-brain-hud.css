@@ -1,0 +1,95 @@
+/* ============================================================================
+ * ملف: second-brain-hud.css
+ * الوصف (Hint بالعربي): ثيم Second Brain المخصص لبرنامج Obsidian
+ * الهدف: تحويل واجهة Obsidian إلى غرفة قيادة سينمائية بألوان داكنة وتوهج سماوي/ذهبي
+ *        مع دعم كامل للغة العربية (RTL) وتنسيق الجداول والبطاقات والتنبيهات.
+ * ============================================================================ */
+
+/* Hint بالعربي: تعريف متغيرات الألوان الأساسية المستوحاة من شاشات القيادة السينمائية (HUD) */
+.theme-dark {
+  --background-primary: #070b14;
+  --background-primary-alt: #0c1322;
+  --background-secondary: #090f1c;
+  --background-secondary-alt: #050811;
+  --text-normal: #e2f1ff;
+  --text-muted: #8aa6c1;
+  --text-accent: #00e5ff;
+  --text-accent-hover: #5cecff;
+  --interactive-accent: #00b8d4;
+  --interactive-accent-hover: #00e5ff;
+  --sb-cyan: #00e5ff;
+  --sb-gold: #ffb300;
+  --sb-emerald: #00e676;
+  --sb-danger: #ff3d71;
+  --sb-border: rgba(0, 229, 255, 0.25);
+  --sb-glow: 0 0 14px rgba(0, 229, 255, 0.18);
+  --font-text-theme: 'Segoe UI', 'Cairo', 'Tajawal', sans-serif;
+}
+
+/* Hint بالعربي: تنسيق العناوين الرئيسية بحدود مضيئة وتدرج لوني مستقبلي */
+.markdown-rendered h1,
+.HyperMD-header-1 {
+  color: var(--sb-cyan) !important;
+  border-bottom: 1px solid var(--sb-border);
+  padding-bottom: 8px;
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.35);
+  letter-spacing: 0.4px;
+}
+
+.markdown-rendered h2,
+.HyperMD-header-2 {
+  color: var(--sb-gold) !important;
+  border-right: 4px solid var(--sb-gold);
+  padding-right: 10px;
+}
+
+.markdown-rendered h3,
+.HyperMD-header-3 {
+  color: var(--sb-emerald) !important;
+}
+
+/* Hint بالعربي: تصميم الجداول لتبدو مثل شاشات البيانات الرقمية في غرفة القيادة */
+.markdown-rendered table {
+  border-collapse: collapse;
+  width: 100%;
+  background: rgba(12, 19, 34, 0.85);
+  border: 1px solid var(--sb-border);
+  box-shadow: var(--sb-glow);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.markdown-rendered th {
+  background: rgba(0, 229, 255, 0.14) !important;
+  color: var(--sb-cyan) !important;
+  font-weight: 700;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--sb-border);
+}
+
+.markdown-rendered td {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(0, 229, 255, 0.1);
+}
+
+.markdown-rendered tr:hover td {
+  background: rgba(0, 229, 255, 0.06);
+}
+
+/* Hint بالعربي: تنسيق صناديق التنبيهات (Callouts) بإطار متوهج */
+.callout {
+  background-color: rgba(12, 19, 34, 0.9) !important;
+  border: 1px solid var(--sb-border) !important;
+  border-right: 4px solid var(--sb-cyan) !important;
+  box-shadow: var(--sb-glow);
+  border-radius: 8px;
+}
+
+/* Hint بالعربي: تنسيق مقاطع الأكواد البرمجية */
+.markdown-rendered pre,
+.markdown-rendered code {
+  background-color: #050912 !important;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  color: #64ffda;
+  border-radius: 6px;
+}

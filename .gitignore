@@ -1,0 +1,44 @@
+# ============================================================================
+# Second Brain — ما لا يُرفع إلى GitHub أبداً
+# المستودع عام: يُرفع الكود والوثائق فقط، ويبقى كل محتوى شخصي أو سري على الجهاز.
+# ============================================================================
+
+# بيانات النظام: الخزنة المشفرة، النسخ الاحتياطية، كتيب الطوارئ، الذاكرة، والسجلات
+Second-Brain-System/data/
+
+# الإعدادات الحقيقية (تحتوي مسارات المشاريع ودخلها وفواتيرها) — المرفوع هو branding.example.json
+Second-Brain-System/config/branding.json
+Second-Brain-System/config/settings.json
+
+# محتوى Obsidian الشخصي
+Obsidian-Vault/01-Commander-Profile/*
+!Obsidian-Vault/01-Commander-Profile/AI-Coding-Standards.md
+Obsidian-Vault/02-Projects/
+Obsidian-Vault/03-AI-Shared-Memory/Antigravity-Sessions/
+Obsidian-Vault/03-AI-Shared-Memory/Claude-Code-Sessions/
+Obsidian-Vault/04-Family-Emergency-Guide/
+
+# حالة واجهة Obsidian المحلية
+Obsidian-Vault/.obsidian/workspace.json
+Obsidian-Vault/.obsidian/workspace-mobile.json
+Obsidian-Vault/.trash/
+
+# أسرار عامة في أي مكان
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+
+# ملفات النظام والمحررات
+node_modules/
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+*.log

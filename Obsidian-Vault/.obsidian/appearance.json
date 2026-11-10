@@ -1,0 +1,10 @@
+{
+  "baseFontSize": 16,
+  "theme": "obsidian",
+  "cssTheme": "",
+  "enabledCssSnippets": [
+    "second-brain-hud"
+  ],
+  "accentColor": "#00e5ff",
+  "showViewHeader": true
+}
