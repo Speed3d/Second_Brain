@@ -46,6 +46,33 @@ export function writeJsonFileSafe(filePath: string, data: unknown): void {
 }
 
 /**
+ * Hint بالعربي: دالة كتابة ذرّية (Atomic Write): تكتب المحتوى في ملف مؤقت ثم تستبدل به الملف الأصلي
+ *               دفعة واحدة، فلا يتلف الملف أبداً لو انقطعت الكهرباء أثناء الحفظ.
+ *               المدخلات: المسار، المحتوى، وعدد النسخ السابقة المحفوظة (file.bak-1 هي الأحدث).
+ */
+export function writeFileAtomic(filePath: string, content: string | Buffer, keepBackups: number = 0): void {
+  ensureDirectoryExists(path.dirname(filePath));
+
+  if (keepBackups > 0 && fs.existsSync(filePath)) {
+    for (let i = keepBackups - 1; i >= 1; i--) {
+      const older = `${filePath}.bak-${i}`;
+      if (fs.existsSync(older)) fs.renameSync(older, `${filePath}.bak-${i + 1}`);
+    }
+    fs.copyFileSync(filePath, `${filePath}.bak-1`);
+  }
+
+  const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  const fd = fs.openSync(tempPath, 'w');
+  try {
+    fs.writeSync(fd, typeof content === 'string' ? Buffer.from(content, 'utf-8') : content);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.renameSync(tempPath, filePath);
+}
+
+/**
  * Hint بالعربي: دالة لكتابة نص (مثل ملفات Markdown الخاصة بـ Obsidian) بأمان كامل بترميز UTF-8.
  */
 export function writeTextFileSafe(filePath: string, content: string): void {

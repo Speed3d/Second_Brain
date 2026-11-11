@@ -10,7 +10,7 @@
 
 import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
-import { createSecondBrainDesktopServer } from '../src/features/dashboard-app/desktop-server.ts';
+import { startSecondBrainDesktopServer } from '../src/features/dashboard-app/desktop-server.ts';
 import { scanAndGenerateCodeRegistry } from '../src/tools/code-registry-scanner.ts';
 import { handleMcpJsonRpcRequest } from '../src/tools/mcp-memory-server.ts';
 
@@ -38,10 +38,10 @@ export async function runToolsAndDashboardTests(): Promise<string[]> {
   passedChecks.push('اختبار خادم الذاكرة الموحد (MCP Memory Server) لجميع الأوامر بنجاح.');
 
   // 2. اختبار خادم واجهة سطح المكتب (HUD + Wife Mode HTTP Server)
-  const server = createSecondBrainDesktopServer();
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+  const server = await startSecondBrainDesktopServer(0);
   const address = server.address();
-  const port = typeof address === 'object' && address ? address.port : 0;
+  assert.ok(typeof address === 'object' && address && address.address === '127.0.0.1', 'يجب أن يستمع الخادم على 127.0.0.1 فقط');
+  const port = address.port;
 
   const healthRes = await fetch(`http://127.0.0.1:${port}/api/health`);
   const healthJson = (await healthRes.json()) as { status: string };
@@ -54,7 +54,7 @@ export async function runToolsAndDashboardTests(): Promise<string[]> {
   assert.ok(homeHtml.includes('وضع العائلة والطوارئ'), 'يجب أن تحتوي الواجهة على وضع العائلة للزوجة');
 
   await new Promise<void>((resolve) => server.close(() => resolve()));
-  passedChecks.push('اختبار خادم وواجهة سطح المكتب (HUD + Wife Mode) عبر اتصال HTTP حقيقي بنجاح.');
+  passedChecks.push('اختبار خادم وواجهة سطح المكتب (الاستماع على 127.0.0.1 فقط + وضع القائد + وضع العائلة) عبر HTTP حقيقي بنجاح.');
 
   // 3. اختبار أداة الفهرسة الآلية للدوال والأكواد (تطبيقاً للقانون السابع)
   const registryResult = scanAndGenerateCodeRegistry();

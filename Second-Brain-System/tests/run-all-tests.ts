@@ -2,7 +2,7 @@
  * ============================================================================
  * الملف: tests/run-all-tests.ts
  * القسم: Tests (المشغل الشامل للاختبارات الدائمة — القانون الثامن)
- * Hint بالعربي: يقوم هذا الملف بتشغيل جميع حزم الاختبارات الخمس في المشروع،
+ * Hint بالعربي: يقوم هذا الملف بتشغيل جميع حزم الاختبارات في المشروع،
  *               ويتحقق من عمل كل دالة وميزة بنسبة 100%، ثم يولد تقريراً مفصلاً
  *               ودائماً في docs/05-TESTS-ARCHIVE-REPORT.md ويحدث فهرس الأكواد.
  * ============================================================================
@@ -17,6 +17,7 @@ import { runProjectIndexerTests } from './02-project-indexer.test.ts';
 import { runAISharedMemoryTests } from './03-ai-shared-memory.test.ts';
 import { runFamilyEmergencyTests } from './04-family-emergency.test.ts';
 import { runToolsAndDashboardTests } from './05-tools-and-dashboard.test.ts';
+import { runSecurityTests } from './06-security.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -52,6 +53,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '5. اختبارات خادم MCP وفهرس الدوال الآلي وواجهة سطح المكتب',
       file: 'tests/05-tools-and-dashboard.test.ts',
       runner: runToolsAndDashboardTests,
+    },
+    {
+      name: '6. اختبارات الأمان وسلامة البيانات (الخزنة v2، الجلسات، CSRF، XSS، النسخ والاستعادة)',
+      file: 'tests/06-security.test.ts',
+      runner: runSecurityTests,
     },
   ];
 
@@ -93,7 +99,7 @@ export async function executeAllSystemTests(): Promise<void> {
 
 ---
 
-## 📋 تفاصيل نتائج حزم الاختبار الخمس
+## 📋 تفاصيل نتائج حزم الاختبار
 
 ${reportSections.join('\n\n---\n\n')}
 

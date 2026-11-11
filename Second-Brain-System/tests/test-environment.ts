@@ -13,6 +13,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { SystemBrandingConfig, WatchedProjectConfig } from '../src/shared/types.ts';
 import { loadSystemConfig } from '../src/core/config-manager.ts';
+import { createVault, unlockVault, vaultExists, type UnlockedVault } from '../src/features/vault/vault-manager.ts';
 
 /**
  * Hint بالعربي: معلومات بيئة الاختبار المعزولة التي تُعاد للمشغل الرئيسي.
@@ -92,11 +93,30 @@ export function setupIsolatedTestEnvironment(): IsolatedTestEnvironment {
     rootDir,
     fixtureProject,
     restore: () => {
+      cachedTestEmergencyKey = null;
       if (previousEnv === undefined) delete process.env.SECOND_BRAIN_CONFIG_PATH;
       else process.env.SECOND_BRAIN_CONFIG_PATH = previousEnv;
       fs.rmSync(rootDir, { recursive: true, force: true });
     },
   };
+}
+
+/** كلمة مرور الخزنة التجريبية (بيئة الاختبار فقط) */
+export const TEST_MASTER_PASSWORD = 'Test-Only-Master-Pass-2026';
+let cachedTestEmergencyKey: string | null = null;
+
+/**
+ * Hint بالعربي: دالة إنشاء خزنة الاختبار المشتركة مرة واحدة (أو فتحها إن كانت موجودة).
+ *               المخرجات: الخزنة مفتوحة بكلمة المرور، ومفتاح الطوارئ الخاص بها.
+ */
+export function ensureTestVault(): { vault: UnlockedVault; emergencyKey: string; masterPassword: string } {
+  if (!vaultExists()) {
+    const created = createVault(TEST_MASTER_PASSWORD);
+    cachedTestEmergencyKey = created.emergencyRecoveryKey;
+    return { vault: created.vault, emergencyKey: created.emergencyRecoveryKey, masterPassword: TEST_MASTER_PASSWORD };
+  }
+  if (!cachedTestEmergencyKey) throw new Error('خزنة الاختبار موجودة لكن مفتاح الطوارئ غير معروف.');
+  return { vault: unlockVault(TEST_MASTER_PASSWORD), emergencyKey: cachedTestEmergencyKey, masterPassword: TEST_MASTER_PASSWORD };
 }
 
 /**

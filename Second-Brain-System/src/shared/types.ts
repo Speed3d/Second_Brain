@@ -42,6 +42,12 @@ export interface SystemBrandingConfig {
     voiceLang: string;
   };
   watchedProjects: WatchedProjectConfig[];
+  /** إعدادات الأمان (اختيارية؛ لها قيم افتراضية آمنة) */
+  security?: {
+    autoLockMinutes?: number;
+    backupRetention?: number;
+    extraBackupDir?: string;
+  };
 }
 
 /**
@@ -67,6 +73,44 @@ export interface EncryptedPayload {
   authTagHex: string;
   cipherTextHex: string;
   createdAt: string;
+  /** معاملات اشتقاق المفتاح المستخدمة (تُحفظ لتسهيل الترقية مستقبلاً) */
+  kdf?: KdfParams;
+}
+
+/**
+ * Hint بالعربي: معاملات خوارزمية scrypt لاشتقاق المفتاح من كلمة المرور.
+ */
+export interface KdfParams {
+  algorithm: 'scrypt';
+  N: number;
+  r: number;
+  p: number;
+}
+
+/**
+ * Hint بالعربي: بيانات مشفرة بمفتاح جاهز (بدون اشتقاق من كلمة مرور).
+ */
+export interface SealedData {
+  ivHex: string;
+  authTagHex: string;
+  cipherTextHex: string;
+}
+
+/**
+ * Hint بالعربي: مفتاح البيانات (DEK) مغلَّفاً (مشفراً) بمفتاح مشتق من كلمة مرور أو مفتاح الطوارئ.
+ */
+export interface WrappedKey extends SealedData {
+  kdf: KdfParams;
+  saltHex: string;
+}
+
+/**
+ * Hint بالعربي: نسخة سابقة من ملف حساس محفوظة داخل الخزنة.
+ */
+export interface CriticalFileVersion {
+  sha256: string;
+  savedAt: string;
+  contentBase64: string;
 }
 
 /**
@@ -82,7 +126,13 @@ export interface VaultSecretItem {
   notesForCommanderAr: string;
   notesForWifeAr: string;
   originalFilePath?: string;
+  url?: string;
+  tags?: string[];
+  createdAt?: string;
   updatedAt: string;
+  /** للملفات الحساسة: بصمة المحتوى الحالي، والنسخ السابقة (آخر 5) */
+  contentSha256?: string;
+  fileVersions?: CriticalFileVersion[];
 }
 
 /**
@@ -113,6 +163,8 @@ export interface CriticalFileEntry {
   reasonAr: string;
   sizeBytes: number;
   vaultSecretId?: string;
+  /** حالة التأمين: مكتشف فقط، مؤمَّن الآن، مؤمَّن سابقاً دون تغيير، أو أكبر من الحد المسموح */
+  securedState?: 'detected' | 'secured' | 'unchanged' | 'too_large';
 }
 
 /**

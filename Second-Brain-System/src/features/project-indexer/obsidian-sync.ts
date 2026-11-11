@@ -10,7 +10,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ProjectScanReport, WatchedProjectConfig } from '../../shared/types.ts';
+import type { CriticalFileEntry, ProjectScanReport, WatchedProjectConfig } from '../../shared/types.ts';
 import { ensureDirectoryExists, writeTextFileSafe } from '../../shared/file-helpers.ts';
 import { loadSystemConfig } from '../../core/config-manager.ts';
 import { logSystemInfo } from '../../core/logger.ts';
@@ -87,7 +87,7 @@ ${scanReport.updateCommands.join('\n')}
       ? scanReport.criticalFilesFound
           .map(
             (c) =>
-              `| \`${c.relativePath}\` | ${c.reasonAr} | \`${c.vaultSecretId ?? 'جاهز للتأمين في الخزنة'}\` |`
+              `| \`${c.relativePath}\` | ${c.reasonAr} | ${describeSecuredState(c.securedState, c.vaultSecretId)} |`
           )
           .join('\n')
       : '| لا توجد ملفات سرية مكشوفة حالياً | تم الفحص بنجاح | — |';
@@ -96,9 +96,9 @@ ${scanReport.updateCommands.join('\n')}
 
 > [!CAUTION]
 > **تحذير أمني صارم:**  
-> الملفات المذكورة في هذا الجدول هي أهم ملفات المشروع ولا يتم رفعها على GitHub. قام نظام العقل الثاني بأخذ نسخة مشفرة منها بـ \`AES-256\` داخل الخزنة السرية لاسترجاعها عند الحاجة.
+> الملفات المذكورة في هذا الجدول هي أهم ملفات المشروع ولا يتم رفعها على GitHub. تُشفَّر نسخة منها داخل الخزنة عند إعادة الفحص والخزنة مفتوحة؛ الملف المكتوب بجانبه "مكتشَف فقط" لم يُؤمَّن بعد.
 
-| مسار الملف داخل المشروع | لماذا هذا الملف خطير ولا يعوض؟ | معرف النسخة المشفرة في الخزنة |
+| مسار الملف داخل المشروع | لماذا هذا الملف خطير ولا يعوض؟ | حالة التأمين في الخزنة |
 | :--- | :--- | :--- |
 ${critRows}
 `;
@@ -116,7 +116,7 @@ ${critRows}
   // 5. ملف سجل التغييرات التلقائي (05-Auto-Changelog.md)
   const changelogPath = path.join(projectFolder, '05-Auto-Changelog.md');
   const existingChangelog = fs.existsSync(changelogPath) ? fs.readFileSync(changelogPath, 'utf-8') : `# 🕒 سجل التحديثات التلقائي: ${projectConfig.name}\n\n`;
-  const newEntry = `* **[${scanReport.scannedAt}]** فحص وتحديث تلقائي للمشروع — التقنيات: (${scanReport.detectedStack.join(', ')}) — عدد الملفات الحساسة المؤمنة: (${scanReport.criticalFilesFound.length}).\n`;
+  const newEntry = `* **[${scanReport.scannedAt}]** فحص وتحديث تلقائي للمشروع — التقنيات: (${scanReport.detectedStack.join(', ')}) — الملفات الحساسة: (${scanReport.criticalFilesFound.length}) منها مؤمَّنة: (${countSecuredFiles(scanReport)}).\n`;
   writeTextFileSafe(changelogPath, existingChangelog + newEntry);
 
   // 6. ملف دليل الزوجة المبسط (06-Wife-Guide.md)
@@ -131,11 +131,27 @@ ${projectConfig.wifeSummaryAr}
 
 ## 3. ماذا تفعلين إذا احتاج هذا المشروع إلى تحديث أو إصلاح؟
 1. لا تعطي أي مبرمج كلمة المرور الرئيسية للإيميل أو حسابات المتاجر.
-2. هذا المشروع يحتوي على **(${scanReport.criticalFilesFound.length}) ملفات حساسة** مؤمنة داخل خزنة برنامج العقل الثاني.
+2. هذا المشروع يحتوي على **(${scanReport.criticalFilesFound.length}) ملفات حساسة**، منها **(${countSecuredFiles(scanReport)})** محفوظة بأمان داخل خزنة برنامج العقل الثاني.
 3. يمكنكِ فتح **وضع العائلة (Wife Mode)** في برنامج العقل الثاني وسؤال المساعد الذكي: *"كيف أتعامل مع مشروع ${projectConfig.name}؟"* وسيشرح لكِ كل خطوة بالتفصيل.
 `;
   writeTextFileSafe(path.join(projectFolder, '06-Wife-Guide.md'), wifeGuideMd);
 
   logSystemInfo('ObsidianSync', `تم توليد وتحديث ملفات Obsidian الستة للمشروع: ${projectConfig.name}`);
   return projectFolder;
+}
+
+/**
+ * Hint بالعربي: دالة وصف حالة تأمين الملف الحساس بالعربية لجدول Obsidian.
+ */
+export function describeSecuredState(state: CriticalFileEntry['securedState'], vaultSecretId?: string): string {
+  if ((state === 'secured' || state === 'unchanged') && vaultSecretId) return `🔐 مؤمَّن (\`${vaultSecretId}\`)`;
+  if (state === 'too_large') return '⚠️ أكبر من الحد المسموح للتأمين';
+  return '👁️ مكتشَف فقط (افتح الخزنة ثم أعد الفحص لتأمينه)';
+}
+
+/**
+ * Hint بالعربي: دالة حساب عدد الملفات الحساسة المؤمَّنة فعلاً داخل الخزنة في تقرير الفحص.
+ */
+export function countSecuredFiles(report: ProjectScanReport): number {
+  return report.criticalFilesFound.filter((c) => c.securedState === 'secured' || c.securedState === 'unchanged').length;
 }

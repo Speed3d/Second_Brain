@@ -18,7 +18,7 @@
 export function getSecondBrainHologramClientScript(): string {
   return `
     // ==================== محرك المؤثرات الصوتية المستقبلية (Web Audio Sci-Fi Synth) ====================
-    let soundFxEnabled = true;
+    let soundFxEnabled = false; // صامتة افتراضياً؛ تُفعَّل من زر المؤثرات
     let audioCtx = null;
 
     function playSciFiTone(freqStart = 680, freqEnd = 1120, duration = 0.08, type = 'sine') {

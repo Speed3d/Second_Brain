@@ -60,12 +60,24 @@
     │   │   │   ├── 📄 emergency-kit-service.ts
     │   │   │   └── 📄 backup-service.ts
     │   │   └── 📁 dashboard-app\               # تطبيق وواجهة سطح المكتب (HUD + Wife Mode)
-    │   │       ├── 📄 desktop-server.ts
-    │   │       └── 📄 ui-renderer.ts
+    │   │       ├── 📄 desktop-server.ts        # موجّه صغير على 127.0.0.1 فقط + طبقات الحماية
+    │   │       ├── 📄 http-utils.ts            # الرد، حد حجم الطلب، الكوكيز، فحص Host و CSRF، رؤوس الأمان
+    │   │       ├── 📄 session-manager.ts       # جلسة الخزنة في الذاكرة + القفل التلقائي + تأخير المحاولات
+    │   │       ├── 📁 routes\                  # معالجات المسارات حسب الميزة
+    │   │       │   ├── 📄 vault-routes.ts      # إنشاء/فتح/قفل الخزنة وإدارة الأسرار وكلمة المرور ومفتاح الطوارئ
+    │   │       │   ├── 📄 project-routes.ts    # إضافة مشروع وإعادة الفحص
+    │   │       │   ├── 📄 memory-routes.ts     # سحب المحادثات
+    │   │       │   ├── 📄 assistant-routes.ts  # المساعد الذكي
+    │   │       │   └── 📄 emergency-routes.ts  # كتيب الطوارئ والنسخ الاحتياطي والاستعادة
+    │   │       ├── 📄 ui-renderer.ts           # بناء الصفحة (كل القيم تمر عبر escapeHtml)
+    │   │       ├── 📄 vault-client-script.ts   # سكربت الخزنة والطوارئ في المتصفح (textContent فقط)
+    │   │       ├── 📄 hud-styles.ts
+    │   │       └── 📄 hologram-core-script.ts
     │   │
     │   ├── 📁 shared\                          # [3. SHARED] الأنواع والدوال المشتركة
     │   │   ├── 📄 types.ts                     # جميع تعريفات الأنواع والواجهات البرمجية
-    │   │   └── 📄 file-helpers.ts              # دوال التعامل الآمن مع الملفات والمجلدات
+    │   │   ├── 📄 file-helpers.ts              # دوال الملفات الآمنة + الكتابة الذرّية مع النسخ السابقة
+    │   │   └── 📄 html-helpers.ts              # escapeHtml للحماية من حقن الأكواد (XSS)
     │   │
     │   └── 📁 tools\                           # [4. TOOLS] الأدوات المستقلة والخوادم المساعدة
     │       ├── 📄 mcp-memory-server.ts         # خادم MCP لربط Antigravity و Claude Code بالذاكرة
@@ -78,7 +90,8 @@
         ├── 📄 02-project-indexer.test.ts       # اختبار تشريح المشاريع وصيد الملفات السرية وتحديث Obsidian
         ├── 📄 03-ai-shared-memory.test.ts      # اختبار الذاكرة المشتركة وسحب سجلات Antigravity و Claude
         ├── 📄 04-family-emergency.test.ts      # اختبار بوابة زوجتك، كتيب الطوارئ، والنسخ الاحتياطي المشفر
-        └── 📄 05-tools-and-dashboard.test.ts   # اختبار فهرس الأكواد، خادم MCP، وواجهة سطح المكتب
+        ├── 📄 05-tools-and-dashboard.test.ts   # اختبار فهرس الأكواد، خادم MCP، وواجهة سطح المكتب
+        └── 📄 06-security.test.ts              # اختبارات الأمان: الخزنة v2، الجلسات، CSRF، XSS، النسخ والاستعادة
 ```
 
 ---

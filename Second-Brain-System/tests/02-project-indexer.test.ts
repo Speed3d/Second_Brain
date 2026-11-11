@@ -14,6 +14,7 @@ import * as path from 'node:path';
 import { loadSystemConfig, registerWatchedProject } from '../src/core/config-manager.ts';
 import { syncProjectToObsidianVault } from '../src/features/project-indexer/obsidian-sync.ts';
 import { scanAndAnalyzeProject } from '../src/features/project-indexer/project-scanner.ts';
+import { ensureTestVault } from './test-environment.ts';
 
 /**
  * Hint بالعربي: دالة تشغيل اختبارات فحص المشاريع وصيد الملفات الحساسة ومزامنة Obsidian.
@@ -27,11 +28,13 @@ export async function runProjectIndexerTests(): Promise<string[]> {
   registerWatchedProject(mainProject);
   passedChecks.push('اختبار تسجيل المشروع في قائمة المراقبة التلقائية بنجاح.');
 
-  // 2. اختبار التشريح التلقائي واكتشاف التقنيات والملفات الحساسة
-  const scanReport = scanAndAnalyzeProject(mainProject, {
-    masterPassword: 'Commander-Master-Pass-999',
-    emergencyRecoveryKey: 'SB-TEST-1111-2222-3333',
-  });
+  // 2. بدون خزنة مفتوحة: الملفات "مكتشفة" فقط ولا يُدّعى أنها مؤمَّنة
+  const detectedOnly = scanAndAnalyzeProject(mainProject);
+  assert.ok(detectedOnly.criticalFilesFound.every((f) => f.securedState === 'detected' && !f.vaultSecretId));
+
+  // 3. مع خزنة مفتوحة: التشريح واكتشاف التقنيات وتأمين الملفات الحساسة فعلاً
+  const { vault } = ensureTestVault();
+  const scanReport = scanAndAnalyzeProject(mainProject, vault);
   assert.ok(scanReport.detectedStack.includes('TypeScript'), 'يجب أن يكتشف تقنية TypeScript في المشروع');
   assert.ok(scanReport.runCommands.length > 0, 'يجب أن يستخرج أوامر التشغيل من package.json');
   assert.ok(
@@ -39,14 +42,18 @@ export async function runProjectIndexerTests(): Promise<string[]> {
     'يجب أن يصطاد ملف الأسرار الحساس (.env) في المشروع التجريبي'
   );
   assert.ok(
-    scanReport.criticalFilesFound.every((f) => typeof f.vaultSecretId === 'string'),
+    scanReport.criticalFilesFound.every((f) => typeof f.vaultSecretId === 'string' && f.securedState === 'secured'),
     'يجب أن يُشفَّر كل ملف حساس مكتشف داخل الخزنة'
   );
+  assert.ok(
+    scanAndAnalyzeProject(mainProject, vault).criticalFilesFound.every((f) => f.securedState === 'unchanged'),
+    'إعادة الفحص دون تغيير لا تُنشئ نسخة جديدة'
+  );
   passedChecks.push(
-    `اختبار تشريح المشروع (${scanReport.projectName}) واكتشاف (${scanReport.criticalFilesFound.length}) ملف حساس وتأمينه في الخزنة.`
+    `اختبار تشريح المشروع (${scanReport.projectName}): بدون خزنة "مكتشف فقط"، ومع الخزنة تأمين (${scanReport.criticalFilesFound.length}) ملف فعلياً دون تكرار عند إعادة الفحص.`
   );
 
-  // 3. اختبار توليد وتحديث الملفات الـ 6 داخل Obsidian-Vault
+  // 4. اختبار توليد وتحديث الملفات الـ 6 داخل Obsidian-Vault
   const obsidianProjectDir = syncProjectToObsidianVault(mainProject, scanReport);
   const expectedFiles = [
     '01-Overview.md',

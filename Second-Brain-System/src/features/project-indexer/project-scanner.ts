@@ -13,17 +13,15 @@ import * as path from 'node:path';
 import type { ProjectScanReport, WatchedProjectConfig } from '../../shared/types.ts';
 import { formatTimestampIso, readJsonFileSafe } from '../../shared/file-helpers.ts';
 import { huntCriticalProjectFiles } from './secret-file-hunter.ts';
-import { backupCriticalFileToVault } from '../vault/vault-manager.ts';
-import { logSystemInfo } from '../../core/logger.ts';
+import { backupCriticalFileToVault, MAX_CRITICAL_FILE_BYTES, type UnlockedVault } from '../vault/vault-manager.ts';
+import { logSystemError, logSystemInfo } from '../../core/logger.ts';
 
 /**
  * Hint بالعربي: دالة لفحص مشروع كامل واستخراج تقرير شامل عن طريقة تشغيله وتحديثه وملفاته المهمة.
- * وإذا تم تمرير بيانات الخزنة، تقوم بتشفير وتأمين الملفات الحساسة تلقائياً!
+ *               إذا مُرِّرت خزنة مفتوحة، تُشفَّر الملفات الحساسة فعلاً داخلها (مع نسخ تاريخية عند التغيّر)،
+ *               وإلا تبقى في حالة "مكتشَف" فقط ولا يُدّعى أنها مؤمَّنة.
  */
-export function scanAndAnalyzeProject(
-  projectConfig: WatchedProjectConfig,
-  vaultCredentials?: { masterPassword: string; emergencyRecoveryKey: string; customVaultFilePath?: string }
-): ProjectScanReport {
+export function scanAndAnalyzeProject(projectConfig: WatchedProjectConfig, unlockedVault?: UnlockedVault): ProjectScanReport {
   const projectPath = projectConfig.path;
   const detectedStack: string[] = [];
   const runCommands: string[] = [];
@@ -94,22 +92,24 @@ export function scanAndAnalyzeProject(
   // 6. صيد الملفات السرية الحرجة التي لا تعوض
   const criticalFilesFound = huntCriticalProjectFiles(projectPath);
 
-  // 7. إذا توفرت مفاتيح الخزنة، نقوم بتأمين كل ملف حساس داخل الخزنة المشفرة تلقائياً
-  if (vaultCredentials) {
-    for (const critFile of criticalFilesFound) {
-      try {
-        const secretId = backupCriticalFileToVault(
-          projectConfig.id,
-          critFile.absolutePath,
-          critFile.reasonAr,
-          vaultCredentials.masterPassword,
-          vaultCredentials.emergencyRecoveryKey,
-          vaultCredentials.customVaultFilePath
-        );
-        critFile.vaultSecretId = secretId;
-      } catch {
-        // استمرار الفحص حتى لو تعذر قراءة ملف واحد
-      }
+  // 7. التأمين الفعلي داخل الخزنة إذا كانت مفتوحة
+  for (const critFile of criticalFilesFound) {
+    if (critFile.sizeBytes > MAX_CRITICAL_FILE_BYTES) {
+      critFile.securedState = 'too_large';
+      continue;
+    }
+    if (!unlockedVault) continue;
+    try {
+      const { secretId, changed } = backupCriticalFileToVault(
+        unlockedVault,
+        projectConfig.id,
+        critFile.absolutePath,
+        critFile.reasonAr
+      );
+      critFile.vaultSecretId = secretId;
+      critFile.securedState = changed ? 'secured' : 'unchanged';
+    } catch (err) {
+      logSystemError('ProjectScanner', `تعذر تأمين الملف الحساس: ${critFile.relativePath}`, err);
     }
   }
 

@@ -16,9 +16,13 @@ import { listFilesRecursive } from '../../shared/file-helpers.ts';
 /**
  * Hint بالعربي: قائمة القواعد التي تحدد ما إذا كان الملف حساساً ولا يمكن تعويضه مع شرح أهميته بالعربية.
  */
+/** ملفات قوالب لا تحتوي أسراراً حقيقية فلا تُعد حساسة */
+const TEMPLATE_ENV_SUFFIXES = ['.example', '.sample', '.template', '.dist'];
+
 const CRITICAL_PATTERNS: Array<{ test: (fileName: string) => boolean; reasonAr: string }> = [
   {
-    test: (name) => name === '.env' || name.startsWith('.env.'),
+    test: (name) =>
+      (name === '.env' || name.startsWith('.env.')) && !TEMPLATE_ENV_SUFFIXES.some((suffix) => name.endsWith(suffix)),
     reasonAr: 'ملف متغيرات البيئة والأسرار (.env) — يحتوي على مفاتيح الربط وروابط قواعد البيانات السرية غير المرفوعة على Git.',
   },
   {
@@ -34,13 +38,14 @@ const CRITICAL_PATTERNS: Array<{ test: (fileName: string) => boolean; reasonAr: 
     reasonAr: 'مفتاح تشفير أو شهادة اتصال بالسيرفر (SSH / SSL Private Key) — لا يمكن الدخول للسيرفر بدونه.',
   },
   {
-    test: (name) => name === 'branding.json' || name.endsWith('.secret.json') || name === 'secrets.json',
-    reasonAr: 'ملف إعدادات وهوية مركزية أو أسرار خاصة بالمشروع.',
+    test: (name) => name.endsWith('.secret.json') || name === 'secrets.json',
+    reasonAr: 'ملف أسرار خاص بالمشروع.',
   },
 ];
 
 /**
  * Hint بالعربي: دالة لفحص مجلد مشروع كامل واستخراج كافة الملفات الحساسة التي تحتاج تأميناً في الخزنة.
+ *               الروابط الرمزية (symlinks) لا تُتبع لأن listFilesRecursive تتجاهلها.
  */
 export function huntCriticalProjectFiles(projectRootPath: string): CriticalFileEntry[] {
   const discovered: CriticalFileEntry[] = [];
@@ -59,6 +64,7 @@ export function huntCriticalProjectFiles(projectRootPath: string): CriticalFileE
           absolutePath: filePath,
           reasonAr: rule.reasonAr,
           sizeBytes: stats.size,
+          securedState: 'detected',
         });
         break;
       }
