@@ -5,11 +5,13 @@
  * Hint بالعربي: - سؤال المساعد برد كامل (/api/assistant) أو برد متدفق SSE (/api/assistant/stream).
  *               - حالة المزوّدين (مهيّأ / متاح) لعرضها في الواجهة.
  *               - حفظ مفاتيح Claude و Gemini داخل الخزنة المشفرة (للقائد فقط).
+ *               - اختبار الاتصال بمزوّد واحد برسالة قصيرة ثابتة (/api/assistant/test).
  * ============================================================================
  */
 
 import { loadSystemConfig } from '../../../core/config-manager.ts';
 import { askSecondBrainAssistant } from '../../assistant/assistant-engine.ts';
+import { testProviderConnection, TESTABLE_PROVIDERS } from '../../assistant/provider-tester.ts';
 import { buildProviders, PROVIDER_KEY_SECRET_IDS, resolveProviderKeys } from '../../assistant/providers/provider-registry.ts';
 import { deleteVaultSecret, upsertVaultSecret } from '../../vault/vault-manager.ts';
 import { HttpError, readString, sendJson, type RouteContext, type RouteDefinition } from '../http-utils.ts';
@@ -97,6 +99,16 @@ export function getAssistantRoutes(): RouteDefinition[] {
           })
         );
         sendJson(res, 200, { vaultUnlocked: Boolean(session), providers: list });
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/assistant/test',
+      commanderOnly: true,
+      handler: async ({ res, body, session }) => {
+        const providerId = String(body.provider ?? '');
+        if (!TESTABLE_PROVIDERS.includes(providerId as never)) throw new HttpError(400, 'المزوّد يجب أن يكون claude أو gemini أو ollama.');
+        sendJson(res, 200, await testProviderConnection(providerId as (typeof TESTABLE_PROVIDERS)[number], session?.vault));
       },
     },
     {

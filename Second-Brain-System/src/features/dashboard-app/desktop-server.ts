@@ -29,6 +29,7 @@ import { getAssistantRoutes } from './routes/assistant-routes.ts';
 import { getEmergencyRoutes } from './routes/emergency-routes.ts';
 import { getMemoryRoutes } from './routes/memory-routes.ts';
 import { getProjectRoutes } from './routes/project-routes.ts';
+import { getMaintenanceRoutes } from './routes/maintenance-routes.ts';
 import { getVaultRoutes } from './routes/vault-routes.ts';
 import { getStateRoutes } from './routes/state-routes.ts';
 import { getVaultSession, peekActiveVault } from './session-manager.ts';
@@ -55,6 +56,7 @@ export function buildRouteTable(): RouteDefinition[] {
     ...getMemoryRoutes(),
     ...getAssistantRoutes(),
     ...getEmergencyRoutes(),
+    ...getMaintenanceRoutes(),
   ];
 }
 

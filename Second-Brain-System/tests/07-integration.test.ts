@@ -31,8 +31,8 @@ import { rescanAllProjects, startProjectWatcher } from '../src/features/project-
 import { startSecondBrainDesktopServer } from '../src/features/dashboard-app/desktop-server.ts';
 import { handleMcpJsonRpcRequest, processMcpLine, SUPPORTED_MCP_VERSIONS } from '../src/tools/mcp-memory-server.ts';
 import { resetSessionStateForTests } from '../src/features/dashboard-app/session-manager.ts';
-import { postJson } from './06-security.test.ts';
-import { FAKE_SECRETS, TEST_MASTER_PASSWORD, writeFixtureFile } from './test-environment.ts';
+import { postJson, rawRequest } from './06-security.test.ts';
+import { ensureTestVault, FAKE_SECRETS, TEST_MASTER_PASSWORD, writeFixtureFile } from './test-environment.ts';
 
 const SAMPLE_REQUEST: ProviderChatRequest = {
   system: 'تعليمات اختبار',
@@ -368,23 +368,39 @@ export async function runIntegrationTests(): Promise<string[]> {
     const providers = (await providersRes.json()) as { providers: Array<{ id: string; available: boolean }> };
     assert.deepEqual(providers.providers.map((p) => [p.id, p.available]), [['local', true]]);
 
-    // الإعدادات: القراءة متاحة، والحفظ يتطلب جلسة القائد بعد إنشاء الخزنة، مع تحقق صارم من القيم
-    const settings = (await (await fetch(`http://127.0.0.1:${port}/api/settings`)).json()) as Record<string, any>;
+    // الإعدادات: القراءة والحفظ تتطلبان إعادة إدخال كلمة المرور الرئيسية (مفتاح الطوارئ لا يكفي)
+    resetSessionStateForTests();
+    assert.equal((await fetch(`http://127.0.0.1:${port}/api/settings`)).status, 401, 'قراءة الإعدادات دون كلمة المرور مرفوضة');
+    const login = await postJson(port, '/api/vault/unlock', { key: TEST_MASTER_PASSWORD });
+    const cmdCookie = String(login.headers['set-cookie'] ?? '').split(';')[0];
+    const getSettings = () => rawRequest(port, { path: '/api/settings', headers: { Cookie: cmdCookie } });
+    assert.equal((await getSettings()).status, 401, 'الخزنة المفتوحة وحدها لا تفتح الإعدادات');
+    const ekey = ensureTestVault().emergencyKey;
+    assert.equal((await postJson(port, '/api/settings/auth', { password: ekey }, cmdCookie)).status, 401, 'مفتاح الطوارئ لا يفتح الإعدادات');
+    assert.equal((await postJson(port, '/api/settings/auth', { password: TEST_MASTER_PASSWORD }, cmdCookie)).status, 200);
+    const settings = JSON.parse((await getSettings()).body) as Record<string, any>;
     assert.ok(settings.identity.appName && settings.ai.claudeModel && settings.readOnly.paths.rootDir);
+    await postJson(port, '/api/settings/lock', {}, cmdCookie);
+    assert.equal((await getSettings()).status, 401, 'مغادرة الإعدادات تلغي الصلاحية فوراً');
+    resetSessionStateForTests();
+    // كلمة المرور في نافذة الإعدادات تفتح الخزنة المقفلة أيضاً (جلسة جديدة)
+    const authLocked = await postJson(port, '/api/settings/auth', { password: TEST_MASTER_PASSWORD });
+    assert.equal(authLocked.status, 200);
+    assert.ok(String(authLocked.headers['set-cookie'] ?? '').includes('HttpOnly'));
+    resetSessionStateForTests();
+    const relog = await postJson(port, '/api/settings/auth', { password: TEST_MASTER_PASSWORD });
+    const settingsCookie = String(relog.headers['set-cookie'] ?? '').split(';')[0];
     const edited = structuredClone(settings);
     delete edited.readOnly;
     edited.identity.assistantNameAr = 'العقل الثاني المعدّل';
-    assert.equal((await postJson(port, '/api/settings', edited)).status, 401, 'الحفظ دون جلسة القائد مرفوض');
-    resetSessionStateForTests();
-    const login = await postJson(port, '/api/vault/unlock', { key: TEST_MASTER_PASSWORD });
-    const cmdCookie = String(login.headers['set-cookie'] ?? '').split(';')[0];
+    assert.equal((await postJson(port, '/api/settings', edited)).status, 401, 'الحفظ دون جلسة مرفوض');
     const remote = structuredClone(edited);
     remote.ai.ollamaEndpoint = 'http://evil.example:11434';
-    assert.equal((await postJson(port, '/api/settings', remote, cmdCookie)).status, 400, 'عنوان Ollama خارجي مرفوض');
+    assert.equal((await postJson(port, '/api/settings', remote, settingsCookie)).status, 400, 'عنوان Ollama خارجي مرفوض');
     const badModel = structuredClone(edited);
     badModel.ai.claudeModel = 'model; rm -rf /';
-    assert.equal((await postJson(port, '/api/settings', badModel, cmdCookie)).status, 400, 'اسم نموذج غير صالح مرفوض');
-    const saved = await postJson(port, '/api/settings', edited, cmdCookie);
+    assert.equal((await postJson(port, '/api/settings', badModel, settingsCookie)).status, 400, 'اسم نموذج غير صالح مرفوض');
+    const saved = await postJson(port, '/api/settings', edited, settingsCookie);
     assert.equal(saved.status, 200);
     assert.equal(loadSystemConfig().assistantNameAr, 'العقل الثاني المعدّل', 'التعديل يُحفظ فعلاً');
     assert.deepEqual(loadSystemConfig().aiConfig.providerOrder, ['local'], 'ترتيب المزوّدين غير المعروض في النموذج يبقى كما هو');
@@ -392,7 +408,7 @@ export async function runIntegrationTests(): Promise<string[]> {
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
-  passedChecks.push('اختبار البثّ التدريجي عبر الخادم (SSE) وحالة المزوّدين وصفحة الإعدادات (صلاحية القائد والتحقق من القيم) بنجاح.');
+  passedChecks.push('اختبار البثّ التدريجي عبر الخادم (SSE) وحالة المزوّدين وحماية الإعدادات بكلمة المرور في كل مرة (لا تكفي الخزنة المفتوحة ولا مفتاح الطوارئ) والتحقق من القيم بنجاح.');
 
   return passedChecks;
 }

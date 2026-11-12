@@ -17,8 +17,19 @@ import { loadSystemConfig, updateBrandingIdentity, updateSystemSettings, readRaw
 import { querySharedAIMemory } from '../../ai-memory/shared-memory-service.ts';
 import { countSecuredFiles } from '../../project-indexer/obsidian-sync.ts';
 import { scanAndAnalyzeProject } from '../../project-indexer/project-scanner.ts';
-import { vaultExists } from '../../vault/vault-manager.ts';
-import { HttpError, sendJson, type RouteDefinition } from '../http-utils.ts';
+import { unlockVault, vaultExists, verifyMasterPassword } from '../../vault/vault-manager.ts';
+import { buildSessionCookie, HttpError, readString, sendJson, type RouteDefinition } from '../http-utils.ts';
+import {
+  getVaultSession,
+  grantSettingsAuth,
+  hasSettingsAuth,
+  openVaultSession,
+  recordUnlockFailure,
+  recordUnlockSuccess,
+  SETTINGS_AUTH_MS,
+  type VaultSession,
+} from '../session-manager.ts';
+import { assertUnlockAllowed } from './vault-routes.ts';
 
 const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
@@ -89,6 +100,17 @@ export function validateLocalEndpoint(value: unknown): string {
     throw new HttpError(400, 'عنوان Ollama يجب أن يكون على هذا الجهاز (127.0.0.1 أو localhost).');
   }
   return `${url.protocol}//${url.host}`;
+}
+
+/**
+ * Hint بالعربي: دالة التأكد من صلاحية الإعدادات: قبل إنشاء الخزنة مسموح (أول تشغيل)،
+ *               وبعدها تُطلب كلمة المرور الرئيسية حديثاً (خلال 5 دقائق) — مفتاح الطوارئ لا يكفي.
+ */
+export function assertSettingsAuth(session: VaultSession | null): void {
+  if (!vaultExists()) return;
+  if (!hasSettingsAuth(session)) {
+    throw new HttpError(401, 'أدخل كلمة المرور الرئيسية لفتح الإعدادات.', { needsSettingsAuth: true });
+  }
 }
 
 /**
@@ -198,17 +220,54 @@ export function getStateRoutes(): RouteDefinition[] {
       },
     },
     {
+      method: 'POST',
+      path: '/api/settings/auth',
+      handler: ({ res, body, session }) => {
+        // يقبل كلمة المرور الرئيسية فقط؛ وإن كانت الخزنة مقفلة تُفتح بها أيضاً حتى لا تُطلب مرتين
+        if (!vaultExists()) {
+          sendJson(res, 200, { ok: true, settingsAuthSeconds: null });
+          return;
+        }
+        assertUnlockAllowed();
+        const password = readString(body, 'password', 512);
+        if (!password || !verifyMasterPassword(password)) {
+          recordUnlockFailure();
+          throw new HttpError(401, 'كلمة المرور الرئيسية غير صحيحة.');
+        }
+        recordUnlockSuccess();
+        let active = session;
+        const headers: Record<string, string> = {};
+        if (!active || active.vault.unlockedBy !== 'commander') {
+          const token = openVaultSession(unlockVault(password));
+          headers['Set-Cookie'] = buildSessionCookie(token);
+          active = getVaultSession(token);
+        }
+        grantSettingsAuth(active!);
+        sendJson(res, 200, { ok: true, settingsAuthSeconds: SETTINGS_AUTH_MS / 1000 }, headers);
+      },
+    },
+    {
+      method: 'POST',
+      path: '/api/settings/lock',
+      handler: ({ res, session }) => {
+        // عند مغادرة قسم الإعدادات تُلغى الصلاحية فوراً
+        if (session) session.settingsAuthUntil = 0;
+        sendJson(res, 200, { ok: true });
+      },
+    },
+    {
       method: 'GET',
       path: '/api/settings',
-      handler: ({ res }) => sendJson(res, 200, buildEditableSettings()),
+      handler: ({ res, session }) => {
+        assertSettingsAuth(session);
+        sendJson(res, 200, buildEditableSettings());
+      },
     },
     {
       method: 'POST',
       path: '/api/settings',
       handler: ({ res, body, session }) => {
-        if (vaultExists() && session?.vault.unlockedBy !== 'commander') {
-          throw new HttpError(401, 'افتح الخزنة بكلمة المرور الرئيسية لتعديل الإعدادات.', { locked: !session });
-        }
+        assertSettingsAuth(session);
         const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
         const identity = obj(body.identity);
         const ai = obj(body.ai);

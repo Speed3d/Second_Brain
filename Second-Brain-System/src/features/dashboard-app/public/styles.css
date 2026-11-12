@@ -213,12 +213,6 @@ fieldset legend { font-weight: 700; color: var(--amber); padding: 0 6px; }
 /* ===== القيادة: النواة + المحادثة ===== */
 .command-grid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 18px; align-items: start; }
 .core-card { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.pill-row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
-.pill {
-  font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer;
-  padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted);
-}
-.pill.is-active, .pill:hover { color: var(--text); border-color: var(--amber); background: var(--amber-soft); }
 .core-stage { position: relative; width: min(100%, 460px); aspect-ratio: 1; }
 #coreCanvas { width: 100%; height: 100%; display: block; cursor: pointer; }
 .core-status {
@@ -349,3 +343,32 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); }
 @media print {
   .topbar, .sidebar, .toasts { display: none; }
 }
+
+/* ===== صفحة المشروع ===== */
+.project-card.is-clickable { cursor: pointer; transition: border-color 0.2s, transform 0.2s; }
+.project-card.is-clickable:hover, .project-card.is-clickable:focus-visible { border-color: var(--cyan); transform: translateY(-2px); }
+[data-panel="project"] .path { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); direction: ltr; text-align: left; overflow-wrap: anywhere; }
+[data-panel="project"] h1 { margin: 6px 0 2px; }
+.project-section h2 { margin: 0 0 8px; font-size: 1rem; color: var(--amber); }
+.project-summary { white-space: pre-wrap; line-height: 1.8; }
+.cmd-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; margin-top: 6px; background: rgba(2, 8, 18, 0.7); border-radius: var(--radius-sm); }
+.cmd-row code { direction: ltr; unicode-bidi: isolate; overflow-wrap: anywhere; min-width: 0; }
+.plain-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.plain-list li { padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); font-size: 0.88rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.plain-list li .mono { direction: ltr; unicode-bidi: isolate; }
+dialog.wide { width: min(900px, calc(100vw - 32px)); }
+.conversation-text { max-height: 65vh; overflow: auto; margin: 0; direction: auto; }
+
+/* ===== وضع التطوير ===== */
+#devPanel { margin-top: 14px; }
+#devPanel h2 { margin: 0 0 8px; color: var(--rose); }
+#devPanel hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+#trashList { margin-top: 10px; }
+
+/* ===== دليل الربط ===== */
+.steps { margin: 6px 0 0; padding-inline-start: 22px; display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; }
+.connect-card h3 { margin: 12px 0 4px; font-size: 0.95rem; color: var(--cyan); }
+.connect-card .report.ok { border-inline-start-color: var(--green); }
+.connect-card .report.fail { border-inline-start-color: var(--rose); }
+[data-panel="connect"] > .card-grid + .card { margin-top: 14px; }
+[data-panel="connect"] .card + details.card { margin-top: 14px; }

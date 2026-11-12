@@ -58,22 +58,27 @@
     │   │   │   ├── 📄 secret-file-hunter.ts    # صيد الملفات الحساسة (.env، keystore، مفاتيح...)
     │   │   │   ├── 📄 git-inspector.ts         # الفرع، آخر commit، والملفات الحساسة المرفوعة على Git
     │   │   │   ├── 📄 obsidian-sync.ts         # الوثائق الست مع حماية الملاحظات اليدوية وسجل تغييرات عند التغيّر فقط
+    │   │   │   ├── 📄 project-details.ts       # تفاصيل صفحة المشروع: التقرير، السجل، الذاكرة، المحادثات، سياق الخلاصة
+    │   │   │   ├── 📄 project-launcher.ts      # فتح مجلد المشروع أو VS Code (بلا shell، للمشاريع المسجّلة فقط)
     │   │   │   └── 📄 project-watcher.ts       # المراقب الدوري وإعادة الفحص الشاملة
     │   │   ├── 📁 ai-memory\
     │   │   │   ├── 📄 shared-memory-service.ts # الذاكرة المشتركة (مع حذف الأسرار)
     │   │   │   ├── 📄 transcript-harvester.ts  # السحب التزايدي وربط الجلسات بالمشاريع
     │   │   │   └── 📁 connectors\              # claude-code-connector.ts، antigravity-connector.ts، connector-types.ts
     │   │   ├── 📁 assistant\
-    │   │   │   ├── 📄 assistant-engine.ts      # بناء السياق (بلا محتوى الخزنة) ووضعا القائد والعائلة
+    │   │   │   ├── 📄 assistant-engine.ts      # بناء السياق (بلا محتوى الخزنة) ووضعا القائد والعائلة + خلاصة المشروع
+    │   │   │   ├── 📄 provider-tester.ts       # زر اختبار الاتصال لكل مزوّد مع سبب الفشل والحل المقترح
     │   │   │   └── 📁 providers\               # claude / gemini / ollama / local + provider-registry (التراجع) + stream-parsers
     │   │   ├── 📁 family-emergency\
     │   │   │   ├── 📄 emergency-kit-service.ts # كتيب الطوارئ (في الذاكرة فقط)
     │   │   │   └── 📄 backup-service.ts        # النسخ v2 والاستعادة إلى مجلد جديد
+    │   │   ├── 📁 maintenance\
+    │   │   │   └── 📄 reset-service.ts         # وضع التطوير: التصفير إلى السلة، الاسترجاع، إفراغ السلة
     │   │   └── 📁 dashboard-app\
     │   │       ├── 📄 desktop-server.ts        # الموجّه على 127.0.0.1 + طبقات الحماية + تشغيل المراقب
     │   │       ├── 📄 http-utils.ts            # الرد، حد الطلب، الكوكيز، Host/CSRF، رؤوس الأمان
     │   │       ├── 📄 session-manager.ts       # جلسة الخزنة، القفل التلقائي، تأخير المحاولات
-    │   │       ├── 📁 routes\                  # state، vault، project، memory، assistant، emergency
+    │   │       ├── 📁 routes\                  # state، vault، project، memory، assistant، emergency، maintenance
     │   │       └── 📁 public\                  # index.html، styles.css، app.js، hologram.js (CSP صارمة)
     │   │
     │   ├── 📁 shared\                          # [SHARED] لا يعتمد على أي طبقة أخرى
@@ -96,7 +101,10 @@
         ├── 📄 05-tools-and-dashboard.test.ts
         ├── 📄 06-security.test.ts
         ├── 📄 07-integration.test.ts
-        └── 📄 08-disaster-recovery.test.ts       # محاكاة دليل الجهاز الجديد من البداية للنهاية
+        ├── 📄 08-disaster-recovery.test.ts     # محاكاة دليل الجهاز الجديد من البداية للنهاية
+        ├── 📄 09-project-page.test.ts          # صفحة المشروع
+        ├── 📄 10-maintenance.test.ts           # التصفير والاسترجاع والاعتماد النهائي
+        └── 📄 11-connection-guide.test.ts      # اختبار الاتصال بالمزوّدين
 ```
 
 ---

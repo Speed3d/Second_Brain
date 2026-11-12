@@ -46,6 +46,7 @@
       <button type="button" class="nav-btn" data-action="view" data-view="vault"><span aria-hidden="true">🔐</span><span>الخزنة</span></button>
       <button type="button" class="nav-btn" data-action="view" data-view="memory"><span aria-hidden="true">🧠</span><span>الذاكرة</span></button>
       <button type="button" class="nav-btn" data-action="view" data-view="emergency"><span aria-hidden="true">🛡️</span><span>الطوارئ</span></button>
+      <button type="button" class="nav-btn" data-action="view" data-view="connect"><span aria-hidden="true">🔌</span><span>الربط</span></button>
       <button type="button" class="nav-btn" data-action="view" data-view="settings"><span aria-hidden="true">⚙️</span><span>الإعدادات</span></button>
       <div class="sidebar-foot">
         <button type="button" class="icon-btn" id="soundToggle" data-action="toggle-sound" aria-pressed="false" title="المؤثرات الصوتية">🔇</button>
@@ -60,12 +61,6 @@
         <h1 id="h-command" class="sr-only">القيادة</h1>
         <div class="command-grid">
           <div class="core-card">
-            <div class="pill-row" role="group" aria-label="شكل النواة">
-              <button type="button" class="pill is-active" data-action="core-mode" data-core="fusion">المدمج</button>
-              <button type="button" class="pill" data-action="core-mode" data-core="cyan_wave">الموجة</button>
-              <button type="button" class="pill" data-action="core-mode" data-core="neural_cloud">السحابة</button>
-              <button type="button" class="pill" data-action="core-mode" data-core="hud_rings">الحلقات</button>
-            </div>
             <div class="core-stage">
               <canvas id="coreCanvas" aria-label="النواة المتحركة" role="img"></canvas>
               <div id="coreStatus" class="core-status">جاهز</div>
@@ -119,6 +114,101 @@
         </form>
         <div class="report" id="projectsReport" hidden></div>
         <div class="card-grid" id="projectsList"></div>
+      </section>
+
+      <!-- دليل ربط النماذج -->
+      <section class="view" data-panel="connect" aria-labelledby="h-connect" hidden>
+        <div class="view-head">
+          <h1 id="h-connect">دليل ربط النماذج</h1>
+          <div class="toolbar"><button type="button" class="btn btn-ghost" data-action="refresh-providers-guide">🔄 تحديث الحالة</button></div>
+        </div>
+        <p class="small muted">يجرّب المساعد المزوّدين بالترتيب المحدد في الإعدادات، وإن تعذّر الجميع يجيب من المعرفة المحلية. زر «اختبار الاتصال» يرسل رسالة قصيرة ثابتة فقط (بلا أي معلومات شخصية) ويعرض النتيجة.</p>
+
+        <div class="card-grid two">
+          <article class="card connect-card" data-provider="claude">
+            <div class="card-head"><h2>🟠 Claude (Anthropic)</h2><span class="badge" data-status></span></div>
+            <ol class="steps">
+              <li>افتح <span class="mono">console.anthropic.com</span> وسجّل الدخول.</li>
+              <li>من <strong>Settings ← Billing</strong> أضف رصيداً (يُحاسب الاستخدام بعدد الكلمات).</li>
+              <li>من <strong>Settings ← API Keys</strong> اضغط <strong>Create Key</strong> وانسخ المفتاح (يبدأ بـ <span class="mono">sk-ant-</span>).</li>
+              <li>في هذا البرنامج: <strong>الخزنة ← مفاتيح الذكاء الاصطناعي</strong>، اختر Claude والصق المفتاح واحفظه.</li>
+              <li>النموذج الافتراضي في الإعدادات: <span class="mono">claude-opus-5-5</span> (الأقوى). للأسرع والأرخص: <span class="mono">claude-sonnet-5-5</span> أو <span class="mono">claude-haiku-5-5</span>.</li>
+              <li>اضغط «اختبار الاتصال» أدناه.</li>
+            </ol>
+            <div class="card-actions"><button type="button" class="btn btn-primary btn-sm" data-action="test-provider" data-provider="claude">🧪 اختبار الاتصال</button></div>
+            <div class="report" data-result hidden></div>
+          </article>
+
+          <article class="card connect-card" data-provider="gemini">
+            <div class="card-head"><h2>🔵 Gemini (Google)</h2><span class="badge" data-status></span></div>
+            <ol class="steps">
+              <li>افتح <span class="mono">aistudio.google.com</span> بحساب Google.</li>
+              <li>اضغط <strong>Get API key</strong> ثم <strong>Create API key</strong> وانسخ المفتاح (يبدأ بـ <span class="mono">AIza</span>).</li>
+              <li>للاستخدام الكثيف فعّل الفوترة في مشروع Google Cloud المرتبط؛ الطبقة المجانية لها حدود يومية.</li>
+              <li>في هذا البرنامج: <strong>الخزنة ← مفاتيح الذكاء الاصطناعي</strong>، اختر Gemini والصق المفتاح واحفظه.</li>
+              <li>النموذج الافتراضي: <span class="mono">gemini-3.8-flash</span> (سريع ورخيص)، ويمكن تغييره من الإعدادات.</li>
+              <li>اضغط «اختبار الاتصال» أدناه.</li>
+            </ol>
+            <div class="card-actions"><button type="button" class="btn btn-primary btn-sm" data-action="test-provider" data-provider="gemini">🧪 اختبار الاتصال</button></div>
+            <div class="report" data-result hidden></div>
+          </article>
+        </div>
+
+        <article class="card connect-card" data-provider="ollama">
+          <div class="card-head"><h2>🦙 Ollama (محلي، مجاني، بلا إنترنت)</h2><span class="badge" data-status></span></div>
+          <div class="card-grid two">
+            <div>
+              <h3>على Windows (اللابتوب أو المكتبي)</h3>
+              <ol class="steps">
+                <li>نزّل Ollama من <span class="mono">ollama.com/download</span> وثبّته (يعمل في الخلفية تلقائياً).</li>
+                <li>افتح PowerShell ونزّل نموذجاً: <span class="mono">ollama pull llama3.2</span></li>
+                <li>تأكد أنه يعمل: <span class="mono">ollama list</span></li>
+                <li>في الإعدادات: العنوان <span class="mono">http://127.0.0.1:11434</span> واسم النموذج نفسه.</li>
+              </ol>
+            </div>
+            <div>
+              <h3>على MacBook Air</h3>
+              <ol class="steps">
+                <li>نزّل Ollama للماك من <span class="mono">ollama.com/download</span> واسحبه إلى Applications ثم افتحه.</li>
+                <li>من Terminal: <span class="mono">ollama pull llama3.2</span></li>
+                <li>نفس العنوان والإعدادات كما في Windows.</li>
+              </ol>
+            </div>
+          </div>
+          <h3>أي نموذج يناسب جهازك؟</h3>
+          <ul class="plain-list">
+            <li><strong>المكتبي (RTX 3090 بذاكرة 24GB):</strong> نماذج حتى نحو 32 مليار معامل بضغط 4-bit تعمل بالكامل على البطاقة، مثل عائلات Qwen أو Gemma أو DeepSeek بأحجام 27B–32B. هذا أقوى خيار محلي لديك.</li>
+            <li><strong>MacBook Air M5:</strong> نماذج صغيرة ومتوسطة (3B–14B) حسب الذاكرة الموحّدة؛ مع 16GB يُفضّل 8B تقريباً، ومع 24–32GB حتى نحو 14B.</li>
+            <li><strong>اللابتوب:</strong> حسب ذاكرة بطاقة الرسوميات؛ ابدأ بـ <span class="mono">llama3.2</span> (3B) وجرّب الأكبر تدريجياً.</li>
+          </ul>
+          <p class="small muted">راجع الأسماء والأحجام المتاحة في <span class="mono">ollama.com/library</span>. ربط Ollama المكتبي من اللابتوب والماك عبر نطاقك على Cloudflare سيُضاف في المرحلة «د» من الخطة؛ حتى ذلك الحين يقبل البرنامج Ollama على نفس الجهاز فقط.</p>
+          <div class="card-actions"><button type="button" class="btn btn-primary btn-sm" data-action="test-provider" data-provider="ollama">🧪 اختبار الاتصال</button></div>
+          <div class="report" data-result hidden></div>
+        </article>
+
+        <details class="card">
+          <summary>🧩 ربط الذاكرة المشتركة مع Claude Code و Antigravity (MCP)</summary>
+          <p class="small">خادم الذاكرة المشتركة مسجّل في Claude Code وفي Antigravity على هذا الجهاز، فيقرأ الوكيلان ملفك الشخصي وسياق المشروع ويسجّلان القرارات. على جهاز جديد تُسجَّل الأداة تلقائياً بالمثبّت (المرحلة «ب»)، والتفاصيل في <span class="mono">docs/08-AI-CONNECTION-GUIDE.md</span>.</p>
+        </details>
+      </section>
+
+      <!-- صفحة مشروع واحد (تُفتح بالضغط على بطاقة المشروع) -->
+      <section class="view" data-panel="project" aria-labelledby="h-project" hidden>
+        <div class="view-head">
+          <div>
+            <button type="button" class="btn btn-ghost btn-sm" data-action="back-to-projects">→ كل المشاريع</button>
+            <h1 id="h-project">المشروع</h1>
+            <div class="path" id="projectPath"></div>
+          </div>
+          <div class="toolbar" id="projectToolbar">
+            <button type="button" class="btn btn-ghost" data-action="project-open" data-target="folder">📂 فتح المجلد</button>
+            <button type="button" class="btn btn-ghost" data-action="project-open" data-target="vscode">🧑‍💻 فتح في VS Code</button>
+            <button type="button" class="btn btn-primary" data-action="project-rescan">🔄 إعادة الفحص</button>
+            <button type="button" class="btn btn-ghost" data-action="project-edit">✏️ تعديل</button>
+            <button type="button" class="btn btn-danger" data-action="project-remove">⏹️ إيقاف المراقبة</button>
+          </div>
+        </div>
+        <div id="projectBody"></div>
       </section>
 
       <!-- الخزنة -->
@@ -241,8 +331,11 @@
       <!-- الإعدادات -->
       <section class="view" data-panel="settings" aria-labelledby="h-settings" hidden>
         <div class="view-head"><h1 id="h-settings">الإعدادات</h1></div>
-        <p class="muted small" id="settingsLockNote" hidden>🔒 افتح الخزنة بكلمة المرور الرئيسية لحفظ التعديلات.</p>
-        <form data-form="settings" class="settings-form">
+        <div class="card narrow" id="settingsLocked">
+          <p>🔒 الإعدادات محمية بكلمة المرور الرئيسية.</p>
+          <button type="button" class="btn btn-primary" data-action="open-settings-auth">إدخال كلمة المرور</button>
+        </div>
+        <form data-form="settings" class="settings-form" hidden>
           <fieldset class="card form-grid">
             <legend>الهوية</legend>
             <label>اسم البرنامج<input name="identity.appName" maxlength="100" required /></label>
@@ -284,6 +377,20 @@
           </details>
           <div class="form-actions"><button type="submit" class="btn btn-primary">💾 حفظ الإعدادات</button></div>
         </form>
+        <section class="card danger-zone" id="devPanel" aria-labelledby="h-dev" hidden>
+          <h2 id="h-dev">🧪 وضع التطوير</h2>
+          <p class="small">خلال مرحلة التطوير يمكنك تصفير البرنامج للبدء من جديد. <strong>لا يُحذف شيء:</strong> الخزنة والإعدادات الشخصية والمشاريع والذاكرة والسجلات وما ولّده البرنامج في Obsidian تُنقل إلى سلة داخل <span class="mono">data/_trash</span> ويمكن استرجاعها.
+            لا يمس الكود ولا الوثائق ولا ملفك الشخصي في Obsidian ولا النسخ الاحتياطية المشفرة.</p>
+          <div class="toolbar">
+            <button type="button" class="btn btn-danger" data-action="dev-reset">🧹 تصفير كل شيء</button>
+            <button type="button" class="btn btn-ghost" data-action="dev-restore">♻️ استرجاع آخر تصفير</button>
+            <button type="button" class="btn btn-danger" data-action="dev-empty-trash">🗑️ إفراغ السلة نهائياً</button>
+          </div>
+          <div id="trashList"></div>
+          <hr />
+          <p class="small muted">عند انتهاء التطوير اضغط «اعتماد نهائي»: يُطفأ وضع التطوير، ويختفي هذا القسم، ويرفض البرنامج التصفير بعدها.</p>
+          <button type="button" class="btn btn-ghost" data-action="dev-finalize">✅ اعتماد نهائي</button>
+        </section>
       </section>
     </main>
   </div>
@@ -375,6 +482,46 @@
       <div class="form-actions">
         <button type="submit" class="btn btn-primary" value="save">🔒 تشفير وحفظ</button>
         <button type="button" class="btn btn-ghost" data-action="close-dialog">إلغاء</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- نافذة تعديل معلومات المشروع -->
+  <dialog id="projectDialog" aria-labelledby="projectDialogTitle">
+    <form data-form="project-edit" class="stack" method="dialog">
+      <h2 id="projectDialogTitle">✏️ تعديل معلومات المشروع</h2>
+      <label>ما هو؟ (وصف تقني)<textarea name="descriptionAr" rows="2" maxlength="2000"></textarea></label>
+      <label>شرح مبسط للعائلة<textarea name="wifeSummaryAr" rows="2" maxlength="2000"></textarea></label>
+      <label>الدخل الشهري<input name="monthlyIncome" maxlength="300" /></label>
+      <label>الفواتير والتجديد<textarea name="billingNotes" rows="2" maxlength="2000"></textarea></label>
+      <label>الخلاصة (ما هو وماذا يخدم)<textarea name="summaryAr" rows="8" maxlength="8000"></textarea></label>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">💾 حفظ</button>
+        <button type="button" class="btn btn-ghost" data-action="close-dialog">إلغاء</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- نافذة قراءة محادثة مؤرشفة -->
+  <dialog id="conversationDialog" class="wide" aria-labelledby="conversationDialogTitle">
+    <div class="stack">
+      <h2 id="conversationDialogTitle">محادثة</h2>
+      <pre class="report conversation-text" id="conversationText"></pre>
+      <div class="form-actions">
+        <button type="button" class="btn btn-ghost" data-action="close-dialog">إغلاق</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- نافذة كلمة المرور لفتح الإعدادات -->
+  <dialog id="authDialog" aria-labelledby="authDialogTitle">
+    <form data-form="settings-auth" class="stack" method="dialog">
+      <h2 id="authDialogTitle">🔒 الإعدادات محمية</h2>
+      <p class="small muted">أدخل كلمة المرور الرئيسية لفتح الإعدادات. مفتاح الطوارئ لا يفتحها، وتُقفل عند مغادرة القسم.</p>
+      <label>كلمة المرور الرئيسية<input type="password" name="password" autocomplete="current-password" required /></label>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">فتح الإعدادات</button>
+        <button type="button" class="btn btn-ghost" data-action="cancel-settings-auth">إلغاء</button>
       </div>
     </form>
   </dialog>

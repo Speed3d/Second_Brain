@@ -22,6 +22,25 @@ export interface VaultSession {
   vault: UnlockedVault;
   createdAt: number;
   lastActivityAt: number;
+  /** نهاية صلاحية الإعدادات (تُمنح بإعادة إدخال كلمة المرور الرئيسية فقط) */
+  settingsAuthUntil?: number;
+}
+
+/** مدة صلاحية الإعدادات بعد إدخال كلمة المرور */
+export const SETTINGS_AUTH_MS = 5 * 60 * 1000;
+
+/**
+ * Hint بالعربي: دالة منح الجلسة صلاحية الإعدادات لمدة 5 دقائق (بعد التحقق من كلمة المرور الرئيسية).
+ */
+export function grantSettingsAuth(session: VaultSession): void {
+  session.settingsAuthUntil = Date.now() + SETTINGS_AUTH_MS;
+}
+
+/**
+ * Hint بالعربي: دالة التحقق من أن الجلسة تملك صلاحية إعدادات سارية (للقائد فقط).
+ */
+export function hasSettingsAuth(session: VaultSession | null): boolean {
+  return Boolean(session && session.vault.unlockedBy === 'commander' && session.settingsAuthUntil && session.settingsAuthUntil > Date.now());
 }
 
 let activeSession: VaultSession | null = null;

@@ -57,6 +57,8 @@ export interface SystemBrandingConfig {
     harvestTranscripts: boolean;
   };
   watchedProjects: WatchedProjectConfig[];
+  /** وضع التطوير: يُظهر زر التصفير؛ يُطفأ مرة واحدة عند الاعتماد النهائي (افتراضياً مفعّل) */
+  developerMode?: boolean;
   /** إعدادات الأمان (اختيارية؛ لها قيم افتراضية آمنة) */
   security?: {
     autoLockMinutes?: number;
@@ -89,6 +91,8 @@ export interface WatchedProjectConfig {
   wifeSummaryAr: string;
   monthlyIncome: string;
   billingNotes: string;
+  /** ملخص "ما هذا المشروع وماذا يخدم" (يولّده المساعد ويمكن تعديله يدوياً) */
+  summaryAr?: string;
 }
 
 /**

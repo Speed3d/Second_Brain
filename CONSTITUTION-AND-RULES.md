@@ -7,7 +7,7 @@
 ## 📜 القوانين الثمانية الملزمة (The 8 Mandatory Laws)
 
 ### القانون الأول (1): تثبيت الخطة داخل المشروع
-* يجب أن تظل الخطة الرئيسية (`00-Master-Implementation-Plan.md`) وخطة العمل التنفيذية (`docs/02-EXECUTION-ROADMAP.md`) وخطة الإصلاحات والتحسينات المعتمدة ([`docs/06-FIXES-AND-IMPROVEMENTS-PLAN.md`](./docs/06-FIXES-AND-IMPROVEMENTS-PLAN.md)) مكتوبة ومثبتة داخل المشروع، ويُرجع إليها قبل أي تطوير أو تعديل.
+* يجب أن تظل الخطة الرئيسية (`00-Master-Implementation-Plan.md`) وخطة العمل التنفيذية (`docs/02-EXECUTION-ROADMAP.md`) وخطة الإصلاحات والتحسينات المعتمدة ([`docs/06-FIXES-AND-IMPROVEMENTS-PLAN.md`](./docs/06-FIXES-AND-IMPROVEMENTS-PLAN.md)) وخطة التوسعة ([`docs/07-EXPANSION-PLAN.md`](./docs/07-EXPANSION-PLAN.md)) مكتوبة ومثبتة داخل المشروع، ويُرجع إليها قبل أي تطوير أو تعديل.
 * **الاسم المعتمد للنظام هو `Second Brain` (العقل الثاني)**، ويُستخدم وحده في الكود والملفات والوثائق والواجهة.
 
 ### القانون الثاني (2): الهيكلية المتفرعة الصارمة وعدم الخلط

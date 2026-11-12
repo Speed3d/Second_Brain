@@ -261,6 +261,19 @@ export function rotateEmergencyKey(vault: UnlockedVault, masterPassword: string)
 }
 
 /**
+ * Hint بالعربي: دالة التحقق من كلمة المرور الرئيسية فقط (مفتاح الطوارئ لا يُقبل هنا).
+ */
+export function verifyMasterPassword(masterPassword: string, customVaultFilePath?: string): boolean {
+  const file = readVaultFile(resolveVaultFilePath(customVaultFilePath));
+  try {
+    unwrapDataKey(file.commanderWrap, masterPassword).fill(0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Hint بالعربي: دالة التحقق من أن مفتاح طوارئ معيّن يفتح هذه الخزنة فعلاً (قبل طباعته في الكتيب).
  */
 export function verifyEmergencyKey(emergencyKey: string, customVaultFilePath?: string): boolean {

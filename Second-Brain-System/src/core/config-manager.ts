@@ -31,7 +31,7 @@ const IDENTITY_KEYS: Array<keyof BrandingIdentity> = [
   'version',
 ];
 /** مفاتيح الإعدادات التي تُنقل إلى settings.json */
-const SETTINGS_KEYS = ['serverPort', 'paths', 'aiConfig', 'connectors', 'watcher', 'security', 'watchedProjects'] as const;
+const SETTINGS_KEYS = ['serverPort', 'paths', 'aiConfig', 'connectors', 'watcher', 'security', 'developerMode', 'watchedProjects'] as const;
 const VALID_PROVIDERS: AIProviderId[] = ['claude', 'gemini', 'ollama', 'local'];
 
 /**
@@ -115,6 +115,7 @@ export function buildDefaultConfig(): SystemBrandingConfig {
     connectors: { antigravity: { enabled: true }, claudeCode: { enabled: true } },
     watcher: { enabled: true, intervalMinutes: 15, harvestTranscripts: true },
     security: { autoLockMinutes: 10, backupRetention: 10 },
+    developerMode: true,
     watchedProjects: [],
   };
 }
@@ -180,6 +181,7 @@ export function normalizeSystemConfig(raw: Record<string, unknown>): { config: S
           wifeSummaryAr: str(o.wifeSummaryAr, ''),
           monthlyIncome: str(o.monthlyIncome, 'غير محدد بعد'),
           billingNotes: str(o.billingNotes, ''),
+          ...(typeof o.summaryAr === 'string' && o.summaryAr.trim() ? { summaryAr: o.summaryAr } : {}),
         });
       } else {
         warnings.push('تم تجاهل مشروع ناقص البيانات في قائمة المشاريع.');
@@ -235,6 +237,7 @@ export function normalizeSystemConfig(raw: Record<string, unknown>): { config: S
         ? resolveConfiguredPath(security.extraBackupDir, '', rootDir)
         : undefined,
     },
+    developerMode: raw.developerMode !== false,
     watchedProjects: projects,
   };
   return { config, warnings };
@@ -350,4 +353,17 @@ export function registerWatchedProject(
   if (idx >= 0) list[idx] = project;
   else list.push(project);
   return updateSystemSettings({ watchedProjects: list }, customConfigPath);
+}
+
+/**
+ * Hint بالعربي: دالة إيقاف مراقبة مشروع (إزالته من القائمة فقط؛ وثائقه في Obsidian تبقى كما هي).
+ *               المخرجات: true إذا وُجد المشروع وأُزيل.
+ */
+export function unregisterWatchedProject(projectId: string, customConfigPath: string = resolveDefaultConfigPath()): boolean {
+  const raw = readRawSettings(customConfigPath);
+  const list = Array.isArray(raw.watchedProjects) ? (raw.watchedProjects as WatchedProjectConfig[]) : [];
+  const remaining = list.filter((p) => p.id !== projectId);
+  if (remaining.length === list.length) return false;
+  updateSystemSettings({ watchedProjects: remaining }, customConfigPath);
+  return true;
 }

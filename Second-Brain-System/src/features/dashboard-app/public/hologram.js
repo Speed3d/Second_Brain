@@ -1,9 +1,11 @@
 /* ============================================================================
  * الملف: src/features/dashboard-app/public/hologram.js
- * Hint بالعربي: محرك النواة المتحركة (Canvas) ومؤثرات الصوت. يتيح للواجهة: SBHologram.setMode / setState /
- *               pulse / setVisible / setSound.
- *               الأداء: يتوقف الرسم عند إخفاء التبويب أو مغادرة قسم القيادة، ويرسم إطاراً ثابتاً عند تفعيل
- *               "تقليل الحركة"، ويقلل عدد النقاط على الأجهزة الأضعف، ويتبع حجم العنصر الفعلي.
+ * Hint بالعربي: النواة المتحركة: كرة موجية واحدة هادئة وبطيئة، تتفاعل مع المساعد:
+ *               - SBHologram.feed(n): نبضة متناسبة مع طول كل جزء من الرد أثناء بثّه.
+ *               - SBHologram.setState: هادئ / يستمع / يفكر / يجيب.
+ *               - SBHologram.pulse: نبضة قصيرة (عند الضغط أو مع كل كلمة أثناء النطق).
+ *               الأداء: يتوقف الرسم عند إخفاء التبويب أو مغادرة قسم القيادة، ويرسم إطاراً ثابتاً مع
+ *               "تقليل الحركة"، ويقلل النقاط على الأجهزة الأضعف، ويرسم فوراً بعد تغيير الحجم.
  * ============================================================================ */
 'use strict';
 
@@ -14,15 +16,19 @@
   const statusEl = document.getElementById('coreStatus');
   const barsBox = document.getElementById('voiceBars');
 
-  const LOGICAL = 560; // كل الرسم يتم في مساحة منطقية 560×560 ثم يُكبّر/يُصغّر لحجم العنصر
+  const LOGICAL = 560; // الرسم في مساحة منطقية 560×560 ثم يُكبّر/يُصغّر لحجم العنصر
   const C = LOGICAL / 2;
-  const reducedMotion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false, addEventListener() {} };
+  const RADIUS = 175;
+  const reducedMotion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
   const weakDevice = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4;
   const PARTICLES = weakDevice ? 900 : 1600;
 
-  let mode = 'fusion';
+  // سرعات هادئة (نحو نصف السرعة السابقة)
+  const SPEED_IDLE = 0.007;
+  const SPEED_ACTIVE = 0.015;
+
   let aiState = 'IDLE';
-  let energy = 0;
+  let energy = 0; // طاقة لحظية تأتي من الرد ومن النبضات، وتتلاشى تدريجياً
   let mouseX = 0;
   let mouseY = 0;
   let time = 0;
@@ -31,7 +37,6 @@
   let soundOn = false;
   let audioCtx = null;
 
-  // نقاط موزعة بانتظام على سطح الكرة (لولب فيبوناتشي)
   const points = [];
   const golden = Math.PI * (3 - Math.sqrt(5));
   for (let i = 0; i < PARTICLES; i++) {
@@ -40,7 +45,6 @@
     points.push({ x: Math.cos(golden * i) * r, y: y, z: Math.sin(golden * i) * r });
   }
 
-  // أشرطة الصوت
   const bars = [];
   if (barsBox) {
     for (let i = 0; i < 28; i++) {
@@ -62,95 +66,34 @@
     }
     const scale = size / LOGICAL;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    // تغيير الحجم يمسح اللوحة؛ نرسم فوراً حتى لا تظهر فارغة بانتظار الإطار التالي
-    drawFrame();
+    drawFrame(); // تغيير الحجم يمسح اللوحة؛ نرسم فوراً
   }
 
-  function drawRings(t) {
-    ctx.save();
-    ctx.translate(C, C);
-    const glow = ctx.createRadialGradient(0, 0, 20, 0, 0, 265);
-    glow.addColorStop(0, 'rgba(0, 229, 255, 0.16)');
-    glow.addColorStop(0.55, 'rgba(0, 180, 255, 0.05)');
-    glow.addColorStop(0.82, 'rgba(255, 140, 0, 0.09)');
-    glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(0, 0, 265, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.save();
-    ctx.rotate(-t * 0.25);
-    ctx.strokeStyle = 'rgba(255, 140, 0, 0.75)';
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 72; i++) {
-      const a = (i / 72) * Math.PI * 2;
-      const len = i % 6 === 0 ? 14 : 6;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * 238, Math.sin(a) * 238);
-      ctx.lineTo(Math.cos(a) * (238 + len), Math.sin(a) * (238 + len));
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    ctx.save();
-    ctx.rotate(t * 0.42);
-    ctx.strokeStyle = '#ff8a00';
-    ctx.shadowColor = '#ff8a00';
-    ctx.shadowBlur = 14;
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(0, 0, 224, -0.4, 0.9);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(0, 0, 224, Math.PI - 0.6, Math.PI + 0.7);
-    ctx.stroke();
-    ctx.restore();
-
-    ctx.save();
-    ctx.rotate(-t * 0.6);
-    ctx.strokeStyle = '#00e5ff';
-    ctx.shadowColor = '#00e5ff';
-    ctx.shadowBlur = 12;
-    ctx.lineWidth = 2.5;
-    ctx.setLineDash([45, 18, 12, 18]);
-    ctx.beginPath();
-    ctx.arc(0, 0, 198, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.restore();
-
-    ctx.save();
-    ctx.rotate(t * 0.85);
-    ctx.strokeStyle = 'rgba(0, 229, 255, 0.5)';
-    ctx.lineWidth = 1.5;
-    for (let i = 0; i < 48; i++) {
-      if (i % 4 === 0) continue;
-      const a = (i / 48) * Math.PI * 2;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * 172, Math.sin(a) * 172);
-      ctx.lineTo(Math.cos(a) * 180, Math.sin(a) * 180);
-      ctx.stroke();
-    }
-    ctx.restore();
-    ctx.restore();
+  function drawGlow() {
+    const g = ctx.createRadialGradient(C, C, 10, C, C, 260);
+    g.addColorStop(0, 'rgba(0, 229, 255, ' + (0.1 + energy * 0.08).toFixed(3) + ')');
+    g.addColorStop(0.6, 'rgba(0, 160, 255, 0.04)');
+    g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, LOGICAL, LOGICAL);
   }
 
-  function drawSphere(t, radius, scheme, boost) {
-    const rotY = t * 0.55 + mouseX * 0.85;
-    const rotX = Math.sin(t * 0.35) * 0.35 + mouseY * 0.85;
+  function drawWaveSphere(t) {
+    const rotY = t * 0.5 + mouseX * 0.6;
+    const rotX = Math.sin(t * 0.3) * 0.3 + mouseY * 0.6;
     const cosY = Math.cos(rotY);
     const sinY = Math.sin(rotY);
     const cosX = Math.cos(rotX);
     const sinX = Math.sin(rotX);
     const active = aiState === 'SPEAKING' || aiState === 'LISTENING';
-    const amp = (active ? 0.22 : 0.12) + boost * 0.16;
-    const freq = aiState === 'SPEAKING' ? 6.5 : 4.5;
+    // ارتفاع الموجة يعتمد على الحالة وعلى الطاقة القادمة من الرد
+    const amp = (active ? 0.16 : 0.09) + Math.min(energy, 1.4) * 0.14;
+    const freq = 4 + Math.min(energy, 1.4) * 2;
 
     for (let i = 0; i < points.length; i++) {
       const p = points[i];
-      const w1 = Math.sin(p.x * freq + t * 2.6) * Math.cos(p.y * freq - t * 2.1);
-      const w2 = Math.sin(p.z * (freq + 2) + t * 3.2) * 0.5;
+      const w1 = Math.sin(p.x * freq + t * 2.2) * Math.cos(p.y * freq - t * 1.7);
+      const w2 = Math.sin(p.z * (freq + 2) + t * 2.6) * 0.5;
       const d = 1 + (w1 + w2) * amp;
       const wx = p.x * d;
       const wy = p.y * d;
@@ -160,12 +103,11 @@
       const y2 = wy * cosX - z1 * sinX;
       const z2 = z1 * cosX + wy * sinX;
       const persp = 3.2 / (3.2 - z2);
-      const sx = C + x1 * radius * persp;
-      const sy = C + y2 * radius * persp;
+      const sx = C + x1 * RADIUS * persp;
+      const sy = C + y2 * RADIUS * persp;
       const alpha = Math.max(0.12, Math.min(1, (z2 + 1.3) / 2.2));
-      const size = Math.max(0.9, (1.5 + (w1 + 0.5) * 0.9) * persp * 0.7);
-      if (scheme === 'white') ctx.fillStyle = 'rgba(235, 245, 255, ' + (alpha * 0.85).toFixed(3) + ')';
-      else if (aiState === 'SPEAKING' && w1 > 0.38) ctx.fillStyle = 'rgba(255, 179, 0, ' + alpha.toFixed(3) + ')';
+      const size = Math.max(0.9, (1.4 + (w1 + 0.5) * 0.8) * persp * 0.7);
+      if (energy > 0.35 && w1 > 0.45) ctx.fillStyle = 'rgba(255, 179, 0, ' + alpha.toFixed(3) + ')';
       else ctx.fillStyle = 'rgba(0, ' + Math.floor(215 + w1 * 40) + ', 255, ' + (alpha * 0.9).toFixed(3) + ')';
       ctx.fillRect(sx - size / 2, sy - size / 2, size, size);
     }
@@ -173,34 +115,28 @@
 
   function drawFrame() {
     ctx.clearRect(0, 0, LOGICAL, LOGICAL);
-    if (mode === 'fusion') {
-      drawRings(time);
-      drawSphere(time, 122, 'cyan', energy);
-    } else if (mode === 'cyan_wave') {
-      drawSphere(time, 168, 'cyan', energy);
-    } else if (mode === 'neural_cloud') {
-      drawSphere(time, 168, 'white', energy);
-    } else {
-      drawRings(time);
-      drawSphere(time, 68, 'cyan', energy);
-    }
-    const active = aiState !== 'IDLE' || energy > 0.1;
+    drawGlow();
+    drawWaveSphere(time);
+    const lively = aiState !== 'IDLE' || energy > 0.08;
     for (let i = 0; i < bars.length; i++) {
-      const h = active ? 6 + Math.abs(Math.sin(time * 9 + i * 0.7)) * 20 : 4 + Math.abs(Math.sin(time * 2 + i * 0.4)) * 4;
+      const h = lively
+        ? 5 + Math.abs(Math.sin(time * 6 + i * 0.7)) * (8 + Math.min(energy, 1.4) * 14)
+        : 4 + Math.abs(Math.sin(time * 1.5 + i * 0.4)) * 3;
       bars[i].style.height = h.toFixed(1) + 'px';
     }
   }
 
   function loop() {
-    time += aiState === 'IDLE' ? 0.014 : 0.03;
-    energy *= 0.93;
+    time += aiState === 'IDLE' && energy < 0.1 ? SPEED_IDLE : SPEED_ACTIVE + Math.min(energy, 1.4) * 0.006;
+    energy *= 0.96;
     drawFrame();
     rafId = window.requestAnimationFrame(loop);
   }
 
   function start() {
-    if (rafId || !visible || reducedMotion.matches) {
-      if (!rafId) drawFrame();
+    if (rafId) return;
+    if (!visible || reducedMotion.matches) {
+      drawFrame();
       return;
     }
     rafId = window.requestAnimationFrame(loop);
@@ -250,9 +186,9 @@
   }
 
   window.SBHologram = {
-    setMode(next) {
-      mode = next;
-      tone(740, 1180, 0.1);
+    /** نبضة متناسبة مع طول الجزء الذي وصل من الرد (عدد الأحرف) */
+    feed(length) {
+      energy = Math.min(1.4, energy + Math.min(0.35, Math.max(0.04, length / 120)));
       if (!rafId) drawFrame();
     },
     setState(next) {
@@ -261,7 +197,7 @@
       if (!rafId) drawFrame();
     },
     pulse(withSound) {
-      energy = 1.2;
+      energy = Math.min(1.4, energy + (withSound ? 0.9 : 0.25));
       if (withSound) tone(320, 1280, 0.22);
       if (!rafId) drawFrame();
     },

@@ -62,15 +62,19 @@ export function resolveProviderKeys(vault?: UnlockedVault | null, env: NodeJS.Pr
  * Hint بالعربي: دالة إنشاء قائمة المزوّدين مرتبة حسب الإعدادات.
  */
 export function buildProviders(config: SystemBrandingConfig, keys: ProviderKeys, localContext: LocalKnowledgeContext): AIProvider[] {
+  return resolveProviderOrder(config.aiConfig).map((id) => buildProviderById(id, config, keys, localContext));
+}
+
+/**
+ * Hint بالعربي: دالة إنشاء مزوّد واحد بمعرّفه (بغض النظر عن ترتيب المزوّدين)، مثلاً لزر "اختبار الاتصال".
+ */
+export function buildProviderById(id: AIProviderId, config: SystemBrandingConfig, keys: ProviderKeys, localContext: LocalKnowledgeContext): AIProvider {
   const ai = config.aiConfig;
   const timeoutMs = ai.requestTimeoutMs ?? 120000;
-  const factories: Record<AIProviderId, () => AIProvider> = {
-    claude: () => createClaudeProvider({ apiKey: keys.claude, model: ai.claudeModel, effort: ai.claudeEffort, timeoutMs }),
-    gemini: () => createGeminiProvider({ apiKey: keys.gemini, model: ai.geminiModel, timeoutMs }),
-    ollama: () => createOllamaProvider({ endpoint: ai.ollamaEndpoint, model: ai.ollamaModel, timeoutMs }),
-    local: () => createLocalKnowledgeProvider(localContext),
-  };
-  return resolveProviderOrder(ai).map((id) => factories[id]());
+  if (id === 'claude') return createClaudeProvider({ apiKey: keys.claude, model: ai.claudeModel, effort: ai.claudeEffort, timeoutMs });
+  if (id === 'gemini') return createGeminiProvider({ apiKey: keys.gemini, model: ai.geminiModel, timeoutMs });
+  if (id === 'ollama') return createOllamaProvider({ endpoint: ai.ollamaEndpoint, model: ai.ollamaModel, timeoutMs });
+  return createLocalKnowledgeProvider(localContext);
 }
 
 /**

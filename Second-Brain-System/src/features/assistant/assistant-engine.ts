@@ -143,6 +143,40 @@ export function sanitizeHistory(history: unknown): ChatTurn[] {
 }
 
 /**
+ * Hint بالعربي: دالة توليد ملخص "ما هذا المشروع وماذا يخدم" بالمساعد الذكي من سياق المشروع.
+ *               تستخدم المزوّدين الحقيقيين فقط (لا المعرفة المحلية)، وترمي خطأ مفهوماً إن لم يتوفر أي مزوّد.
+ */
+export async function generateProjectSummary(
+  projectName: string,
+  projectContext: string,
+  vault?: UnlockedVault | null
+): Promise<{ summaryAr: string; providerUsed: AIProviderId; model: string }> {
+  const config = loadSystemConfig();
+  const providers = buildProviders(config, resolveProviderKeys(vault), {
+    assistantNameAr: config.assistantNameAr,
+    familyTitle: config.familyMemberTitle,
+    projects: [],
+    projectReports: [],
+    memoryCount: 0,
+  }).filter((p) => p.id !== 'local');
+  const system = `أنت تكتب ملخصاً عربياً واضحاً لمشروع برمجي يخص ${config.commanderName}، ليُحفظ في صفحة المشروع.
+اكتب 4 أقسام قصيرة بعناوين: "ما هو؟"، "ماذا يخدم ولمن؟"، "كيف يعمل؟" (تقنياً باختصار)، "ما المهم الانتباه له؟".
+اعتمد فقط على المعلومات المعطاة، ولا تخترع أرقاماً أو ميزات. إن كانت المعلومات قليلة فقل ذلك. لا تكتب أي أسرار.`;
+  try {
+    const result = await runProvidersWithFallback(providers, {
+      system,
+      messages: [{ role: 'user', content: `اكتب ملخص المشروع "${projectName}" من هذه المعلومات:\n\n${projectContext}` }],
+      question: projectName,
+      mode: 'commander',
+      maxOutputTokens: 2000,
+    });
+    return { summaryAr: redactSecrets(result.text.trim()).text, providerUsed: result.providerUsed, model: result.model };
+  } catch {
+    throw new Error('لا يوجد مزوّد ذكاء متاح لكتابة الملخص. افتح الخزنة لاستخدام مفاتيح Claude/Gemini أو شغّل Ollama، أو اكتب الملخص يدوياً.');
+  }
+}
+
+/**
  * Hint بالعربي: دالة التفاعل الرئيسية مع المساعد: تبني السياق، وتجرّب المزوّدين بالترتيب، وتبثّ الرد تدريجياً.
  */
 export async function askSecondBrainAssistant(

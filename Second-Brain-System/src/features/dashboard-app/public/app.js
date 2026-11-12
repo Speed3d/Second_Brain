@@ -164,8 +164,9 @@
 
   function setView(view) {
     if (!$('[data-panel="' + view + '"]')) view = 'command';
+    if (state.view === 'settings' && view !== 'settings') lockSettings();
     state.view = view;
-    store.set('view', view);
+    if (view !== 'settings' && view !== 'project') store.set('view', view);
     $$('.view').forEach((p) => {
       const active = p.dataset.panel === view;
       p.hidden = !active;
@@ -180,7 +181,35 @@
     updateHologramVisibility();
     if (view === 'vault' && state.vault.unlocked) loadSecrets();
     if (view === 'emergency') loadBackups();
-    if (view === 'settings') loadSettings();
+    if (view === 'settings') requireSettingsAuth();
+    if (view === 'connect') loadProvidersGuide();
+  }
+
+  // ===================== حماية الإعدادات بكلمة المرور =====================
+  /** كل دخول لقسم الإعدادات يطلب كلمة المرور الرئيسية من جديد */
+  function requireSettingsAuth() {
+    $('#devPanel').hidden = true;
+    $('[data-form="settings"]').hidden = true;
+    $('#settingsLocked').hidden = false;
+    if (!state.vault.exists) {
+      loadSettings(); // قبل إنشاء الخزنة (أول تشغيل) لا توجد كلمة مرور بعد
+      return;
+    }
+    openSettingsAuth();
+  }
+
+  function openSettingsAuth() {
+    const dialog = $('#authDialog');
+    $('[data-form="settings-auth"]').reset();
+    if (!dialog.open) dialog.showModal();
+    $('[data-form="settings-auth"]').elements.password.focus();
+  }
+
+  function lockSettings() {
+    $('#devPanel').hidden = true;
+    $('[data-form="settings"]').hidden = true;
+    $('#settingsLocked').hidden = false;
+    api('/api/settings/lock', {}).catch(() => {});
   }
 
   function updateHologramVisibility() {
@@ -246,10 +275,163 @@
             ? el('p', { className: 'small muted', text: '🕒 آخر commit: ' + p.lastCommitMessage + (p.uncommittedChanges ? ' — ' + p.uncommittedChanges + ' تغيير غير محفوظ' : '') })
             : null,
           p.trackedByGit.length ? el('p', { className: 'small', text: '⚠️ مرفوع على Git: ' + p.trackedByGit.join('، ') + ' — احذفه من المستودع وغيّر أي سر بداخله.' }) : null,
+          el('p', { className: 'small muted', text: 'اضغط لفتح صفحة المشروع ←' }),
         ],
+      });
+      card.classList.add('is-clickable');
+      card.tabIndex = 0;
+      card.setAttribute('role', 'link');
+      card.setAttribute('aria-label', 'فتح صفحة المشروع ' + p.name);
+      card.addEventListener('click', () => openProject(p.id));
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openProject(p.id);
+        }
       });
       list.appendChild(card);
     });
+  }
+
+  // ===================== صفحة المشروع =====================
+  function projectSection(title, children) {
+    return el('section', { className: 'card project-section', children: [el('h2', { text: title })].concat(children) });
+  }
+
+  function commandRows(list) {
+    if (!list || !list.length) return [el('p', { className: 'small muted', text: '—' })];
+    return list.map((c) => el('div', { className: 'cmd-row', children: [el('code', { text: c }), copyButton(c, '📋 نسخ')] }));
+  }
+
+  function plainList(items, render, emptyText) {
+    if (!items.length) return el('p', { className: 'small muted', text: emptyText });
+    const ul = el('ul', { className: 'plain-list' });
+    items.forEach((it) => ul.appendChild(render(it)));
+    return ul;
+  }
+
+  async function openProject(id) {
+    state.projectId = id;
+    setView('project');
+    $('#h-project').textContent = 'جارٍ التحميل…';
+    $('#projectPath').textContent = '';
+    $('#projectBody').replaceChildren();
+    try {
+      state.projectDetails = await api('/api/projects/' + encodeURIComponent(id));
+      renderProjectPage();
+    } catch (err) {
+      toast('❌ ' + err.message, 'error');
+      setView('projects');
+    }
+  }
+
+  function renderProjectPage() {
+    const d = state.projectDetails;
+    if (!d) return;
+    const p = d.project;
+    const r = d.report;
+    $('#h-project').textContent = p.name;
+    $('#projectPath').textContent = p.path + (p.pathExists ? '' : '  (غير موجود على هذا الجهاز)');
+    const commander = isCommander();
+    $$('#projectToolbar [data-action="project-open"], #projectToolbar [data-action="project-edit"], #projectToolbar [data-action="project-remove"]').forEach((b) => {
+      b.disabled = !commander;
+      b.title = commander ? '' : 'افتح الخزنة بكلمة المرور الرئيسية أولاً';
+    });
+
+    const tags = el('div', { className: 'tags' });
+    r.stack.forEach((s) => tags.appendChild(el('span', { className: 'badge', text: s })));
+    const total = r.criticalFiles.length;
+    if (total) tags.appendChild(el('span', { className: 'badge ' + (r.securedCount === total ? 'ok' : 'warn'), text: '🔐 ' + r.securedCount + '/' + total + ' مؤمَّن' }));
+
+    const summaryBox = p.summaryAr
+      ? el('div', { className: 'project-summary', text: p.summaryAr })
+      : el('p', { className: 'small muted', text: 'لا توجد خلاصة بعد. اضغط "توليد بالذكاء" ليكتبها المساعد من ملفات المشروع، أو "تعديل" لكتابتها بنفسك.' });
+    const genBtn = button('✨ توليد بالذكاء', 'btn-primary btn-sm', (e) => generateSummary(e.currentTarget));
+    genBtn.disabled = state.vault.exists && !commander;
+
+    const git = r.gitBranch
+      ? [
+          el('p', { className: 'small', text: '🌿 الفرع: ' + r.gitBranch }),
+          r.lastCommitMessage ? el('p', { className: 'small', text: '🕒 آخر commit: ' + r.lastCommitMessage + (r.lastCommitDate ? ' — ' + String(r.lastCommitDate).slice(0, 10) : '') }) : null,
+          el('p', { className: 'small ' + (r.uncommittedChanges ? '' : 'muted'), text: r.uncommittedChanges ? '✏️ ' + r.uncommittedChanges + ' تغيير غير محفوظ' : 'لا تغييرات غير محفوظة.' }),
+          r.trackedByGit.length ? el('p', { className: 'small', text: '⚠️ ملفات حساسة مرفوعة على Git: ' + r.trackedByGit.join('، ') }) : null,
+        ]
+      : [el('p', { className: 'small muted', text: 'المشروع ليس مستودع Git.' })];
+
+    $('#projectBody').replaceChildren(
+      projectSection('📌 ما هو؟', [
+        tags,
+        el('p', { text: p.descriptionAr || '—' }),
+        el('p', { className: 'small', children: [el('strong', { text: 'للعائلة: ' }), el('span', { text: p.wifeSummaryAr || '—' })] }),
+        el('p', { className: 'small', children: [el('strong', { text: '💰 الدخل: ' }), el('span', { text: p.monthlyIncome || '—' }), el('strong', { text: '  🧾 الفواتير: ' }), el('span', { text: p.billingNotes || '—' })] }),
+      ]),
+      projectSection('🧭 الخلاصة: ماذا يخدم وكيف يعمل', [summaryBox, el('div', { className: 'card-actions', children: [genBtn] })]),
+      el('div', {
+        className: 'card-grid two',
+        children: [
+          projectSection('▶️ أوامر التشغيل', commandRows(r.runCommands).concat(r.buildCommands.length ? [el('h2', { text: '🏗️ البناء' })].concat(commandRows(r.buildCommands)) : [])),
+          projectSection('🌿 Git', git),
+        ],
+      }),
+      projectSection('🔐 الملفات الحساسة', [
+        plainList(r.criticalFiles, (c) => el('li', { children: [el('span', { className: 'mono', text: c.path }), el('div', { className: 'muted', text: c.reasonAr + ' — ' + c.stateAr })] }), 'لم تُكتشف ملفات حساسة.'),
+      ]),
+      projectSection('📜 آخر التغييرات', [plainList(d.changelog, (c) => el('li', { text: c }), 'لا يوجد سجل تغييرات بعد.')]),
+      projectSection('🧠 القرارات والذاكرة', [
+        plainList(
+          d.memories,
+          (m) => el('li', { children: [el('strong', { text: m.title }), el('div', { className: 'muted small', text: m.createdAt.slice(0, 10) + ' — ' + m.sourceAI }), el('div', { text: m.summaryAr })] }),
+          'لا توجد سجلات ذاكرة لهذا المشروع.'
+        ),
+      ]),
+      projectSection('💬 المحادثات المؤرشفة', [
+        plainList(
+          d.conversations,
+          (c) => {
+            const readBtn = button('📖 قراءة', 'btn-ghost btn-sm', () => readConversation(c));
+            readBtn.disabled = !commander;
+            return el('li', {
+              children: [
+                el('strong', { text: c.title }),
+                el('div', { className: 'muted small', text: c.modifiedAt.slice(0, 16).replace('T', ' ') + ' — ' + Math.ceil(c.sizeBytes / 1024) + ' KB' }),
+                el('div', { className: 'card-actions', children: [readBtn] }),
+              ],
+            });
+          },
+          'لا توجد محادثات مؤرشفة. اجمعها من قسم "الذاكرة".'
+        ),
+      ]),
+      el('p', { className: 'small muted', text: 'آخر فحص: ' + String(r.scannedAt).slice(0, 16).replace('T', ' ') })
+    );
+  }
+
+  async function generateSummary(btn) {
+    btn.textContent = '⏳ يكتب المساعد…';
+    await busy(btn, async () => {
+      const data = await api('/api/projects/' + encodeURIComponent(state.projectId) + '/summary', {});
+      toast('✅ كُتبت الخلاصة بواسطة ' + (PROVIDER_NAMES[data.providerUsed] || data.providerUsed), 'ok');
+      await openProject(state.projectId);
+    });
+    btn.textContent = '✨ توليد بالذكاء';
+  }
+
+  async function readConversation(c) {
+    try {
+      const data = await api('/api/projects/' + encodeURIComponent(state.projectId) + '/conversations/' + encodeURIComponent(c.file));
+      $('#conversationDialogTitle').textContent = c.title;
+      $('#conversationText').textContent = data.content;
+      $('#conversationDialog').showModal();
+    } catch (err) {
+      toast('❌ ' + err.message, 'error');
+    }
+  }
+
+  function openProjectDialog() {
+    const p = state.projectDetails && state.projectDetails.project;
+    if (!p) return;
+    const f = $('[data-form="project-edit"]');
+    ['descriptionAr', 'wifeSummaryAr', 'monthlyIncome', 'billingNotes', 'summaryAr'].forEach((k) => (f.elements[k].value = p[k] || ''));
+    $('#projectDialog').showModal();
   }
 
   function renderFamilyProjects() {
@@ -319,7 +501,6 @@
     $('#vaultOpen').hidden = !v.unlocked;
     $('#vaultToolbar').hidden = !v.unlocked;
     $$('[data-commander-only]').forEach((n) => (n.hidden = !isCommander()));
-    $('#settingsLockNote').hidden = !v.exists || isCommander();
 
     const chip = $('#chipVault');
     chip.textContent = !v.exists ? 'غير مُنشأة' : v.unlocked ? 'مفتوحة' : 'مقفلة';
@@ -529,10 +710,13 @@
     try {
       state.settings = await api('/api/settings');
     } catch (err) {
-      toast('تعذر تحميل الإعدادات: ' + err.message, 'error');
+      if (err.data && err.data.needsSettingsAuth) openSettingsAuth();
+      else toast('تعذر تحميل الإعدادات: ' + err.message, 'error');
       return;
     }
     const form = $('[data-form="settings"]');
+    form.hidden = false;
+    $('#settingsLocked').hidden = true;
     const s = state.settings;
     const values = {
       identity: s.identity,
@@ -556,6 +740,60 @@
     });
     dl.appendChild(el('dt', { text: 'serverPort' }));
     dl.appendChild(el('dd', { className: 'mono', text: String(s.readOnly.serverPort) }));
+    loadMaintenance();
+  }
+
+  // ===================== وضع التطوير والتصفير =====================
+  async function loadMaintenance() {
+    const panel = $('#devPanel');
+    try {
+      state.maintenance = await api('/api/maintenance');
+    } catch (e) {
+      panel.hidden = true;
+      return;
+    }
+    panel.hidden = !state.maintenance.developerMode;
+    const box = $('#trashList');
+    box.replaceChildren();
+    const trash = state.maintenance.trash;
+    if (!trash.length) {
+      box.appendChild(el('p', { className: 'small muted', text: 'السلة فارغة.' }));
+      return;
+    }
+    box.appendChild(el('p', { className: 'small', text: 'محتوى السلة (الأحدث أولاً):' }));
+    const ul = el('ul', { className: 'plain-list' });
+    trash.forEach((b) => {
+      const label = b.kind === 'reset' ? '🧹 تصفير' : '💾 حالة محفوظة قبل الاسترجاع';
+      ul.appendChild(el('li', { text: label + ' — ' + b.createdAt.slice(0, 16).replace('T', ' ') + ' — ' + b.itemCount + ' عنصر' }));
+    });
+    box.appendChild(ul);
+  }
+
+  /** طلب عبارة التأكيد من المستخدم؛ المخرجات: النص المكتوب أو null عند الإلغاء */
+  function askPhrase(message, phrase) {
+    const typed = window.prompt(message + '\n\nللتأكيد اكتب: ' + phrase);
+    return typed === null ? null : typed;
+  }
+
+  /** بعد التصفير أو الاسترجاع تتغير الخزنة كلها: نعيد تحميل الواجهة من البداية */
+  function reloadAfterMaintenance(message) {
+    toast(message, 'ok', 6000);
+    setTimeout(() => window.location.reload(), 1800);
+  }
+
+  async function maintenanceCall(btn, pathName, body) {
+    return busy(btn, async () => {
+      try {
+        return await api(pathName, body);
+      } catch (err) {
+        if (err.data && err.data.needsSettingsAuth) {
+          toast('انتهت مدة صلاحية الإعدادات. أدخل كلمة المرور ثم أعد المحاولة.', 'warn');
+          openSettingsAuth();
+          return undefined;
+        }
+        throw err;
+      }
+    });
   }
 
   function collectSettings(form) {
@@ -661,6 +899,7 @@
       h.setState('THINKING');
       h.pulse();
     }
+    let shownLength = 0;
     try {
       const result = await streamAssistant(
         question,
@@ -670,10 +909,14 @@
             reply.classList.remove('is-pending');
             if (h) h.setState('SPEAKING');
           }
+          // الموجة تنبض بقدر النص الجديد الذي وصل
+          if (h && text.length > shownLength) h.feed(text.length - shownLength);
+          shownLength = text.length;
           reply.textContent = text;
           chatLog(mode).scrollTop = chatLog(mode).scrollHeight;
         },
         () => {
+          shownLength = 0;
           reply.classList.add('is-pending');
           reply.textContent = '⏳ المزوّد الأول تعذّر، جاري تجربة التالي…';
         }
@@ -706,6 +949,10 @@
     utter.lang = (state.app && state.app.voiceLang) || 'ar-SA';
     const h = hologram();
     utter.onstart = () => h && h.setState('SPEAKING');
+    // نبضة خفيفة مع كل كلمة يقرؤها المتصفح
+    utter.onboundary = (e) => {
+      if (h && e.name === 'word') h.pulse(false);
+    };
     utter.onend = () => h && h.setState('IDLE');
     window.speechSynthesis.speak(utter);
   }
@@ -741,6 +988,51 @@
     }
   }
 
+  // ===================== دليل الربط =====================
+  async function loadProvidersGuide() {
+    let data;
+    try {
+      data = await api('/api/assistant/providers');
+    } catch (e) {
+      return;
+    }
+    $$('.connect-card').forEach((card) => {
+      const badge = $('[data-status]', card);
+      const p = data.providers.find((x) => x.id === card.dataset.provider);
+      if (!p) {
+        badge.className = 'badge';
+        badge.textContent = 'خارج ترتيب المزوّدين';
+        badge.title = 'غيّر "الوضع" في الإعدادات ليُستخدم هذا المزوّد';
+      } else if (p.available) {
+        badge.className = 'badge ok';
+        badge.textContent = '✓ جاهز';
+        badge.title = '';
+      } else {
+        badge.className = 'badge warn';
+        badge.textContent = p.configured ? '✗ غير متاح' : '✗ غير مهيّأ';
+        badge.title = p.reasonAr || '';
+      }
+    });
+  }
+
+  async function testProvider(btn) {
+    const card = btn.closest('.connect-card');
+    const box = $('[data-result]', card);
+    box.hidden = false;
+    box.className = 'report';
+    box.textContent = '⏳ جارٍ الاختبار…';
+    const done = await busy(btn, async () => {
+      const r = await api('/api/assistant/test', { provider: btn.dataset.provider });
+      box.className = 'report ' + (r.ok ? 'ok' : 'fail');
+      box.textContent = r.ok
+        ? '✅ يعمل. النموذج: ' + r.model + ' — الزمن: ' + (r.latencyMs / 1000).toFixed(1) + ' ث' + (r.replyPreview ? '\nالرد: ' + r.replyPreview : '')
+        : '❌ لم ينجح الاتصال (' + r.model + ').\nالسبب: ' + r.reasonAr + '\nالحل المقترح: ' + r.hintAr;
+      loadProvidersGuide();
+      return true;
+    });
+    if (!done) box.hidden = true;
+  }
+
   // ===================== معالجات النماذج =====================
   const formHandlers = {
     async chat(form) {
@@ -753,6 +1045,15 @@
         form.reset();
         form.hidden = true;
         await loadState();
+      });
+    },
+    async 'project-edit'(form, btn) {
+      await busy(btn, async () => {
+        const data = await api('/api/projects/' + encodeURIComponent(state.projectId) + '/update', formData(form));
+        $('#projectDialog').close();
+        toast(data.messageAr, 'ok');
+        await openProject(state.projectId);
+        loadState();
       });
     },
     async setup(form, btn) {
@@ -846,11 +1147,30 @@
     },
     async settings(form, btn) {
       await busy(btn, async () => {
-        const data = await api('/api/settings', collectSettings(form));
-        state.settings = data.settings;
-        toast(data.messageAr, 'ok');
-        await loadState();
-        refreshProviders();
+        try {
+          const data = await api('/api/settings', collectSettings(form));
+          state.settings = data.settings;
+          toast(data.messageAr, 'ok');
+          await loadState();
+          refreshProviders();
+        } catch (err) {
+          // انتهت صلاحية الإعدادات (5 دقائق): نطلب كلمة المرور ثم يعيد المستخدم الحفظ
+          if (err.data && err.data.needsSettingsAuth) {
+            toast('انتهت مدة صلاحية الإعدادات. أدخل كلمة المرور ثم اضغط حفظ مجدداً.', 'warn');
+            openSettingsAuth();
+            return;
+          }
+          throw err;
+        }
+      });
+    },
+    async 'settings-auth'(form, btn) {
+      await busy(btn, async () => {
+        await api('/api/settings/auth', formData(form));
+        form.reset();
+        $('#authDialog').close();
+        await refreshVault();
+        await loadSettings();
       });
     },
   };
@@ -859,12 +1179,6 @@
   const actions = {
     mode: (b) => setMode(b.dataset.mode),
     view: (b) => setView(b.dataset.view),
-    'core-mode': (b) => {
-      $$('[data-action="core-mode"]').forEach((p) => p.classList.toggle('is-active', p === b));
-      store.set('coreMode', b.dataset.core);
-      const h = hologram();
-      if (h) h.setMode(b.dataset.core);
-    },
     'toggle-sound': (b) => {
       const on = b.getAttribute('aria-pressed') !== 'true';
       applySound(on);
@@ -903,7 +1217,76 @@
       toast('🔒 قُفلت الخزنة.', 'ok');
     },
     'new-secret': () => openSecretDialog(null),
-    'close-dialog': () => $('#secretDialog').close(),
+    'close-dialog': (b) => {
+      const d = b.closest('dialog');
+      if (d) d.close();
+    },
+    'back-to-projects': () => setView('projects'),
+    'test-provider': (b) => testProvider(b),
+    'refresh-providers-guide': () => loadProvidersGuide(),
+    'dev-reset': async (b) => {
+      const m = state.maintenance;
+      if (!m) return;
+      const confirm = askPhrase('سيُنقل كل شيء شخصي (الخزنة، الإعدادات، المشاريع، الذاكرة، السجلات) إلى السلة، ويبدأ البرنامج من جديد كأول تشغيل.', m.phrases.reset);
+      if (confirm === null) return;
+      const data = await maintenanceCall(b, '/api/maintenance/reset', { confirm });
+      if (data) reloadAfterMaintenance(data.messageAr);
+    },
+    'dev-restore': async (b) => {
+      if (!window.confirm('استرجاع آخر حالة من السلة؟ الحالة الحالية لن تُحذف بل تُحفظ في السلة أولاً.')) return;
+      const data = await maintenanceCall(b, '/api/maintenance/restore-last', {});
+      if (data) reloadAfterMaintenance(data.messageAr);
+    },
+    'dev-empty-trash': async (b) => {
+      const m = state.maintenance;
+      if (!m) return;
+      const confirm = askPhrase('⚠️ حذف نهائي لا رجعة فيه لكل ما في السلة.', m.phrases.emptyTrash);
+      if (confirm === null) return;
+      const data = await maintenanceCall(b, '/api/maintenance/empty-trash', { confirm });
+      if (data) {
+        toast(data.messageAr, 'ok');
+        loadMaintenance();
+      }
+    },
+    'dev-finalize': async (b) => {
+      const m = state.maintenance;
+      if (!m) return;
+      const confirm = askPhrase('الاعتماد النهائي يُطفئ وضع التطوير ولا يمكن التراجع عنه من البرنامج. زر التصفير سيختفي.', m.phrases.finalize);
+      if (confirm === null) return;
+      const data = await maintenanceCall(b, '/api/maintenance/finalize', { confirm });
+      if (data) {
+        toast(data.messageAr, 'ok', 7000);
+        loadMaintenance();
+      }
+    },
+    'project-open': (b) =>
+      busy(b, async () => {
+        await api('/api/projects/' + encodeURIComponent(state.projectId) + '/open', { target: b.dataset.target });
+        toast(b.dataset.target === 'vscode' ? '🧑‍💻 فُتح المشروع في VS Code.' : '📂 فُتح مجلد المشروع.', 'ok');
+      }),
+    'project-rescan': (b) =>
+      busy(b, async () => {
+        await api('/api/projects/rescan', {});
+        await openProject(state.projectId);
+        toast('✅ أُعيد فحص المشروع.', 'ok');
+        loadState();
+      }),
+    'project-edit': () => openProjectDialog(),
+    'project-remove': (b) => {
+      const p = state.projectDetails && state.projectDetails.project;
+      if (!p || !window.confirm('إيقاف مراقبة (' + p.name + ')؟ وثائقه في Obsidian تبقى كما هي، ويمكنك إضافته لاحقاً.')) return;
+      busy(b, async () => {
+        const data = await api('/api/projects/' + encodeURIComponent(p.id) + '/remove', {});
+        toast(data.messageAr, 'ok');
+        await loadState();
+        setView('projects');
+      });
+    },
+    'open-settings-auth': () => openSettingsAuth(),
+    'cancel-settings-auth': () => {
+      $('#authDialog').close();
+      setView('command');
+    },
   };
 
   function applySound(on) {
@@ -971,9 +1354,6 @@
   // ===================== التشغيل =====================
   function init() {
     bindEvents();
-    const savedCore = store.get('coreMode', 'fusion');
-    const pill = $('[data-action="core-mode"][data-core="' + savedCore + '"]');
-    if (pill) actions['core-mode'](pill);
     applySound(store.get('sound', false));
     setView(store.get('view', 'command'));
     setMode('commander');

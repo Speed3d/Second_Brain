@@ -20,6 +20,9 @@ import { runToolsAndDashboardTests } from './05-tools-and-dashboard.test.ts';
 import { runSecurityTests } from './06-security.test.ts';
 import { runIntegrationTests } from './07-integration.test.ts';
 import { runDisasterRecoveryTests } from './08-disaster-recovery.test.ts';
+import { runProjectPageTests } from './09-project-page.test.ts';
+import { runMaintenanceTests } from './10-maintenance.test.ts';
+import { runConnectionGuideTests } from './11-connection-guide.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -70,6 +73,21 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '8. اختبار التعافي من الكوارث (محاكاة دليل التشغيل على جهاز جديد من البداية للنهاية)',
       file: 'tests/08-disaster-recovery.test.ts',
       runner: runDisasterRecoveryTests,
+    },
+    {
+      name: '9. اختبارات صفحة المشروع (التفاصيل، المحادثات المؤرشفة، توليد الخلاصة، التعديل وإيقاف المراقبة)',
+      file: 'tests/09-project-page.test.ts',
+      runner: runProjectPageTests,
+    },
+    {
+      name: '10. اختبارات وضع التطوير (التصفير إلى السلة، الاسترجاع، إفراغ السلة، الاعتماد النهائي)',
+      file: 'tests/10-maintenance.test.ts',
+      runner: runMaintenanceTests,
+    },
+    {
+      name: '11. اختبارات دليل الربط (اختبار الاتصال بكل مزوّد، الحلول المقترحة، الصلاحيات)',
+      file: 'tests/11-connection-guide.test.ts',
+      runner: runConnectionGuideTests,
     },
   ];
 
