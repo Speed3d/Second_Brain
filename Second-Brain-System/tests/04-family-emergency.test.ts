@@ -53,7 +53,8 @@ export async function runFamilyEmergencyTests(): Promise<string[]> {
   const byPassword = openEncryptedBackup(backup.backupFilePath, TEST_MASTER_PASSWORD);
   assert.equal(byKey.filesCount, backup.filesIncluded);
   assert.equal(byPassword.filesCount, backup.filesIncluded);
-  assert.ok(Object.keys(byKey.filesMap).includes('Second-Brain-System/config/branding.json'), 'يجب تضمين الإعدادات');
+  assert.ok(Object.keys(byKey.filesMap).includes('Second-Brain-System/config/branding.json'), 'يجب تضمين الهوية');
+  assert.ok(Object.keys(byKey.filesMap).includes('Second-Brain-System/config/settings.json'), 'يجب تضمين الإعدادات (المشاريع والفواتير) للاستعادة الكاملة');
   passedChecks.push(
     `اختبار النسخة الاحتياطية v2 (${backup.filesIncluded} ملف) وفتحها بمفتاح الطوارئ وبكلمة المرور الرئيسية بنجاح.`
   );

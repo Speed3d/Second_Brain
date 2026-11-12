@@ -13,7 +13,7 @@ import * as path from 'node:path';
 import type { SealedData } from '../../shared/types.ts';
 import { ensureDirectoryExists, formatTimestampIso, listFilesRecursive, readJsonFileSafe, writeFileAtomic } from '../../shared/file-helpers.ts';
 import { openWithKey, sealWithKey } from '../../core/crypto-engine.ts';
-import { loadSystemConfig, resolveDefaultConfigPath } from '../../core/config-manager.ts';
+import { loadSystemConfig, resolveDefaultConfigPath, resolveSettingsPath } from '../../core/config-manager.ts';
 import { logSystemInfo } from '../../core/logger.ts';
 import { readVaultFile, unwrapVaultDataKey, type UnlockedVault, type VaultKeyEnvelopes } from '../vault/vault-manager.ts';
 
@@ -22,6 +22,7 @@ const BACKUP_PREFIX = 'Second-Brain-Backup-';
 const BACKUP_SUFFIX = '.enc.json';
 /** المسار الثابت للإعدادات داخل النسخة (مهما كان مكانها الفعلي) */
 const CONFIG_ENTRY = 'Second-Brain-System/config/branding.json';
+const SETTINGS_ENTRY = 'Second-Brain-System/config/settings.json';
 
 /**
  * Hint بالعربي: محتوى النسخة الاحتياطية بعد فك تشفيرها.
@@ -69,6 +70,8 @@ export function createEncryptedSystemBackup(
   for (const filePath of listFilesRecursive(config.paths.obsidianVaultDir)) addFile(filePath);
   addFile(vault.vaultFilePath);
   addFile(resolveDefaultConfigPath(), CONFIG_ENTRY);
+  // الإعدادات (المشاريع، الدخل والفواتير، الذكاء...) — ضرورية للاستعادة الكاملة على جهاز جديد
+  addFile(resolveSettingsPath(), SETTINGS_ENTRY);
   addFile(path.join(config.paths.rootDir, 'Second-Brain-System', 'data', 'ai-memory-store.json'));
 
   const createdAt = formatTimestampIso();

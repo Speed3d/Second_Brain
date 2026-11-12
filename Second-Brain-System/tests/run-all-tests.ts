@@ -19,6 +19,7 @@ import { runFamilyEmergencyTests } from './04-family-emergency.test.ts';
 import { runToolsAndDashboardTests } from './05-tools-and-dashboard.test.ts';
 import { runSecurityTests } from './06-security.test.ts';
 import { runIntegrationTests } from './07-integration.test.ts';
+import { runDisasterRecoveryTests } from './08-disaster-recovery.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -64,6 +65,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '7. اختبارات الربط والمرونة (الإعدادات، مزوّدو الذكاء، MCP، Git، سجل التغييرات، تنقية الأسرار، البثّ)',
       file: 'tests/07-integration.test.ts',
       runner: runIntegrationTests,
+    },
+    {
+      name: '8. اختبار التعافي من الكوارث (محاكاة دليل التشغيل على جهاز جديد من البداية للنهاية)',
+      file: 'tests/08-disaster-recovery.test.ts',
+      runner: runDisasterRecoveryTests,
     },
   ];
 

@@ -1,110 +1,122 @@
 # 🌳 الهيكلية الشجرية المتفرعة للمشروع (Strict Modular Architecture Tree)
 
-> **تطبيقاً للقانونين (2) و (3):** هذه الوثيقة تحدد الشجرة المتفرعة الصارمة للمشروع في `D:\Second Brain` وتمنع خلط أي ملفات أو أقسام مع بعضها.
+> **تطبيقاً للقانونين (2) و (3):** هذه الوثيقة تحدد الشجرة الفعلية للمشروع في `D:\Second Brain` وتمنع خلط الملفات أو الأقسام.
+> **آخر مراجعة:** `2026-11-12` (بعد المرحلة 4) — مطابقة للملفات المتتبعة في Git.
+> 🔒 = ملف/مجلد شخصي **لا يُرفع إلى GitHub** (انظر `.gitignore`).
 
 ---
 
-## 1. شجرة المجلدات الشاملة
+## 1. شجرة المجلدات
 
 ```text
 📁 D:\Second Brain\
 │
-├── 📄 00-Master-Implementation-Plan.md         # الخطة الهندسية الشاملة المثبتة (القانون 1)
-├── 📄 CONSTITUTION-AND-RULES.md                # الدستور والقوانين الثمانية الصارمة
+├── 📄 README.md                                # البدء السريع: التشغيل، الاختبار، الربط، والأمان
+├── 📄 00-Master-Implementation-Plan.md         # الرؤية والخطة الهندسية الشاملة (القانون 1)
+├── 📄 CONSTITUTION-AND-RULES.md                # الدستور والقوانين الثمانية الملزمة
+├── 📄 Launch-Second-Brain.bat                  # مشغّل البرنامج (يعمل من أي قرص، ويفتح المتصفح بعد جاهزية الخادم)
+├── 📄 .gitignore                               # ما لا يُرفع أبداً (البيانات، الإعدادات الحقيقية، المحتوى الشخصي)
 │
-├── 📁 docs\                                    # التوثيق الهندسي المستمر المرتبط بالخطط
-│   ├── 📄 01-ARCHITECTURE-TREE.md              # هذه الوثيقة: شجرة المجلدات وتقسيم الطبقات
-│   ├── 📄 02-EXECUTION-ROADMAP.md              # خطة العمل التنفيذية خطوة بخطوة (القانون 4)
-│   ├── 📄 03-PROGRESS-AND-ISSUES-LOG.md        # سجل الإنجازات، المشاكل، الحلول، والمتبقي (القانون 5)
-│   ├── 📄 04-CODE-AND-FUNCTIONS-INDEX.md       # الفهرس الحي لكل دالة وأداة ومكان استخدامها (القانون 7)
-│   ├── 📄 05-TESTS-ARCHIVE-REPORT.md           # أرشيف الاختبارات الدائمة ونتائج الفحص (القانون 8)
-│   └── 📄 06-FIXES-AND-IMPROVEMENTS-PLAN.md    # خطة الإصلاحات والتحسينات المعتمدة وحالة كل بند
+├── 📁 docs\                                    # التوثيق الهندسي الحي
+│   ├── 📄 01-ARCHITECTURE-TREE.md              # هذه الوثيقة
+│   ├── 📄 02-EXECUTION-ROADMAP.md              # خارطة الطريق وحالة كل مرحلة (القانون 4)
+│   ├── 📄 03-PROGRESS-AND-ISSUES-LOG.md        # ما أُنجز، المشاكل، الحلول، والمتبقي (القانون 5)
+│   ├── 📄 04-CODE-AND-FUNCTIONS-INDEX.md       # فهرس الدوال الحي (يُولَّد آلياً — القانون 7)
+│   ├── 📄 05-TESTS-ARCHIVE-REPORT.md           # تقرير الاختبارات الدائم (يُولَّد آلياً — القانون 8)
+│   ├── 📄 06-FIXES-AND-IMPROVEMENTS-PLAN.md    # خطة الإصلاحات المعتمدة وحالة كل بند
+│   └── 📁 archive\                             # وثائق ونماذج تاريخية لم تعد مستخدمة
 │
-├── 📁 Obsidian-Vault\                          # العقل الثاني (يُفتح مباشرة ببرنامج Obsidian)
-│   ├── 📁 .obsidian\                           # إعدادات Obsidian والثيم المخصص (second-brain-hud.css)
-│   ├── 📁 00-Command-Center\                   # لوحة القيادة، خريطة المشاريع Canvas، وفهرس النظام
-│   ├── 📁 01-Commander-Profile\                # هويتك الشخصية وقواعدك البرمجية للـ AI
-│   ├── 📁 02-Projects\                         # مجلدات المشاريع (تُدار وتُحدث تلقائياً)
-│   ├── 📁 03-AI-Shared-Memory\                 # الذاكرة المشتركة وسجلات محادثات Antigravity & Claude
-│   └── 📁 04-Family-Emergency-Guide\           # بوابة ودليل الطوارئ المبسط لزوجتك بالعربية
+├── 📁 Obsidian-Vault\                          # العقل المعرفي (يُفتح ببرنامج Obsidian)
+│   ├── 📁 .obsidian\                           # الإعدادات + الثيم snippets/second-brain-hud.css
+│   ├── 📁 00-Command-Center\                   # لوحة القيادة، خريطة Canvas، ونسخة فهرس الدوال
+│   ├── 📁 01-Commander-Profile\                # AI-Coding-Standards.md (مرفوع) + About-Commander.md 🔒
+│   ├── 📁 02-Projects\ 🔒                      # ستة ملفات لكل مشروع + AI-Conversations (تُحدَّث آلياً)
+│   ├── 📁 03-AI-Shared-Memory\                 # Memory-Index.md (مرفوع) + Memory-Stream.md 🔒 + *-Sessions\ 🔒
+│   └── 📁 04-Family-Emergency-Guide\ 🔒        # دليل العائلة، جدول المشاريع والفواتير، والتشغيل على جهاز جديد
 │
-└── 📁 Second-Brain-System\                           # النظام البرمجي الفعلي (المحرك + الخزنة + الواجهة + الاختبارات)
-    ├── 📄 package.json                         # تعريف الحزم وأوامر التشغيل والاختبار
-    ├── 📄 tsconfig.json                        # إعدادات TypeScript الصارمة
-    ├── 📁 config\                              # الإعدادات المركزية القابلة للتعديل في أي وقت
-    │   ├── 📄 branding.json                    # الهوية فقط (اسم البرنامج والمساعد) — لا يُرفع
-    │   ├── 📄 settings.json                    # المسارات، الذكاء، الموصلات، المراقب، المشاريع — لا يُرفع
-    │   └── 📄 *.example.json                   # نماذج مرفوعة على GitHub
-    │   (المرحلة 2 أضافت: features/assistant/providers/ ، features/ai-memory/connectors/ ،
-    │    project-indexer/git-inspector.ts و project-watcher.ts ، shared/secret-redaction.ts ، tests/07-integration.test.ts)
-    ├── 📁 data\                                # البيانات المشفرة والنسخ الاحتياطية
-    │   ├── 📁 encrypted-vault\                 # ملفات الخزنة المشفرة بـ AES-256-GCM
-    │   ├── 📁 emergency-kits\                  # كتيبات الطوارئ المولدة لزوجتك
-    │   └── 📁 encrypted-backups\               # النسخ الاحتياطية المشفرة الجاهزة للسحابة/USB
+└── 📁 Second-Brain-System\                     # النظام البرمجي (Node.js 24 + TypeScript، بلا أي حزم خارجية)
+    ├── 📄 package.json                         # أوامر: start / test / scan:code / mcp
+    ├── 📄 tsconfig.json
+    ├── 📁 config\
+    │   ├── 📄 branding.json 🔒                 # الهوية فقط
+    │   ├── 📄 settings.json 🔒                 # الذكاء، الموصلات، المراقب، الأمان، المشاريع (والمسارات المخصصة إن وُجدت)
+    │   ├── 📄 branding.example.json            # نموذج مرفوع
+    │   └── 📄 settings.example.json            # نموذج مرفوع
+    ├── 📁 data\ 🔒                             # الخزنة، النسخ الاحتياطية، الذاكرة، حالة السحب والفحص، السجلات
     │
-    ├── 📁 src\                                 # الكود المصدري مقسم حسب القانون (3)
-    │   ├── 📁 core\                            # [1. CORE] النواة التأسيسية للنظام
-    │   │   ├── 📄 config-manager.ts            # إدارة الإعدادات والهوية المتغيرة (Branding)
-    │   │   ├── 📄 crypto-engine.ts             # محرك التشفير العسكري AES-256-GCM + Scrypt
-    │   │   └── 📄 logger.ts                    # مسجل العمليات والأخطاء المربوط بالتوثيق
+    ├── 📁 src\
+    │   ├── 📁 core\                            # [CORE] لا يعتمد إلا على shared
+    │   │   ├── 📄 config-manager.ts            # الإعدادات: الفصل، الترحيل، التحقق، المسارات النسبية
+    │   │   ├── 📄 crypto-engine.ts             # AES-256-GCM + scrypt (N=2^17)، تغليف المفاتيح، مفتاح الطوارئ بخانة تحقق
+    │   │   └── 📄 logger.ts                    # سجل التشغيل
     │   │
-    │   ├── 📁 features\                        # [2. FEATURES] الميزات المستقلة (كل ميزة بمجلد خاص)
-    │   │   ├── 📁 vault\                       # خزنة الإيميلات، الباسووردات، 2FA، والملفات السرية
-    │   │   │   └── 📄 vault-manager.ts
-    │   │   ├── 📁 project-indexer\             # تشريح المشاريع، صيد الملفات الحرجة، والتحديث التلقائي
-    │   │   │   ├── 📄 project-scanner.ts
-    │   │   │   ├── 📄 secret-file-hunter.ts
-    │   │   │   └── 📄 obsidian-sync.ts
-    │   │   ├── 📁 ai-memory\                   # الذاكرة المشتركة وسحب محادثات Antigravity & Claude
-    │   │   │   ├── 📄 shared-memory-service.ts
-    │   │   │   └── 📄 transcript-harvester.ts
-    │   │   ├── 📁 assistant\                   # عقل المساعد الذكي (Gemini/Claude + Ollama + صوت)
-    │   │   │   └── 📄 assistant-engine.ts
-    │   │   ├── 📁 family-emergency\            # وضع الطوارئ لزوجتك + كتيب الطوارئ + النسخ المشفر
-    │   │   │   ├── 📄 emergency-kit-service.ts
-    │   │   │   └── 📄 backup-service.ts
-    │   │   └── 📁 dashboard-app\               # تطبيق وواجهة سطح المكتب (HUD + Wife Mode)
-    │   │       ├── 📄 desktop-server.ts        # موجّه صغير على 127.0.0.1 فقط + طبقات الحماية
-    │   │       ├── 📄 http-utils.ts            # الرد، حد حجم الطلب، الكوكيز، فحص Host و CSRF، رؤوس الأمان
-    │   │       ├── 📄 session-manager.ts       # جلسة الخزنة في الذاكرة + القفل التلقائي + تأخير المحاولات
-    │   │       ├── 📁 routes\                  # معالجات المسارات حسب الميزة
-    │   │       │   ├── 📄 vault-routes.ts      # إنشاء/فتح/قفل الخزنة وإدارة الأسرار وكلمة المرور ومفتاح الطوارئ
-    │   │       │   ├── 📄 project-routes.ts    # إضافة مشروع وإعادة الفحص
-    │   │       │   ├── 📄 memory-routes.ts     # سحب المحادثات
-    │   │       │   ├── 📄 assistant-routes.ts  # المساعد الذكي
-    │   │       │   └── 📄 emergency-routes.ts  # كتيب الطوارئ والنسخ الاحتياطي والاستعادة
-    │   │       ├── 📁 routes\                  # (تابع) state-routes.ts: الصفحة، الملفات الثابتة، /api/state، /api/settings
-    │   │       └── 📁 public\                  # الواجهة كملفات ثابتة (CSP صارمة: لا سكربت ولا نمط مضمّن)
-    │   │           ├── 📄 index.html           # الهيكل: شريط جانبي بستة أقسام + وضع العائلة + نافذة الخزنة
-    │   │           ├── 📄 styles.css           # التصميم المتجاوب (1200/900/600) و RTL وتقليل الحركة
-    │   │           ├── 📄 app.js               # منطق الواجهة (textContent فقط، روابط http/https فقط)
-    │   │           └── 📄 hologram.js          # النواة المتحركة (تتوقف عند الإخفاء، إطار ثابت مع تقليل الحركة)
+    │   ├── 📁 features\                        # [FEATURES] كل ميزة في مجلدها
+    │   │   ├── 📁 vault\
+    │   │   │   └── 📄 vault-manager.ts         # الخزنة v2: مفتاح بيانات مغلَّف مرتين، حفظ ذرّي، تغيير كلمة المرور، تدوير المفتاح
+    │   │   ├── 📁 project-indexer\
+    │   │   │   ├── 📄 project-scanner.ts       # تشريح المشروع + التأمين الفعلي للملفات الحساسة
+    │   │   │   ├── 📄 secret-file-hunter.ts    # صيد الملفات الحساسة (.env، keystore، مفاتيح...)
+    │   │   │   ├── 📄 git-inspector.ts         # الفرع، آخر commit، والملفات الحساسة المرفوعة على Git
+    │   │   │   ├── 📄 obsidian-sync.ts         # الوثائق الست مع حماية الملاحظات اليدوية وسجل تغييرات عند التغيّر فقط
+    │   │   │   └── 📄 project-watcher.ts       # المراقب الدوري وإعادة الفحص الشاملة
+    │   │   ├── 📁 ai-memory\
+    │   │   │   ├── 📄 shared-memory-service.ts # الذاكرة المشتركة (مع حذف الأسرار)
+    │   │   │   ├── 📄 transcript-harvester.ts  # السحب التزايدي وربط الجلسات بالمشاريع
+    │   │   │   └── 📁 connectors\              # claude-code-connector.ts، antigravity-connector.ts، connector-types.ts
+    │   │   ├── 📁 assistant\
+    │   │   │   ├── 📄 assistant-engine.ts      # بناء السياق (بلا محتوى الخزنة) ووضعا القائد والعائلة
+    │   │   │   └── 📁 providers\               # claude / gemini / ollama / local + provider-registry (التراجع) + stream-parsers
+    │   │   ├── 📁 family-emergency\
+    │   │   │   ├── 📄 emergency-kit-service.ts # كتيب الطوارئ (في الذاكرة فقط)
+    │   │   │   └── 📄 backup-service.ts        # النسخ v2 والاستعادة إلى مجلد جديد
+    │   │   └── 📁 dashboard-app\
+    │   │       ├── 📄 desktop-server.ts        # الموجّه على 127.0.0.1 + طبقات الحماية + تشغيل المراقب
+    │   │       ├── 📄 http-utils.ts            # الرد، حد الطلب، الكوكيز، Host/CSRF، رؤوس الأمان
+    │   │       ├── 📄 session-manager.ts       # جلسة الخزنة، القفل التلقائي، تأخير المحاولات
+    │   │       ├── 📁 routes\                  # state، vault، project، memory، assistant، emergency
+    │   │       └── 📁 public\                  # index.html، styles.css، app.js، hologram.js (CSP صارمة)
     │   │
-    │   ├── 📁 shared\                          # [3. SHARED] الأنواع والدوال المشتركة
-    │   │   ├── 📄 types.ts                     # جميع تعريفات الأنواع والواجهات البرمجية
-    │   │   ├── 📄 file-helpers.ts              # دوال الملفات الآمنة + الكتابة الذرّية مع النسخ السابقة
-    │   │   └── 📄 html-helpers.ts              # escapeHtml للحماية من حقن الأكواد (XSS)
+    │   ├── 📁 shared\                          # [SHARED] لا يعتمد على أي طبقة أخرى
+    │   │   ├── 📄 types.ts
+    │   │   ├── 📄 file-helpers.ts              # الكتابة الذرّية، أسماء الملفات الآمنة
+    │   │   ├── 📄 html-helpers.ts              # escapeHtml
+    │   │   └── 📄 secret-redaction.ts          # حذف الأسرار من النصوص
     │   │
-    │   └── 📁 tools\                           # [4. TOOLS] الأدوات المستقلة والخوادم المساعدة
-    │       ├── 📄 mcp-memory-server.ts         # خادم MCP لربط Antigravity و Claude Code بالذاكرة
-    │       └── 📄 code-registry-scanner.ts     # أداة فحص الأكواد وتحديث فهرس الدوال تلقائياً
+    │   └── 📁 tools\                           # [TOOLS] أدوات مستقلة
+    │       ├── 📄 mcp-memory-server.ts         # خادم MCP (6 أدوات) لـ Claude Code و Antigravity
+    │       └── 📄 code-registry-scanner.ts     # مولّد فهرس الدوال
     │
-    └── 📁 tests\                               # [5. TESTS] الاختبارات الدائمة الموثقة (لا تحذف أبداً)
-        ├── 📄 run-all-tests.ts                 # المشغل الشامل لجميع الاختبارات وتوليد التقارير
-        ├── 📄 test-environment.ts              # بيئة اختبار معزولة في مجلد مؤقت (لا تلمس البيانات الحقيقية)
-        ├── 📄 01-core-and-vault.test.ts        # اختبار النواة، التشفير، والخزنة السرية
-        ├── 📄 02-project-indexer.test.ts       # اختبار تشريح المشاريع وصيد الملفات السرية وتحديث Obsidian
-        ├── 📄 03-ai-shared-memory.test.ts      # اختبار الذاكرة المشتركة وسحب سجلات Antigravity و Claude
-        ├── 📄 04-family-emergency.test.ts      # اختبار بوابة زوجتك، كتيب الطوارئ، والنسخ الاحتياطي المشفر
-        ├── 📄 05-tools-and-dashboard.test.ts   # اختبار فهرس الأكواد، خادم MCP، وواجهة سطح المكتب
-        └── 📄 06-security.test.ts              # اختبارات الأمان: الخزنة v2، الجلسات، CSRF، XSS، النسخ والاستعادة
+    └── 📁 tests\                               # [TESTS] دائمة ومعزولة عن البيانات الحقيقية
+        ├── 📄 run-all-tests.ts                 # المشغّل + توليد docs/04 و docs/05
+        ├── 📄 test-environment.ts              # البيئة المؤقتة المعزولة وبيانات الاختبار
+        ├── 📄 01-core-and-vault.test.ts
+        ├── 📄 02-project-indexer.test.ts
+        ├── 📄 03-ai-shared-memory.test.ts
+        ├── 📄 04-family-emergency.test.ts
+        ├── 📄 05-tools-and-dashboard.test.ts
+        ├── 📄 06-security.test.ts
+        ├── 📄 07-integration.test.ts
+        └── 📄 08-disaster-recovery.test.ts       # محاكاة دليل الجهاز الجديد من البداية للنهاية
 ```
 
 ---
 
-## 2. قواعد الفصل بين الأقسام (Zero-Mixing Rules)
+## 2. قواعد الفصل بين الطبقات (تُفحص آلياً)
 
-1. **`src/core/`** لا يستورد أي شيء من `src/features/`، بل يعتمد فقط على `src/shared/`.
-2. **`src/features/`** كل مجلد ميزة بداخله مسؤول عن وظيفة واحدة فقط، ويتواصل مع النواة عبر `src/core/` ومع الأنواع عبر `src/shared/`.
-3. **`src/tools/`** أدوات تشغيلية وفحصية مستقلة يمكن استدعاؤها من سطر الأوامر أو من داخل النظام.
-4. **`tests/`** يختبر جميع الطبقات دون أن يلوث كود الإنتاج، وتبقى جميع ملفاته محفوظة وموثقة داخل المشروع بشكل دائم. منذ `2026-11-11` تعمل كل الاختبارات داخل بيئة مؤقتة معزولة (`test-environment.ts`) عبر متغير البيئة `SECOND_BRAIN_CONFIG_PATH`، فلا تلمس الخزنة أو Obsidian أو سجلات المحادثات الحقيقية.
+1. **`src/shared/`** لا يستورد من أي طبقة أخرى.
+2. **`src/core/`** يستورد من `shared` فقط، ولا يعرف شيئاً عن الميزات.
+3. **`src/features/`** كل مجلد مسؤول عن ميزة واحدة، ويستخدم `core` و `shared`. الاستيراد بين الميزات مسموح عند الحاجة الصريحة (مثل استخدام الخزنة في الفاحص).
+4. **`src/tools/`** أدوات مستقلة تُشغَّل من سطر الأوامر أو تستدعيها أدوات خارجية (MCP).
+5. **`public/`** ملفات واجهة ثابتة: بلا سكربتات أو أنماط مضمّنة، وكل نص يُعرض عبر `textContent`.
+6. **`tests/`** تعمل في مجلد مؤقت عبر `SECOND_BRAIN_CONFIG_PATH` ولا تلمس البيانات الحقيقية أبداً.
+
+## 3. أين تُحفظ البيانات الشخصية؟
+
+| البيانات | المكان | يُرفع إلى GitHub؟ |
+| :--- | :--- | :--- |
+| الأسرار وكلمات المرور ومفاتيح API | `data/encrypted-vault/vault.aes256.json` (مشفرة) | ❌ |
+| النسخ الاحتياطية | `data/encrypted-backups/` (+ مجلد إضافي اختياري) | ❌ |
+| المشاريع والدخل والفواتير | `config/settings.json` و `Obsidian-Vault/02-Projects/` | ❌ |
+| المحادثات المؤرشفة والذاكرة | `Obsidian-Vault/03-AI-Shared-Memory/*-Sessions/` و `Memory-Stream.md` و `data/ai-memory-store.json` | ❌ |
+| دليل العائلة وملف القائد | `Obsidian-Vault/04-Family-Emergency-Guide/` و `About-Commander.md` | ❌ |
+| الكود والوثائق والثيم | بقية المشروع | ✅ |
