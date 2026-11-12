@@ -44,6 +44,10 @@
     │   └── 📄 settings.example.json            # نموذج مرفوع
     ├── 📁 data\ 🔒                             # الخزنة، النسخ الاحتياطية، الذاكرة، حالة السحب والفحص، السجلات
     │
+    ├── 📁 install\                         # المرحلة ب: التشغيل التلقائي والنافذة المستقلة
+    │   ├── 📄 second-brain.ico              # أيقونة الاختصارات
+    │   ├── 📁 windows\                      # install/uninstall-windows.ps1، run-server.ps1 (إعادة تشغيل عند التعطل)، open-app (نافذة --app)
+    │   └── 📁 macos\                        # install/uninstall-macos.sh (LaunchAgent)، open-app.sh
     ├── 📁 src\
     │   ├── 📁 core\                            # [CORE] لا يعتمد إلا على shared
     │   │   ├── 📄 config-manager.ts            # الإعدادات: الفصل، الترحيل، التحقق، المسارات النسبية

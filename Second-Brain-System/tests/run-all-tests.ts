@@ -25,6 +25,7 @@ import { runMaintenanceTests } from './10-maintenance.test.ts';
 import { runConnectionGuideTests } from './11-connection-guide.test.ts';
 import { runClaudeSubscriptionTests } from './12-claude-subscription.test.ts';
 import { runConversationsAndVoiceTests } from './13-conversations-and-voice.test.ts';
+import { runInstallerTests } from './14-installer.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -100,6 +101,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '13. اختبارات المحادثات المحفوظة المشفّرة والنطق العربي المحلي (الحفظ، الحذف، الصلاحيات، Piper)',
       file: 'tests/13-conversations-and-voice.test.ts',
       runner: runConversationsAndVoiceTests,
+    },
+    {
+      name: '14. اختبارات المثبّت والتشغيل التلقائي (سكربتات Windows و macOS، وضع المعاينة، الأيقونة)',
+      file: 'tests/14-installer.test.ts',
+      runner: runInstallerTests,
     },
   ];
 

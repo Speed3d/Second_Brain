@@ -80,10 +80,8 @@ kbd { border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; 
 }
 .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .brand-mark {
-  width: 30px; height: 30px; flex: none; border-radius: 50%;
-  border: 2px dashed var(--cyan);
-  box-shadow: 0 0 12px var(--cyan), inset 0 0 8px var(--amber);
-  animation: spin 12s linear infinite;
+  width: 36px; height: 36px; flex: none; display: block;
+  filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.45));
 }
 .brand-text { display: flex; flex-direction: column; min-width: 0; }
 .brand-text strong { font-size: 1.05rem; letter-spacing: 0.3px; }

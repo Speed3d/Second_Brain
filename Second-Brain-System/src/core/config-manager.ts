@@ -20,6 +20,19 @@ import { readJsonFileSafe, writeFileAtomic } from '../shared/file-helpers.ts';
 
 const currentFileDir = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Hint بالعربي: دالة قراءة إصدار البرنامج من package.json — المصدر الوحيد للإصدار (يُرفع مع كل تحديث،
+ *               وتُوثَّق تغييراته في CHANGELOG.md). لا يُقرأ من branding.json حتى لا يختلف بين الأجهزة.
+ */
+export function readAppVersion(): string {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.resolve(currentFileDir, '..', '..', 'package.json'), 'utf-8')) as { version?: string };
+    return typeof pkg.version === 'string' && /^\d+\.\d+\.\d+$/.test(pkg.version) ? pkg.version : '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
 /** مفاتيح الهوية التي تبقى في branding.json */
 const IDENTITY_KEYS: Array<keyof BrandingIdentity> = [
   'appName',
@@ -88,7 +101,7 @@ export function buildDefaultConfig(): SystemBrandingConfig {
     assistantNameAr: 'العقل الثاني',
     commanderName: 'القائد',
     familyMemberTitle: 'زوجتي الغالية',
-    version: '1.0.0',
+    version: readAppVersion(),
     serverPort: 4777,
     paths: {
       rootDir,
@@ -199,7 +212,7 @@ export function normalizeSystemConfig(raw: Record<string, unknown>): { config: S
     assistantNameAr: str(raw.assistantNameAr, defaults.assistantNameAr),
     commanderName: str(raw.commanderName, defaults.commanderName),
     familyMemberTitle: str(raw.familyMemberTitle, defaults.familyMemberTitle),
-    version: str(raw.version, defaults.version),
+    version: defaults.version,
     serverPort,
     paths: {
       rootDir,

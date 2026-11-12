@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- شعار Second Brain: دماغ بخطوط بسيطة بنصفين متناظرين، وتلافيف تنتهي بعقد عصبية مضيئة -->
+  <defs>
+    <linearGradient id="sb-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0e1f2e"/>
+      <stop offset="1" stop-color="#060d16"/>
+    </linearGradient>
+    <linearGradient id="sb-line" x1="40" y1="40" x2="216" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00e5ff"/>
+      <stop offset="1" stop-color="#8a5cff"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="58" fill="url(#sb-bg)"/>
+  <rect x="8" y="8" width="240" height="240" rx="58" fill="none" stroke="#00e5ff" stroke-opacity="0.35" stroke-width="4"/>
+  <g fill="none" stroke="url(#sb-line)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+    <g id="sb-half">
+      <path d="M128 60 C120 50 104 48 94 56 C80 52 66 62 66 77 C52 83 48 101 58 112 C48 124 52 144 67 149 C67 165 83 177 99 171 C107 183 122 185 128 175"/>
+      <path d="M119 90 C111 80 103 98 93 86"/>
+      <path d="M119 122 C109 112 99 134 86 121"/>
+      <path d="M119 152 C112 145 106 161 98 152"/>
+    </g>
+    <use href="#sb-half" transform="translate(256 0) scale(-1 1)"/>
+    <path d="M128 66 V170" stroke="#7fe9ff" stroke-opacity="0.45" stroke-width="7"/>
+  </g>
+  <g fill="#e8fdff">
+    <circle cx="93" cy="86" r="7"/>
+    <circle cx="163" cy="86" r="7"/>
+    <circle cx="86" cy="121" r="7"/>
+    <circle cx="170" cy="121" r="7"/>
+    <circle cx="98" cy="152" r="6"/>
+    <circle cx="158" cy="152" r="6"/>
+  </g>
+</svg>

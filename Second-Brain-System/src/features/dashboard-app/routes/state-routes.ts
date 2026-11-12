@@ -38,6 +38,7 @@ export const STATIC_ASSETS: Record<string, string> = {
   'styles.css': 'text/css; charset=utf-8',
   'app.js': 'text/javascript; charset=utf-8',
   'hologram.js': 'text/javascript; charset=utf-8',
+  'icon.svg': 'image/svg+xml',
 };
 
 /**
@@ -169,7 +170,7 @@ export function getStateRoutes(): RouteDefinition[] {
     },
     {
       method: 'GET',
-      path: /^\/assets\/([a-z-]+\.(?:css|js))$/,
+      path: /^\/assets\/([a-z-]+\.(?:css|js|svg))$/,
       handler: ({ res, params }) => {
         const type = STATIC_ASSETS[params[0]];
         if (!type) throw new HttpError(404, 'الملف غير موجود');
