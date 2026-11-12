@@ -14,8 +14,6 @@ import type { AddressInfo } from 'node:net';
 import { loadSystemConfig, loadSystemConfigWithWarnings } from '../../core/config-manager.ts';
 import { startProjectWatcher } from '../project-indexer/project-watcher.ts';
 import { logSystemError, logSystemInfo } from '../../core/logger.ts';
-import { querySharedAIMemory } from '../ai-memory/shared-memory-service.ts';
-import { scanAndAnalyzeProject } from '../project-indexer/project-scanner.ts';
 import {
   applySecurityHeaders,
   HttpError,
@@ -23,7 +21,6 @@ import {
   isSameOriginRequest,
   parseCookies,
   readRequestBodyJson,
-  sendHtml,
   sendJson,
   SESSION_COOKIE_NAME,
   type RouteDefinition,
@@ -33,8 +30,8 @@ import { getEmergencyRoutes } from './routes/emergency-routes.ts';
 import { getMemoryRoutes } from './routes/memory-routes.ts';
 import { getProjectRoutes } from './routes/project-routes.ts';
 import { getVaultRoutes } from './routes/vault-routes.ts';
+import { getStateRoutes } from './routes/state-routes.ts';
 import { getVaultSession, peekActiveVault } from './session-manager.ts';
-import { renderSecondBrainDesktopHTML } from './ui-renderer.ts';
 
 /** العنوان الوحيد الذي يستمع عليه الخادم */
 export const SERVER_HOST = '127.0.0.1';
@@ -44,16 +41,7 @@ export const SERVER_HOST = '127.0.0.1';
  */
 export function buildRouteTable(): RouteDefinition[] {
   return [
-    {
-      method: 'GET',
-      path: '/',
-      handler: ({ res }) => {
-        // عرض فقط: فحص للقراءة دون أي كتابة في Obsidian أو الخزنة
-        const config = loadSystemConfig();
-        const reports = config.watchedProjects.map((p) => scanAndAnalyzeProject(p));
-        sendHtml(res, 200, renderSecondBrainDesktopHTML(config, reports, querySharedAIMemory()));
-      },
-    },
+    ...getStateRoutes(),
     {
       method: 'GET',
       path: '/api/health',

@@ -109,6 +109,24 @@ export function listFilesRecursive(
 }
 
 /**
+ * Hint بالعربي: دالة تحويل أي نص (مثل اسم مشروع) إلى اسم مجلد/ملف صالح على Windows و Obsidian:
+ *               تستبدل الرموز الممنوعة < > : " / \ | ? * وأقواس الروابط [ ] # ^ والمحارف الخفية،
+ *               وتمنع الأسماء المحجوزة (CON, NUL...) والنقاط والمسافات في النهاية.
+ */
+export function toSafeFileName(name: string, fallback: string = 'Untitled'): string {
+  let safe = name
+    .replace(/[<>:"/\\|?*\[\]#^\u0000-\u001f]/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/-{2,}/g, '-')
+    .trim()
+    .replace(/[. ]+$/, '')
+    .replace(/^[-. ]+/, '')
+    .slice(0, 100);
+  if (/^(con|prn|aux|nul|com\d|lpt\d)$/i.test(safe)) safe = `${safe}-project`;
+  return safe || fallback;
+}
+
+/**
  * Hint بالعربي: دالة لتنسيق التاريخ والوقت الحالي بصيغة واضحة ومقروءة للسجلات والتقارير.
  */
 export function formatTimestampIso(): string {

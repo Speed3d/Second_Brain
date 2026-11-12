@@ -13,7 +13,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { CriticalFileEntry, ProjectScanReport, WatchedProjectConfig } from '../../shared/types.ts';
-import { ensureDirectoryExists, readJsonFileSafe, writeFileAtomic, writeTextFileSafe } from '../../shared/file-helpers.ts';
+import { ensureDirectoryExists, readJsonFileSafe, toSafeFileName, writeFileAtomic, writeTextFileSafe } from '../../shared/file-helpers.ts';
 import { loadSystemConfig } from '../../core/config-manager.ts';
 import { logSystemInfo } from '../../core/logger.ts';
 
@@ -57,6 +57,14 @@ export function writeAutoManagedFile(filePath: string, autoContent: string, lega
     updated = `${block}\n\n${MANUAL_SECTION}\n${existing.trim()}\n`;
   }
   if (updated !== existing) writeTextFileSafe(filePath, updated);
+}
+
+/**
+ * Hint بالعربي: دالة اسم مجلد المشروع داخل Obsidian: اسم المشروع بعد إزالة الرموز الممنوعة في أسماء
+ *               المجلدات وروابط Obsidian (وإن لم يبقَ شيء يُستخدم معرّف المشروع).
+ */
+export function getProjectFolderName(project: WatchedProjectConfig): string {
+  return toSafeFileName(project.name, toSafeFileName(project.id, 'project'));
 }
 
 /**
@@ -153,7 +161,8 @@ export function syncProjectWithChanges(
 ): { projectFolder: string; changes: string[] } {
   const config = loadSystemConfig();
   const obsidianRoot = customObsidianDir ?? config.paths.obsidianVaultDir;
-  const projectFolder = path.join(obsidianRoot, '02-Projects', projectConfig.name);
+  const folderName = getProjectFolderName(projectConfig);
+  const projectFolder = path.join(obsidianRoot, '02-Projects', folderName);
   ensureDirectoryExists(projectFolder);
   ensureDirectoryExists(path.join(projectFolder, 'AI-Conversations'));
   const tracked = scanReport.criticalFilesTrackedByGit ?? [];
@@ -187,11 +196,11 @@ ${scanReport.importantFiles.length > 0 ? scanReport.importantFiles.map((f) => `*
 ${gitSection}
 
 ## 🔗 روابط وثائق هذا المشروع
-* [[02-Projects/${projectConfig.name}/02-Run-And-Update|⚙️ طريقة التشغيل والبناء والتحديث]]
-* [[02-Projects/${projectConfig.name}/03-Critical-Files|🔐 الملفات الحساسة]]
-* [[02-Projects/${projectConfig.name}/04-Infra-And-Billing|💰 الفواتير والاستضافة والدخل]]
-* [[02-Projects/${projectConfig.name}/05-Auto-Changelog|🕒 سجل التحديثات]]
-* [[02-Projects/${projectConfig.name}/06-Wife-Guide|❤️ دليل المشروع المبسط للعائلة]]`,
+* [[02-Projects/${folderName}/02-Run-And-Update|⚙️ طريقة التشغيل والبناء والتحديث]]
+* [[02-Projects/${folderName}/03-Critical-Files|🔐 الملفات الحساسة]]
+* [[02-Projects/${folderName}/04-Infra-And-Billing|💰 الفواتير والاستضافة والدخل]]
+* [[02-Projects/${folderName}/05-Auto-Changelog|🕒 سجل التحديثات]]
+* [[02-Projects/${folderName}/06-Wife-Guide|❤️ دليل المشروع المبسط للعائلة]]`,
     '# 🚀 نظرة عامة على المشروع'
   );
 

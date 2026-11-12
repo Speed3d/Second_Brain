@@ -73,10 +73,12 @@
     │   │       │   ├── 📄 memory-routes.ts     # سحب المحادثات
     │   │       │   ├── 📄 assistant-routes.ts  # المساعد الذكي
     │   │       │   └── 📄 emergency-routes.ts  # كتيب الطوارئ والنسخ الاحتياطي والاستعادة
-    │   │       ├── 📄 ui-renderer.ts           # بناء الصفحة (كل القيم تمر عبر escapeHtml)
-    │   │       ├── 📄 vault-client-script.ts   # سكربت الخزنة والطوارئ في المتصفح (textContent فقط)
-    │   │       ├── 📄 hud-styles.ts
-    │   │       └── 📄 hologram-core-script.ts
+    │   │       ├── 📁 routes\                  # (تابع) state-routes.ts: الصفحة، الملفات الثابتة، /api/state، /api/settings
+    │   │       └── 📁 public\                  # الواجهة كملفات ثابتة (CSP صارمة: لا سكربت ولا نمط مضمّن)
+    │   │           ├── 📄 index.html           # الهيكل: شريط جانبي بستة أقسام + وضع العائلة + نافذة الخزنة
+    │   │           ├── 📄 styles.css           # التصميم المتجاوب (1200/900/600) و RTL وتقليل الحركة
+    │   │           ├── 📄 app.js               # منطق الواجهة (textContent فقط، روابط http/https فقط)
+    │   │           └── 📄 hologram.js          # النواة المتحركة (تتوقف عند الإخفاء، إطار ثابت مع تقليل الحركة)
     │   │
     │   ├── 📁 shared\                          # [3. SHARED] الأنواع والدوال المشتركة
     │   │   ├── 📄 types.ts                     # جميع تعريفات الأنواع والواجهات البرمجية

@@ -17,13 +17,13 @@ export const MAX_REQUEST_BODY_BYTES = 1024 * 1024;
 export const SESSION_COOKIE_NAME = 'sb_session';
 
 /**
- * Hint بالعربي: سياسة أمان المحتوى (CSP) لواجهة البرنامج: تمنع تحميل أو إرسال أي شيء لمواقع خارجية.
- *               ملاحظة: 'unsafe-inline' مؤقت حتى فصل الواجهة إلى ملفات مستقلة في المرحلة 3.
+ * Hint بالعربي: سياسة أمان المحتوى (CSP) الافتراضية لأي صفحة HTML: لا سكربتات ولا أنماط مضمّنة،
+ *               ولا تحميل أو إرسال لأي موقع خارجي.
  */
 export const DASHBOARD_CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline'",
+  "script-src 'self'",
+  "style-src 'self'",
   "img-src 'self' data:",
   "connect-src 'self'",
   "font-src 'self'",

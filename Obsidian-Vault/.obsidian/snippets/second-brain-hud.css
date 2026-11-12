@@ -7,20 +7,20 @@
 
 /* Hint بالعربي: تعريف متغيرات الألوان الأساسية المستوحاة من شاشات القيادة السينمائية (HUD) */
 .theme-dark {
-  --background-primary: #070b14;
-  --background-primary-alt: #0c1322;
+  --background-primary: #050a12;
+  --background-primary-alt: #0a1422;
   --background-secondary: #090f1c;
   --background-secondary-alt: #050811;
-  --text-normal: #e2f1ff;
-  --text-muted: #8aa6c1;
+  --text-normal: #e6f3ff;
+  --text-muted: #8fa9c4;
   --text-accent: #00e5ff;
   --text-accent-hover: #5cecff;
   --interactive-accent: #00b8d4;
   --interactive-accent-hover: #00e5ff;
   --sb-cyan: #00e5ff;
   --sb-gold: #ffb300;
-  --sb-emerald: #00e676;
-  --sb-danger: #ff3d71;
+  --sb-emerald: #2ee59d;
+  --sb-danger: #ff5c8a;
   --sb-border: rgba(0, 229, 255, 0.25);
   --sb-glow: 0 0 14px rgba(0, 229, 255, 0.18);
   --font-text-theme: 'Segoe UI', 'Cairo', 'Tajawal', sans-serif;

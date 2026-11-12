@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<!--
+  الملف: src/features/dashboard-app/public/index.html
+  Hint بالعربي: هيكل واجهة Second Brain. لا يحتوي أي سكربت أو نمط مضمّن (متوافق مع CSP صارمة)؛
+                كل الأحداث تُربط من app.js عبر data-action، وكل البيانات تُعرض عبر textContent.
+-->
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
+  <title>Second Brain</title>
+  <link rel="stylesheet" href="/assets/styles.css" />
+  <script src="/assets/hologram.js" defer></script>
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">تخطَّ إلى المحتوى</a>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div class="brand-text">
+        <strong id="brandName">Second Brain</strong>
+        <span id="brandSubtitle" class="muted">نظام العقل الثاني والخزنة الذكية</span>
+      </div>
+    </div>
+
+    <div class="chips" aria-label="ملخص الحالة">
+      <span class="chip"><span class="chip-label">المشاريع</span> <strong id="chipProjects">—</strong></span>
+      <span class="chip" id="chipVaultWrap"><span class="chip-label">الخزنة</span> <strong id="chipVault">—</strong></span>
+      <span class="chip"><span class="chip-label">الذاكرة</span> <strong id="chipMemory">—</strong></span>
+    </div>
+
+    <div class="mode-switch" role="tablist" aria-label="الوضع">
+      <button type="button" class="mode-btn is-active" role="tab" aria-selected="true" data-action="mode" data-mode="commander">⚡ غرفة القيادة</button>
+      <button type="button" class="mode-btn mode-btn-family" role="tab" aria-selected="false" data-action="mode" data-mode="family">❤️ وضع العائلة</button>
+    </div>
+  </header>
+
+  <!-- ==================== وضع القائد ==================== -->
+  <div class="shell" id="commanderShell">
+    <nav class="sidebar" aria-label="أقسام البرنامج">
+      <button type="button" class="nav-btn is-active" data-action="view" data-view="command" aria-current="page"><span aria-hidden="true">🎙️</span><span>القيادة</span></button>
+      <button type="button" class="nav-btn" data-action="view" data-view="projects"><span aria-hidden="true">📡</span><span>المشاريع</span></button>
+      <button type="button" class="nav-btn" data-action="view" data-view="vault"><span aria-hidden="true">🔐</span><span>الخزنة</span></button>
+      <button type="button" class="nav-btn" data-action="view" data-view="memory"><span aria-hidden="true">🧠</span><span>الذاكرة</span></button>
+      <button type="button" class="nav-btn" data-action="view" data-view="emergency"><span aria-hidden="true">🛡️</span><span>الطوارئ</span></button>
+      <button type="button" class="nav-btn" data-action="view" data-view="settings"><span aria-hidden="true">⚙️</span><span>الإعدادات</span></button>
+      <div class="sidebar-foot">
+        <button type="button" class="icon-btn" id="soundToggle" data-action="toggle-sound" aria-pressed="false" title="المؤثرات الصوتية">🔇</button>
+        <span class="muted small" id="versionLabel"></span>
+      </div>
+    </nav>
+
+    <main id="main" class="views" tabindex="-1">
+
+      <!-- القيادة: النواة + المحادثة -->
+      <section class="view is-active" data-panel="command" aria-labelledby="h-command">
+        <h1 id="h-command" class="sr-only">القيادة</h1>
+        <div class="command-grid">
+          <div class="core-card">
+            <div class="pill-row" role="group" aria-label="شكل النواة">
+              <button type="button" class="pill is-active" data-action="core-mode" data-core="fusion">المدمج</button>
+              <button type="button" class="pill" data-action="core-mode" data-core="cyan_wave">الموجة</button>
+              <button type="button" class="pill" data-action="core-mode" data-core="neural_cloud">السحابة</button>
+              <button type="button" class="pill" data-action="core-mode" data-core="hud_rings">الحلقات</button>
+            </div>
+            <div class="core-stage">
+              <canvas id="coreCanvas" aria-label="النواة المتحركة" role="img"></canvas>
+              <div id="coreStatus" class="core-status">جاهز</div>
+            </div>
+            <div class="voice-bars" id="voiceBars" aria-hidden="true"></div>
+          </div>
+
+          <div class="card chat-card">
+            <div class="card-head">
+              <h2 id="chatTitle">المحادثة</h2>
+              <button type="button" class="btn btn-ghost btn-sm" data-action="clear-chat" data-mode="commander">🧹 محادثة جديدة</button>
+            </div>
+            <div class="chat-log" id="chatLog" role="log" aria-live="polite" aria-label="سجل المحادثة">
+              <p class="chat-empty muted">اسأل عن مشاريعك أو أوامر التشغيل أو أي قرار سابق. اضغط <kbd>/</kbd> للكتابة.</p>
+            </div>
+            <form class="chat-form" data-form="chat" data-mode="commander">
+              <label for="chatInput" class="sr-only">رسالتك</label>
+              <textarea id="chatInput" rows="2" placeholder="اكتب سؤالك… (Enter للإرسال، Shift+Enter لسطر جديد)"></textarea>
+              <div class="chat-actions">
+                <button type="submit" class="btn btn-primary">إرسال</button>
+                <button type="button" class="btn btn-ghost" data-action="voice" data-mode="commander">🎤 بالصوت</button>
+                <button type="button" class="btn btn-ghost" data-action="speak" data-mode="commander">🔊 نطق آخر رد</button>
+              </div>
+            </form>
+            <p class="small muted" id="providerLine">جاري التحقق من مزوّدي الذكاء…</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- المشاريع -->
+      <section class="view" data-panel="projects" aria-labelledby="h-projects" hidden>
+        <div class="view-head">
+          <h1 id="h-projects">المشاريع</h1>
+          <div class="toolbar">
+            <button type="button" class="btn btn-primary" data-action="rescan">🔄 إعادة الفحص</button>
+            <button type="button" class="btn btn-ghost" data-action="toggle-add-project">➕ مشروع جديد</button>
+          </div>
+        </div>
+        <form class="card form-grid" data-form="add-project" id="addProjectForm" hidden>
+          <h2 class="span-2">إضافة مشروع للفحص والتوثيق</h2>
+          <label>اسم المشروع<input name="name" maxlength="120" required placeholder="My-Flutter-App" /></label>
+          <label>المسار على الجهاز<input name="path" dir="ltr" maxlength="500" required placeholder="D:\Projects\MyApp" /></label>
+          <label class="span-2">وصف تقني<input name="descriptionAr" maxlength="2000" /></label>
+          <label class="span-2">شرح مبسط للعائلة<input name="wifeSummaryAr" maxlength="2000" /></label>
+          <label>الدخل الشهري<input name="monthlyIncome" maxlength="300" /></label>
+          <label>الفواتير والتجديد<input name="billingNotes" maxlength="2000" /></label>
+          <div class="span-2 form-actions">
+            <button type="submit" class="btn btn-primary">🔍 فحص وتوثيق</button>
+            <button type="button" class="btn btn-ghost" data-action="toggle-add-project">إلغاء</button>
+          </div>
+        </form>
+        <div class="report" id="projectsReport" hidden></div>
+        <div class="card-grid" id="projectsList"></div>
+      </section>
+
+      <!-- الخزنة -->
+      <section class="view" data-panel="vault" aria-labelledby="h-vault" hidden>
+        <div class="view-head">
+          <h1 id="h-vault">الخزنة المشفرة</h1>
+          <div class="toolbar" id="vaultToolbar" hidden>
+            <span class="badge" id="autoLockBadge"></span>
+            <button type="button" class="btn btn-primary" data-action="new-secret" data-commander-only>➕ عنصر جديد</button>
+            <button type="button" class="btn btn-ghost" data-action="lock">🔒 قفل الآن</button>
+          </div>
+        </div>
+
+        <div class="card narrow" id="vaultSetup" hidden>
+          <h2>إنشاء الخزنة لأول مرة</h2>
+          <ol class="steps">
+            <li>اختر كلمة مرور رئيسية قوية لا تستخدمها في أي مكان آخر.</li>
+            <li>سيظهر <strong>مفتاح الطوارئ</strong> لزوجتك مرة واحدة فقط.</li>
+            <li>اطبع كتيب الطوارئ فوراً واحفظه في مكان آمن.</li>
+          </ol>
+          <form data-form="setup" class="stack">
+            <label>كلمة المرور الرئيسية<input type="password" name="masterPassword" autocomplete="new-password" minlength="10" required /></label>
+            <div class="meter" aria-hidden="true"><span id="strengthBar"></span></div>
+            <p class="small muted" id="strengthText">10 أحرف على الأقل؛ الأطول أقوى.</p>
+            <label>تأكيد كلمة المرور<input type="password" name="confirmPassword" autocomplete="new-password" required /></label>
+            <button type="submit" class="btn btn-primary">🛡️ إنشاء الخزنة</button>
+          </form>
+        </div>
+
+        <div class="card narrow" id="vaultUnlock" hidden>
+          <h2>الخزنة مقفلة</h2>
+          <form data-form="unlock" class="stack">
+            <label>كلمة المرور الرئيسية<input type="password" name="key" autocomplete="current-password" required /></label>
+            <button type="submit" class="btn btn-primary">🔓 فتح الخزنة</button>
+          </form>
+        </div>
+
+        <div id="vaultOpen" hidden>
+          <div class="filters">
+            <label class="grow"><span class="sr-only">بحث</span><input type="search" id="secretSearch" placeholder="🔎 بحث في الحسابات…" /></label>
+            <label><span class="sr-only">التصنيف</span>
+              <select id="secretFilter">
+                <option value="">كل التصنيفات</option>
+                <option value="email_account">📧 بريد إلكتروني</option>
+                <option value="password">🔑 حسابات</option>
+                <option value="api_key">🧩 مفاتيح API</option>
+                <option value="recovery_code">🛟 أكواد استرداد</option>
+                <option value="billing">💳 فواتير</option>
+                <option value="critical_file">📁 ملفات حساسة</option>
+              </select>
+            </label>
+          </div>
+          <div class="card-grid" id="secretsList"></div>
+
+          <details class="card" data-commander-only>
+            <summary>🤖 مفاتيح الذكاء الاصطناعي (Claude / Gemini)</summary>
+            <form data-form="ai-key" class="form-grid">
+              <p class="small muted span-2">تُحفظ مشفرة داخل الخزنة، ولا يستخدمها المساعد إلا والخزنة مفتوحة. اترك الحقل فارغاً واحفظ لحذف المفتاح.</p>
+              <label>المزوّد<select name="provider"><option value="claude">Claude (Anthropic)</option><option value="gemini">Gemini (Google)</option></select></label>
+              <label>المفتاح<input type="password" name="apiKey" dir="ltr" autocomplete="off" /></label>
+              <div class="span-2 form-actions"><button type="submit" class="btn btn-primary">🔒 حفظ المفتاح</button></div>
+            </form>
+          </details>
+        </div>
+      </section>
+
+      <!-- الذاكرة -->
+      <section class="view" data-panel="memory" aria-labelledby="h-memory" hidden>
+        <div class="view-head">
+          <h1 id="h-memory">الذاكرة المشتركة</h1>
+          <div class="toolbar">
+            <button type="button" class="btn btn-primary" data-action="harvest">🔄 سحب المحادثات الجديدة</button>
+          </div>
+        </div>
+        <p class="muted">قرارات وملخصات العمل التي تحفظها أدوات الذكاء (Claude Code و Antigravity) عبر خادم الذاكرة، وأرشيف المحادثات في Obsidian.</p>
+        <div class="report" id="memoryReport" hidden></div>
+        <label class="filters"><span class="sr-only">بحث</span><input type="search" id="memorySearch" placeholder="🔎 بحث في الذاكرة…" /></label>
+        <div class="list" id="memoryList"></div>
+      </section>
+
+      <!-- الطوارئ -->
+      <section class="view" data-panel="emergency" aria-labelledby="h-emergency" hidden>
+        <div class="view-head"><h1 id="h-emergency">الطوارئ والنسخ الاحتياطي</h1></div>
+        <div class="card-grid two">
+          <div class="card">
+            <h2>🖨️ كتيب الطوارئ للعائلة</h2>
+            <p class="small muted">أدخل مفتاح الطوارئ الحالي؛ يتحقق البرنامج أنه يفتح الخزنة قبل الطباعة. الكتيب لا يُحفظ على القرص.</p>
+            <form data-form="kit" class="stack">
+              <label>مفتاح الطوارئ<input name="emergencyKey" dir="ltr" autocomplete="off" placeholder="SB-XXXX-XXXX-…" /></label>
+              <label>رسالة شخصية (اختياري)<textarea name="personalMessageAr" rows="2" maxlength="4000"></textarea></label>
+              <button type="submit" class="btn btn-primary">🖨️ فتح الكتيب للطباعة</button>
+            </form>
+            <div class="key-reveal" id="keyReveal" hidden></div>
+          </div>
+          <div class="card">
+            <h2>💾 النسخ الاحتياطي المشفر</h2>
+            <p class="small muted">تُفتح النسخة بكلمة المرور أو بمفتاح الطوارئ، حتى على جهاز جديد.</p>
+            <button type="button" class="btn btn-primary" data-action="backup">💾 نسخة احتياطية الآن</button>
+            <div class="list compact" id="backupsList"></div>
+          </div>
+          <div class="card" data-commander-only>
+            <h2>🔑 تغيير كلمة المرور</h2>
+            <form data-form="change-password" class="stack">
+              <label>الحالية<input type="password" name="currentPassword" autocomplete="current-password" required /></label>
+              <label>الجديدة (10 أحرف على الأقل)<input type="password" name="newPassword" autocomplete="new-password" minlength="10" required /></label>
+              <button type="submit" class="btn btn-primary">تغيير</button>
+            </form>
+          </div>
+          <div class="card danger-zone" data-commander-only>
+            <h2>♻️ مفتاح طوارئ جديد</h2>
+            <p class="small">يُبطل الورقة المطبوعة الحالية فوراً. استخدمه إذا فُقدت الورقة.</p>
+            <form data-form="rotate" class="stack">
+              <label>كلمة المرور الرئيسية للتأكيد<input type="password" name="masterPassword" autocomplete="current-password" required /></label>
+              <button type="submit" class="btn btn-danger">إصدار مفتاح جديد</button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- الإعدادات -->
+      <section class="view" data-panel="settings" aria-labelledby="h-settings" hidden>
+        <div class="view-head"><h1 id="h-settings">الإعدادات</h1></div>
+        <p class="muted small" id="settingsLockNote" hidden>🔒 افتح الخزنة بكلمة المرور الرئيسية لحفظ التعديلات.</p>
+        <form data-form="settings" class="settings-form">
+          <fieldset class="card form-grid">
+            <legend>الهوية</legend>
+            <label>اسم البرنامج<input name="identity.appName" maxlength="100" required /></label>
+            <label>العنوان بالعربية<input name="identity.appTitleAr" maxlength="150" required /></label>
+            <label>اسم المساعد<input name="identity.assistantName" maxlength="100" required /></label>
+            <label>اسم المساعد بالعربية<input name="identity.assistantNameAr" maxlength="100" required /></label>
+            <label>لقبك<input name="identity.commanderName" maxlength="100" required /></label>
+            <label>لقب فرد العائلة<input name="identity.familyMemberTitle" maxlength="100" required /></label>
+          </fieldset>
+          <fieldset class="card form-grid">
+            <legend>الذكاء الاصطناعي</legend>
+            <label>الوضع<select name="ai.defaultMode"><option value="hybrid">هجين (سحابي ثم محلي)</option><option value="cloud">سحابي فقط</option><option value="local">محلي فقط (بدون إنترنت)</option></select></label>
+            <label>المزوّد السحابي الأول<select name="ai.cloudProvider"><option value="claude">Claude</option><option value="gemini">Gemini</option></select></label>
+            <label>نموذج Claude<input name="ai.claudeModel" dir="ltr" maxlength="100" required /></label>
+            <label>مستوى جهد Claude<select name="ai.claudeEffort"><option value="low">منخفض (أسرع)</option><option value="medium">متوسط</option><option value="high">عالٍ (أعمق)</option></select></label>
+            <label>نموذج Gemini<input name="ai.geminiModel" dir="ltr" maxlength="100" required /></label>
+            <label>نموذج Ollama<input name="ai.ollamaModel" dir="ltr" maxlength="100" required /></label>
+            <label class="span-2">عنوان Ollama (على هذا الجهاز فقط)<input name="ai.ollamaEndpoint" dir="ltr" maxlength="200" required /></label>
+            <label>لغة الصوت<input name="ai.voiceLang" dir="ltr" maxlength="10" required /></label>
+            <label class="check"><input type="checkbox" name="ai.voiceEnabled" /> تفعيل النطق الصوتي للردود</label>
+          </fieldset>
+          <fieldset class="card form-grid">
+            <legend>الموصلات والمراقبة</legend>
+            <label class="check"><input type="checkbox" name="connectors.claudeCode" /> أرشفة محادثات Claude Code</label>
+            <label class="check"><input type="checkbox" name="connectors.antigravity" /> أرشفة محادثات Antigravity</label>
+            <label class="check"><input type="checkbox" name="watcher.enabled" /> المراقب الدوري للمشاريع</label>
+            <label class="check"><input type="checkbox" name="watcher.harvestTranscripts" /> سحب المحادثات مع كل دورة</label>
+            <label>فترة المراقب (دقائق)<input type="number" name="watcher.intervalMinutes" min="1" max="1440" required /></label>
+          </fieldset>
+          <fieldset class="card form-grid">
+            <legend>الأمان والنسخ</legend>
+            <label>القفل التلقائي بعد (دقائق)<input type="number" name="security.autoLockMinutes" min="1" max="120" required /></label>
+            <label>عدد النسخ المحتفظ بها<input type="number" name="security.backupRetention" min="1" max="100" required /></label>
+            <label class="span-2">مجلد نسخ إضافي (فلاشة أو مجلد سحابي — اختياري)<input name="security.extraBackupDir" dir="ltr" maxlength="500" placeholder="E:\Second-Brain-Backups" /></label>
+          </fieldset>
+          <details class="card">
+            <summary>📂 المسارات الحالية (للقراءة فقط)</summary>
+            <dl class="kv" id="pathsList"></dl>
+          </details>
+          <div class="form-actions"><button type="submit" class="btn btn-primary">💾 حفظ الإعدادات</button></div>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <!-- ==================== وضع العائلة ==================== -->
+  <div class="family" id="familyShell" hidden>
+    <div class="family-hero">
+      <h1 id="familyTitle">أهلاً بكِ</h1>
+      <p>هذه البوابة تشرح لكِ كل مشروع وحساباته وفواتيره خطوة بخطوة، بدون أي تعقيد.</p>
+    </div>
+
+    <div class="family-steps">
+      <section class="family-step" aria-labelledby="fs1">
+        <h2 id="fs1"><span class="step-no">1</span> افتحي خزنة الحسابات</h2>
+        <p>اكتبي <strong>مفتاح الطوارئ</strong> الموجود في الورقة المطبوعة (الحروف الصغيرة والمسافات مقبولة).</p>
+        <form data-form="family-unlock" class="stack">
+          <label>مفتاح الطوارئ<input name="key" dir="ltr" autocomplete="off" placeholder="SB-XXXX-XXXX-…" /></label>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-family btn-lg">🔓 فتح الحسابات</button>
+            <button type="button" class="btn btn-ghost btn-lg" data-action="lock">🔒 قفل</button>
+          </div>
+        </form>
+        <p class="family-status" id="familyVaultStatus">الخزنة مقفلة.</p>
+        <div class="card-grid" id="familySecretsList"></div>
+      </section>
+
+      <section class="family-step" aria-labelledby="fs2">
+        <h2 id="fs2"><span class="step-no">2</span> المشاريع والدخل والفواتير</h2>
+        <div class="card-grid" id="familyProjects"></div>
+      </section>
+
+      <section class="family-step" aria-labelledby="fs3">
+        <h2 id="fs3"><span class="step-no">3</span> اسألي المساعد</h2>
+        <div class="preset-row">
+          <button type="button" class="btn btn-ghost" data-action="preset" data-q="ما هي الفواتير المهمة التي يجب دفعها؟">🧾 الفواتير المهمة</button>
+          <button type="button" class="btn btn-ghost" data-action="preset" data-q="كيف أتعامل مع مبرمج بأمان؟">👨‍💻 التعامل مع مبرمج</button>
+          <button type="button" class="btn btn-ghost" data-action="preset" data-q="اعطني ملخصاً بسيطاً عن كل المشاريع">📋 ملخص المشاريع</button>
+        </div>
+        <div class="chat-log family-log" id="familyChatLog" role="log" aria-live="polite" aria-label="المحادثة مع المساعد"></div>
+        <form class="chat-form" data-form="chat" data-mode="family">
+          <label for="familyChatInput" class="sr-only">سؤالكِ</label>
+          <textarea id="familyChatInput" rows="2" placeholder="اكتبي سؤالكِ هنا…"></textarea>
+          <div class="chat-actions">
+            <button type="submit" class="btn btn-family btn-lg">💬 اسألي</button>
+            <button type="button" class="btn btn-ghost btn-lg" data-action="voice" data-mode="family">🎤 بالصوت</button>
+            <button type="button" class="btn btn-ghost btn-lg" data-action="speak" data-mode="family">🔊 استمعي</button>
+          </div>
+        </form>
+      </section>
+
+      <details class="family-step">
+        <summary>💻 إذا تعطّل الجهاز: استعادة نسخة احتياطية</summary>
+        <p>اختاري ملف النسخة، واكتبي مفتاح الطوارئ، ثم مجلداً جديداً فارغاً للاستعادة.</p>
+        <div class="list compact" id="familyBackupsList"></div>
+        <form data-form="restore" class="stack">
+          <label>ملف النسخة<input name="backupFile" dir="ltr" placeholder="…\Second-Brain-Backup-….enc.json" /></label>
+          <label>مفتاح الطوارئ أو كلمة المرور<input name="key" dir="ltr" autocomplete="off" /></label>
+          <label>مجلد جديد للاستعادة<input name="targetDir" dir="ltr" placeholder="D:\Second Brain Restored" /></label>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-ghost btn-lg" data-dry-run="true">👁️ معاينة</button>
+            <button type="submit" class="btn btn-family btn-lg" data-dry-run="false">♻️ استعادة</button>
+          </div>
+        </form>
+        <div class="report" id="restoreReport" hidden></div>
+      </details>
+    </div>
+  </div>
+
+  <!-- نافذة إضافة/تعديل عنصر في الخزنة -->
+  <dialog id="secretDialog" aria-labelledby="secretDialogTitle">
+    <form data-form="secret" class="stack" method="dialog">
+      <h2 id="secretDialogTitle">عنصر جديد</h2>
+      <input type="hidden" name="id" />
+      <label>التصنيف
+        <select name="category">
+          <option value="email_account">📧 حساب بريد إلكتروني</option>
+          <option value="password">🔑 كلمة مرور / حساب</option>
+          <option value="api_key">🧩 مفتاح API</option>
+          <option value="recovery_code">🛟 أكواد استرداد (2FA)</option>
+          <option value="billing">💳 فواتير واشتراكات</option>
+        </select>
+      </label>
+      <label>العنوان<input name="title" maxlength="200" required placeholder="إيميل Google Play الرسمي" /></label>
+      <label>الإيميل أو اسم المستخدم<input name="usernameOrEmail" dir="ltr" maxlength="300" /></label>
+      <label>كلمة المرور أو الكود السري<input name="secretValue" type="password" autocomplete="off" required /></label>
+      <label>رابط الموقع<input name="url" dir="ltr" maxlength="500" /></label>
+      <label>شرح مبسط للعائلة<textarea name="notesForWifeAr" rows="2" maxlength="2000"></textarea></label>
+      <label>ملاحظة لك<textarea name="notesForCommanderAr" rows="2" maxlength="2000"></textarea></label>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary" value="save">🔒 تشفير وحفظ</button>
+        <button type="button" class="btn btn-ghost" data-action="close-dialog">إلغاء</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+</body>
+</html>

@@ -17,6 +17,7 @@ import { formatTimestampIso, readJsonFileSafe, writeFileAtomic, writeTextFileSaf
 import { redactSecrets } from '../../shared/secret-redaction.ts';
 import { loadSystemConfig } from '../../core/config-manager.ts';
 import { logSystemError, logSystemInfo } from '../../core/logger.ts';
+import { getProjectFolderName } from '../project-indexer/obsidian-sync.ts';
 import { createAntigravityConnector } from './connectors/antigravity-connector.ts';
 import { createClaudeCodeConnector } from './connectors/claude-code-connector.ts';
 import type { TranscriptConnector, TranscriptSession } from './connectors/connector-types.ts';
@@ -90,7 +91,7 @@ export function resolveArchivePath(
   const id8 = session.ref.sessionId.slice(0, 8);
   const date = (session.startedAt ?? new Date(session.ref.modifiedMs).toISOString()).slice(0, 10);
   const fileName = connector.id === 'antigravity' ? `Antigravity-${id8}.md` : `Claude-Code-${date}-${id8}.md`;
-  if (project) return path.join(config.paths.obsidianVaultDir, '02-Projects', project.name, 'AI-Conversations', fileName);
+  if (project) return path.join(config.paths.obsidianVaultDir, '02-Projects', getProjectFolderName(project), 'AI-Conversations', fileName);
   const folder = connector.id === 'antigravity' ? 'Antigravity-Sessions' : 'Claude-Code-Sessions';
   return path.join(config.paths.obsidianVaultDir, '03-AI-Shared-Memory', folder, fileName);
 }
@@ -120,7 +121,7 @@ export function renderSessionMarkdown(
     `> **المصدر:** ${connector.labelAr} | **المعرّف:** \`${session.ref.sessionId}\``,
     `> **البداية:** \`${session.startedAt ?? 'غير معروفة'}\` | **عدد الرسائل:** ${session.messages.length}`,
     session.cwd ? `> **مجلد العمل:** \`${session.cwd}\`` : null,
-    project ? `> **المشروع:** [[02-Projects/${project.name}/01-Overview|${project.name}]]` : null,
+    project ? `> **المشروع:** [[02-Projects/${getProjectFolderName(project)}/01-Overview|${getProjectFolderName(project)}]]` : null,
     `> **آخر أرشفة:** \`${formatTimestampIso()}\`${redactions ? ` | **أسرار حُذفت تلقائياً:** ${redactions}` : ''}`,
   ]
     .filter((l) => l !== null)

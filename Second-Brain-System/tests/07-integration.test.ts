@@ -17,6 +17,7 @@ import * as path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { getSystemRootDir, loadSystemConfig, migrateLegacyConfig, normalizeSystemConfig } from '../src/core/config-manager.ts';
 import { redactSecrets } from '../src/shared/secret-redaction.ts';
+import { toSafeFileName } from '../src/shared/file-helpers.ts';
 import { buildClaudeRequestBody, createClaudeProvider } from '../src/features/assistant/providers/claude-provider.ts';
 import { createGeminiProvider } from '../src/features/assistant/providers/gemini-provider.ts';
 import { createLocalKnowledgeProvider } from '../src/features/assistant/providers/local-knowledge-provider.ts';
@@ -29,8 +30,9 @@ import { scanAndAnalyzeProject } from '../src/features/project-indexer/project-s
 import { rescanAllProjects, startProjectWatcher } from '../src/features/project-indexer/project-watcher.ts';
 import { startSecondBrainDesktopServer } from '../src/features/dashboard-app/desktop-server.ts';
 import { handleMcpJsonRpcRequest, processMcpLine, SUPPORTED_MCP_VERSIONS } from '../src/tools/mcp-memory-server.ts';
+import { resetSessionStateForTests } from '../src/features/dashboard-app/session-manager.ts';
 import { postJson } from './06-security.test.ts';
-import { FAKE_SECRETS, writeFixtureFile } from './test-environment.ts';
+import { FAKE_SECRETS, TEST_MASTER_PASSWORD, writeFixtureFile } from './test-environment.ts';
 
 const SAMPLE_REQUEST: ProviderChatRequest = {
   system: 'تعليمات اختبار',
@@ -308,6 +310,14 @@ export async function runIntegrationTests(): Promise<string[]> {
   assert.ok(fs.readFileSync(customFile, 'utf-8').includes('ملف كتبته بيدي بالكامل'), 'الملف اليدوي القديم لا يُحذف');
   passedChecks.push('اختبار فحص Git (الفرع، آخر commit، الملف الحساس المرفوع) وسجل التغييرات عند التغيّر فقط وحماية الملاحظات اليدوية بنجاح.');
 
+  // 5.أ اسم مشروع يحتوي رموزاً ممنوعة في أسماء المجلدات (Windows / روابط Obsidian) لا يعطّل التوثيق
+  const oddProject = { ...gitProject, id: 'odd', name: 'App: <Beta> | "v2"?*' };
+  const odd = syncProjectWithChanges(oddProject, scanAndAnalyzeProject(oddProject));
+  assert.ok(fs.existsSync(path.join(odd.projectFolder, '01-Overview.md')));
+  assert.equal(path.basename(odd.projectFolder), 'App- -Beta- - -v2-');
+  assert.equal(toSafeFileName('CON'), 'CON-project', 'الأسماء المحجوزة في Windows تُعدَّل');
+  passedChecks.push('اختبار أسماء المشاريع ذات الرموز الممنوعة في أسماء المجلدات (توثيق آمن دون أخطاء) بنجاح.');
+
   // 5.ب ربط الجلسات بالمشاريع من مجلد العمل
   const pA = { ...gitProject, id: 'a', name: 'A', path: path.join(root, 'ws', 'A') };
   const pB = { ...gitProject, id: 'b', name: 'B', path: path.join(root, 'ws2', 'B') };
@@ -357,10 +367,32 @@ export async function runIntegrationTests(): Promise<string[]> {
     const providersRes = await fetch(`http://127.0.0.1:${port}/api/assistant/providers`);
     const providers = (await providersRes.json()) as { providers: Array<{ id: string; available: boolean }> };
     assert.deepEqual(providers.providers.map((p) => [p.id, p.available]), [['local', true]]);
+
+    // الإعدادات: القراءة متاحة، والحفظ يتطلب جلسة القائد بعد إنشاء الخزنة، مع تحقق صارم من القيم
+    const settings = (await (await fetch(`http://127.0.0.1:${port}/api/settings`)).json()) as Record<string, any>;
+    assert.ok(settings.identity.appName && settings.ai.claudeModel && settings.readOnly.paths.rootDir);
+    const edited = structuredClone(settings);
+    delete edited.readOnly;
+    edited.identity.assistantNameAr = 'العقل الثاني المعدّل';
+    assert.equal((await postJson(port, '/api/settings', edited)).status, 401, 'الحفظ دون جلسة القائد مرفوض');
+    resetSessionStateForTests();
+    const login = await postJson(port, '/api/vault/unlock', { key: TEST_MASTER_PASSWORD });
+    const cmdCookie = String(login.headers['set-cookie'] ?? '').split(';')[0];
+    const remote = structuredClone(edited);
+    remote.ai.ollamaEndpoint = 'http://evil.example:11434';
+    assert.equal((await postJson(port, '/api/settings', remote, cmdCookie)).status, 400, 'عنوان Ollama خارجي مرفوض');
+    const badModel = structuredClone(edited);
+    badModel.ai.claudeModel = 'model; rm -rf /';
+    assert.equal((await postJson(port, '/api/settings', badModel, cmdCookie)).status, 400, 'اسم نموذج غير صالح مرفوض');
+    const saved = await postJson(port, '/api/settings', edited, cmdCookie);
+    assert.equal(saved.status, 200);
+    assert.equal(loadSystemConfig().assistantNameAr, 'العقل الثاني المعدّل', 'التعديل يُحفظ فعلاً');
+    assert.deepEqual(loadSystemConfig().aiConfig.providerOrder, ['local'], 'ترتيب المزوّدين غير المعروض في النموذج يبقى كما هو');
+    resetSessionStateForTests();
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
-  passedChecks.push('اختبار البثّ التدريجي عبر الخادم (SSE) وحالة المزوّدين بنجاح.');
+  passedChecks.push('اختبار البثّ التدريجي عبر الخادم (SSE) وحالة المزوّدين وصفحة الإعدادات (صلاحية القائد والتحقق من القيم) بنجاح.');
 
   return passedChecks;
 }

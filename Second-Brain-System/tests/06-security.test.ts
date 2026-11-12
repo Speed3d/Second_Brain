@@ -21,7 +21,7 @@ import { createEncryptedSystemBackup, restoreEncryptedBackup } from '../src/feat
 import { generatePrintableEmergencyKit } from '../src/features/family-emergency/emergency-kit-service.ts';
 import { startSecondBrainDesktopServer } from '../src/features/dashboard-app/desktop-server.ts';
 import { resetSessionStateForTests } from '../src/features/dashboard-app/session-manager.ts';
-import { renderSecondBrainDesktopHTML } from '../src/features/dashboard-app/ui-renderer.ts';
+import { getSystemRootDir } from '../src/core/config-manager.ts';
 import {
   changeMasterPassword,
   createVault,
@@ -158,17 +158,20 @@ export async function runSecurityTests(): Promise<string[]> {
 
   // 7. منع XSS في الواجهة
   assert.equal(escapeHtml('<b>"x" & \'y\'</b>'), '&lt;b&gt;&quot;x&quot; &amp; &#39;y&#39;&lt;/b&gt;');
-  const evilConfig = {
-    ...config,
-    watchedProjects: [{ ...config.watchedProjects[0], name: '<script>alert(1)</script>', wifeSummaryAr: '<img src=x onerror=alert(2)>' }],
-  };
-  const html = renderSecondBrainDesktopHTML(
-    evilConfig,
-    [],
-    [{ id: 'M', sourceAI: 'manual', projectId: 'p', title: '<svg onload=alert(3)>', summaryAr: 's', keyDecisionsAr: [], createdAt: '' }]
-  );
-  assert.ok(!html.includes('<script>alert(1)') && !html.includes('<img src=x') && !html.includes('<svg onload'));
-  passedChecks.push('اختبار منع حقن الأكواد (XSS) في الواجهة وفي أسماء المشاريع وسجلات الذاكرة بنجاح.');
+  // الواجهة تعرض كل البيانات عبر textContent: نتحقق ثابتاً أن ملفاتها لا تحتوي أي إدراج HTML خام أو تنفيذ نصوص،
+  // وأن الصفحة نفسها بلا سكربتات أو أحداث أو أنماط مضمّنة (حتى تعمل سياسة CSP الصارمة).
+  const publicDir = path.join(getSystemRootDir(), 'src', 'features', 'dashboard-app', 'public');
+  for (const file of ['app.js', 'hologram.js']) {
+    const code = fs.readFileSync(path.join(publicDir, file), 'utf-8');
+    for (const forbidden of [/\.innerHTML\s*=/, /\.outerHTML\s*=/, /insertAdjacentHTML/, /document\.write/, /\beval\s*\(/, /new Function\s*\(/]) {
+      assert.ok(!forbidden.test(code), `${file} يجب ألا يحتوي ${forbidden}`);
+    }
+  }
+  const indexHtml = fs.readFileSync(path.join(publicDir, 'index.html'), 'utf-8');
+  assert.ok(!/\son[a-z]+\s*=/i.test(indexHtml), 'لا أحداث مضمّنة (onclick...) في الصفحة');
+  assert.ok(!/\sstyle\s*=/i.test(indexHtml), 'لا أنماط مضمّنة في الصفحة');
+  assert.ok(!/<script(?![^>]*\ssrc=)[^>]*>/i.test(indexHtml), 'لا سكربتات مضمّنة في الصفحة');
+  passedChecks.push('اختبار منع حقن الأكواد (XSS): لا إدراج HTML خام في سكربتات الواجهة، ولا سكربتات أو أحداث أو أنماط مضمّنة في الصفحة بنجاح.');
 
   // 8. حماية الخادم عبر HTTP حقيقي
   resetSessionStateForTests();
