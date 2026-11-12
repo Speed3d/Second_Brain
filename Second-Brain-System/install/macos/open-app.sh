@@ -7,13 +7,9 @@
 # ============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SYSTEM_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-PORT="$(/usr/bin/python3 -c 'import json,sys
-for f in sys.argv[1:]:
-    try:
-        p=json.load(open(f)).get("serverPort")
-        if p: print(p); break
-    except Exception: pass
-else: print(4777)' "$SYSTEM_DIR/config/settings.json" "$SYSTEM_DIR/config/branding.json" 2>/dev/null || echo 4777)"
+# قراءة المنفذ عبر Node (المثبّت أصلاً)؛ /usr/bin/python3 قد يطلب تثبيت أدوات Xcode على ماك جديد
+NODE="$(command -v node || ls /opt/homebrew/bin/node /usr/local/bin/node 2>/dev/null | head -1)"
+PORT="$("$NODE" -e 'const fs=require("fs");for(const f of process.argv.slice(1)){try{const p=JSON.parse(fs.readFileSync(f,"utf8")).serverPort;if(p){console.log(p);process.exit(0)}}catch{}}console.log(4777)' "$SYSTEM_DIR/config/settings.json" "$SYSTEM_DIR/config/branding.json" 2>/dev/null || echo 4777)"
 URL="http://127.0.0.1:$PORT/"
 
 healthy() { curl -fsS --max-time 2 "${URL}api/health" 2>/dev/null | grep -q '"status":"ok"'; }

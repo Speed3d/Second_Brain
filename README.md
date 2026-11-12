@@ -132,6 +132,7 @@ node tests/run-all-tests.ts
 | [`docs/06-FIXES-AND-IMPROVEMENTS-PLAN.md`](./docs/06-FIXES-AND-IMPROVEMENTS-PLAN.md) | خطة الإصلاحات وحالة كل بند |
 | [`docs/07-EXPANSION-PLAN.md`](./docs/07-EXPANSION-PLAN.md) | خطة التوسعة (الأجهزة، التثبيت، المزامنة) وحالة كل مرحلة |
 | [`docs/08-AI-CONNECTION-GUIDE.md`](./docs/08-AI-CONNECTION-GUIDE.md) | دليل ربط الذكاء والصوت العربي |
+| [`docs/09-MAC-SETUP-HANDOFF.md`](./docs/09-MAC-SETUP-HANDOFF.md) | نقل المشروع إلى الماك وخطوات إكمال المرحلة ب عليه |
 | [`CHANGELOG.md`](./CHANGELOG.md) | سجل الإصدارات: ما الجديد في كل إصدار |
 
 ---

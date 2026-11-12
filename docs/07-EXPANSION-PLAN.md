@@ -146,6 +146,7 @@
   - **تسجيل خادم الذاكرة:** المثبّت يفحصه ويعرض حالته فقط، ولا يعدّل ملفات Claude Code أو Antigravity.
   - **الماك:** LaunchAgent بـ `RunAtLoad` و `KeepAlive`، و«Second Brain.command» على سطح المكتب.
   - **الاختبارات:** `tests/14-installer.test.ts`.
+- **تجربة الماك:** تُنفَّذ في جلسة على الـ MacBook حسب [`docs/09-MAC-SETUP-HANDOFF.md`](09-MAC-SETUP-HANDOFF.md)، ثم نعود إلى Windows للمرحلة ج.
 
 ---
 
