@@ -10,6 +10,7 @@
 
 import type { AIProviderId, SystemBrandingConfig } from '../../../shared/types.ts';
 import type { UnlockedVault } from '../../vault/vault-manager.ts';
+import { createClaudeCliProvider, locateClaudeCli } from './claude-cli-provider.ts';
 import { createClaudeProvider } from './claude-provider.ts';
 import { createGeminiProvider } from './gemini-provider.ts';
 import { createLocalKnowledgeProvider, type LocalKnowledgeContext } from './local-knowledge-provider.ts';
@@ -28,8 +29,9 @@ export interface ProviderKeys {
 }
 
 /**
- * Hint بالعربي: دالة تحديد ترتيب المزوّدين: من providerOrder إن وُجد، وإلا من الوضع (هجين/سحابي/محلي)
- *               والمزوّد السحابي المفضل. المحلي يُضاف آخراً دائماً ولا يتكرر أي مزوّد.
+ * Hint بالعربي: دالة تحديد ترتيب المزوّدين: من providerOrder إن وُجد، وإلا من الوضع (هجين/سحابي/محلي).
+ *               الافتراضي بلا فواتير إضافية: Claude عبر الاشتراك ثم Ollama. مزوّدو API (Claude و Gemini)
+ *               لا يُضافون إلا عند تفعيل الخيار المتقدم apiKeysEnabled. المحلي يُضاف آخراً دائماً ولا يتكرر أي مزوّد.
  */
 export function resolveProviderOrder(ai: SystemBrandingConfig['aiConfig']): AIProviderId[] {
   let order: AIProviderId[];
@@ -38,9 +40,10 @@ export function resolveProviderOrder(ai: SystemBrandingConfig['aiConfig']): AIPr
   } else {
     const primary: AIProviderId = ai.cloudProvider;
     const secondary: AIProviderId = primary === 'claude' ? 'gemini' : 'claude';
+    const api: AIProviderId[] = ai.apiKeysEnabled ? [primary, secondary] : [];
     if (ai.defaultMode === 'local') order = ['ollama'];
-    else if (ai.defaultMode === 'cloud') order = [primary, secondary];
-    else order = [primary, secondary, 'ollama'];
+    else if (ai.defaultMode === 'cloud') order = ['claude-cli', ...api];
+    else order = ['claude-cli', ...api, 'ollama'];
   }
   const unique = order.filter((id, idx) => order.indexOf(id) === idx && id !== 'local');
   return [...unique, 'local'];
@@ -71,6 +74,7 @@ export function buildProviders(config: SystemBrandingConfig, keys: ProviderKeys,
 export function buildProviderById(id: AIProviderId, config: SystemBrandingConfig, keys: ProviderKeys, localContext: LocalKnowledgeContext): AIProvider {
   const ai = config.aiConfig;
   const timeoutMs = ai.requestTimeoutMs ?? 120000;
+  if (id === 'claude-cli') return createClaudeCliProvider({ launch: locateClaudeCli(ai.claudeCliPath), model: ai.claudeCliModel || 'sonnet', timeoutMs });
   if (id === 'claude') return createClaudeProvider({ apiKey: keys.claude, model: ai.claudeModel, effort: ai.claudeEffort, timeoutMs });
   if (id === 'gemini') return createGeminiProvider({ apiKey: keys.gemini, model: ai.geminiModel, timeoutMs });
   if (id === 'ollama') return createOllamaProvider({ endpoint: ai.ollamaEndpoint, model: ai.ollamaModel, timeoutMs });
@@ -89,7 +93,7 @@ export interface ProviderAttempt {
 
 /**
  * Hint بالعربي: دالة تجربة المزوّدين بالترتيب حتى ينجح أحدهم.
- *               - المزوّد غير المهيّأ (بلا مفتاح) أو غير المتاح (Ollama متوقف) يُتخطى فوراً.
+ *               - المزوّد غير المهيّأ (بلا مفتاح) أو غير المتاح (Ollama متوقف، Claude Code غير مسجّل الدخول) يُتخطى فوراً.
  *               - إذا فشل مزوّد بعد أن بدأ البثّ تُستدعى onReset لمسح النص الجزئي قبل تجربة التالي.
  */
 export async function runProvidersWithFallback(
@@ -104,7 +108,7 @@ export async function runProvidersWithFallback(
       attempts.push({ providerId: provider.id, ok: false, skipped: true, messageAr: 'غير مهيّأ' });
       continue;
     }
-    if (provider.id === 'ollama') {
+    if (provider.id === 'ollama' || provider.id === 'claude-cli') {
       const availability = await provider.checkAvailability(request.signal);
       if (!availability.ok) {
         attempts.push({ providerId: provider.id, ok: false, skipped: true, messageAr: availability.reasonAr });

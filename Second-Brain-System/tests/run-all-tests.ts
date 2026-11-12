@@ -23,6 +23,7 @@ import { runDisasterRecoveryTests } from './08-disaster-recovery.test.ts';
 import { runProjectPageTests } from './09-project-page.test.ts';
 import { runMaintenanceTests } from './10-maintenance.test.ts';
 import { runConnectionGuideTests } from './11-connection-guide.test.ts';
+import { runClaudeSubscriptionTests } from './12-claude-subscription.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -88,6 +89,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '11. اختبارات دليل الربط (اختبار الاتصال بكل مزوّد، الحلول المقترحة، الصلاحيات)',
       file: 'tests/11-connection-guide.test.ts',
       runner: runConnectionGuideTests,
+    },
+    {
+      name: '12. اختبارات Claude عبر الاشتراك (مزوّد Claude Code المعزول، بلا فواتير API، ترتيب التراجع)',
+      file: 'tests/12-claude-subscription.test.ts',
+      runner: runClaudeSubscriptionTests,
     },
   ];
 

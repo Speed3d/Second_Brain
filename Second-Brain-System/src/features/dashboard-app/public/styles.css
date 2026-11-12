@@ -372,3 +372,9 @@ dialog.wide { width: min(900px, calc(100vw - 32px)); }
 .connect-card .report.fail { border-inline-start-color: var(--rose); }
 [data-panel="connect"] > .card-grid + .card { margin-top: 14px; }
 [data-panel="connect"] .card + details.card { margin-top: 14px; }
+
+/* إعدادات الذكاء المتقدمة (مفاتيح API) داخل نموذج الإعدادات */
+details.advanced-ai { border-top: 1px solid var(--line); padding-top: .6rem; }
+details.advanced-ai > summary { cursor: pointer; font-weight: 600; }
+details.advanced-ai > .form-grid { margin-top: .6rem; }
+.steps .cmd { display: block; direction: ltr; text-align: left; white-space: pre-wrap; word-break: break-all; margin: 0.35rem 0; padding: 0.35rem 0.5rem; border: 1px solid var(--line); border-radius: 6px; }

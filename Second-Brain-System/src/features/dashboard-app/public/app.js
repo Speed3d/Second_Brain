@@ -40,7 +40,7 @@
     billing: '💳 فواتير',
     critical_file: '📁 ملف حساس',
   };
-  const PROVIDER_NAMES = { claude: 'Claude', gemini: 'Gemini', ollama: 'Ollama', local: 'المعرفة المحلية' };
+  const PROVIDER_NAMES = { 'claude-cli': 'Claude (اشتراكك)', claude: 'Claude API', gemini: 'Gemini API', ollama: 'Ollama', local: 'المعرفة المحلية' };
   const MASK = '••••••••••';
 
   const state = {
@@ -982,7 +982,7 @@
       line.textContent =
         'المزوّدون بالترتيب: ' +
         data.providers.map((p) => (PROVIDER_NAMES[p.id] || p.id) + (p.available ? ' ✓' : ' ✗')).join(' ← ') +
-        (data.vaultUnlocked ? '' : ' • افتح الخزنة لاستخدام المفاتيح المحفوظة فيها');
+        (data.vaultUnlocked || !data.providers.some((p) => p.id === 'claude' || p.id === 'gemini') ? '' : ' • افتح الخزنة لاستخدام مفاتيح API المحفوظة فيها');
     } catch (e) {
       line.textContent = '';
     }

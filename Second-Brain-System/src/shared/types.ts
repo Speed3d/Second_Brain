@@ -39,6 +39,12 @@ export interface SystemBrandingConfig {
     geminiModel: string;
     claudeModel: string;
     claudeEffort?: 'low' | 'medium' | 'high';
+    /** نموذج Claude عبر الاشتراك (Claude Code): اسم مختصر مثل sonnet أو opus */
+    claudeCliModel?: string;
+    /** مسار برنامج Claude Code (اختياري؛ يُبحث عنه تلقائياً إن تُرك فارغاً) */
+    claudeCliPath?: string;
+    /** خيار متقدم: استخدام مفاتيح API (فوترة منفصلة عن الاشتراكات)؛ مطفأ افتراضياً */
+    apiKeysEnabled?: boolean;
     ollamaEndpoint: string;
     ollamaModel: string;
     requestTimeoutMs?: number;
@@ -70,7 +76,7 @@ export interface SystemBrandingConfig {
 /**
  * Hint بالعربي: معرّفات مزوّدي الذكاء الاصطناعي المدعومين.
  */
-export type AIProviderId = 'claude' | 'gemini' | 'ollama' | 'local';
+export type AIProviderId = 'claude-cli' | 'claude' | 'gemini' | 'ollama' | 'local';
 
 /**
  * Hint بالعربي: حقول الهوية فقط (تُحفظ في branding.json)؛ بقية الإعدادات في settings.json.

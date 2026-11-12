@@ -68,7 +68,7 @@
     │   │   ├── 📁 assistant\
     │   │   │   ├── 📄 assistant-engine.ts      # بناء السياق (بلا محتوى الخزنة) ووضعا القائد والعائلة + خلاصة المشروع
     │   │   │   ├── 📄 provider-tester.ts       # زر اختبار الاتصال لكل مزوّد مع سبب الفشل والحل المقترح
-    │   │   │   └── 📁 providers\               # claude / gemini / ollama / local + provider-registry (التراجع) + stream-parsers
+    │   │   │   └── 📁 providers\               # claude-cli (Claude عبر الاشتراك) / claude / gemini / ollama / local + provider-registry (التراجع) + stream-parsers
     │   │   ├── 📁 family-emergency\
     │   │   │   ├── 📄 emergency-kit-service.ts # كتيب الطوارئ (في الذاكرة فقط)
     │   │   │   └── 📄 backup-service.ts        # النسخ v2 والاستعادة إلى مجلد جديد
@@ -104,7 +104,8 @@
         ├── 📄 08-disaster-recovery.test.ts     # محاكاة دليل الجهاز الجديد من البداية للنهاية
         ├── 📄 09-project-page.test.ts          # صفحة المشروع
         ├── 📄 10-maintenance.test.ts           # التصفير والاسترجاع والاعتماد النهائي
-        └── 📄 11-connection-guide.test.ts      # اختبار الاتصال بالمزوّدين
+        ├── 📄 11-connection-guide.test.ts      # اختبار الاتصال بالمزوّدين
+        └── 📄 12-claude-subscription.test.ts   # Claude عبر الاشتراك بمحاكي Claude Code وهمي
 ```
 
 ---

@@ -105,6 +105,9 @@ export function setupIsolatedTestEnvironment(): IsolatedTestEnvironment {
 
   const previousEnv = process.env.SECOND_BRAIN_CONFIG_PATH;
   process.env.SECOND_BRAIN_CONFIG_PATH = configPath;
+  // لا تشغّل الاختبارات Claude Code الحقيقي أبداً (لا استهلاك لحصة الاشتراك ولا إرسال بيانات)؛ تستخدم محاكياً وهمياً عند الحاجة
+  const previousClaudeCli = process.env.SECOND_BRAIN_CLAUDE_CLI;
+  process.env.SECOND_BRAIN_CLAUDE_CLI = 'none';
 
   return {
     rootDir,
@@ -113,6 +116,8 @@ export function setupIsolatedTestEnvironment(): IsolatedTestEnvironment {
       cachedTestEmergencyKey = null;
       if (previousEnv === undefined) delete process.env.SECOND_BRAIN_CONFIG_PATH;
       else process.env.SECOND_BRAIN_CONFIG_PATH = previousEnv;
+      if (previousClaudeCli === undefined) delete process.env.SECOND_BRAIN_CLAUDE_CLI;
+      else process.env.SECOND_BRAIN_CLAUDE_CLI = previousClaudeCli;
       fs.rmSync(rootDir, { recursive: true, force: true });
     },
   };

@@ -107,7 +107,7 @@ export function getAssistantRoutes(): RouteDefinition[] {
       commanderOnly: true,
       handler: async ({ res, body, session }) => {
         const providerId = String(body.provider ?? '');
-        if (!TESTABLE_PROVIDERS.includes(providerId as never)) throw new HttpError(400, 'المزوّد يجب أن يكون claude أو gemini أو ollama.');
+        if (!TESTABLE_PROVIDERS.includes(providerId as never)) throw new HttpError(400, 'المزوّد يجب أن يكون claude-cli أو claude أو gemini أو ollama.');
         sendJson(res, 200, await testProviderConnection(providerId as (typeof TESTABLE_PROVIDERS)[number], session?.vault));
       },
     },

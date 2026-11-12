@@ -170,7 +170,9 @@ export async function runIntegrationTests(): Promise<string[]> {
 
   // 2. ترتيب المزوّدين
   const ai = config.aiConfig;
-  assert.deepEqual(resolveProviderOrder({ ...ai, providerOrder: undefined, defaultMode: 'hybrid', cloudProvider: 'claude' }), ['claude', 'gemini', 'ollama', 'local']);
+  assert.deepEqual(resolveProviderOrder({ ...ai, providerOrder: undefined, defaultMode: 'hybrid', apiKeysEnabled: false }), ['claude-cli', 'ollama', 'local'], 'الافتراضي بلا فواتير: الاشتراك ثم Ollama');
+  assert.deepEqual(resolveProviderOrder({ ...ai, providerOrder: undefined, defaultMode: 'hybrid', cloudProvider: 'claude', apiKeysEnabled: true }), ['claude-cli', 'claude', 'gemini', 'ollama', 'local']);
+  assert.deepEqual(resolveProviderOrder({ ...ai, providerOrder: undefined, defaultMode: 'cloud', apiKeysEnabled: false }), ['claude-cli', 'local']);
   assert.deepEqual(resolveProviderOrder({ ...ai, providerOrder: undefined, defaultMode: 'local' }), ['ollama', 'local']);
   assert.deepEqual(resolveProviderOrder({ ...ai, providerOrder: ['gemini', 'local', 'gemini'] }), ['gemini', 'local']);
   passedChecks.push('اختبار تحديد ترتيب مزوّدي الذكاء (الوضع الهجين والمحلي والترتيب المخصص، والمحلي آخراً دائماً) بنجاح.');

@@ -32,7 +32,7 @@ const IDENTITY_KEYS: Array<keyof BrandingIdentity> = [
 ];
 /** مفاتيح الإعدادات التي تُنقل إلى settings.json */
 const SETTINGS_KEYS = ['serverPort', 'paths', 'aiConfig', 'connectors', 'watcher', 'security', 'developerMode', 'watchedProjects'] as const;
-const VALID_PROVIDERS: AIProviderId[] = ['claude', 'gemini', 'ollama', 'local'];
+const VALID_PROVIDERS: AIProviderId[] = ['claude-cli', 'claude', 'gemini', 'ollama', 'local'];
 
 /**
  * Hint بالعربي: دالة تُرجع المسار الفعلي لمجلد Second-Brain-System محسوباً من موقع هذا الملف،
@@ -106,6 +106,9 @@ export function buildDefaultConfig(): SystemBrandingConfig {
       geminiModel: 'gemini-3.8-flash',
       claudeModel: 'claude-opus-5-5',
       claudeEffort: 'medium',
+      claudeCliModel: 'sonnet',
+      claudeCliPath: '',
+      apiKeysEnabled: false,
       ollamaEndpoint: 'http://127.0.0.1:11434',
       ollamaModel: 'llama3.2',
       requestTimeoutMs: 120000,
@@ -215,6 +218,9 @@ export function normalizeSystemConfig(raw: Record<string, unknown>): { config: S
       geminiModel: str(ai.geminiModel, defaults.aiConfig.geminiModel),
       claudeModel: str(ai.claudeModel, defaults.aiConfig.claudeModel),
       claudeEffort: effort,
+      claudeCliModel: /^[a-z0-9][a-z0-9.\-]{0,79}$/i.test(String(ai.claudeCliModel ?? '')) ? String(ai.claudeCliModel) : defaults.aiConfig.claudeCliModel,
+      claudeCliPath: typeof ai.claudeCliPath === 'string' ? ai.claudeCliPath.trim().slice(0, 500) : '',
+      apiKeysEnabled: ai.apiKeysEnabled === true,
       ollamaEndpoint: str(ai.ollamaEndpoint, defaults.aiConfig.ollamaEndpoint),
       ollamaModel: str(ai.ollamaModel, defaults.aiConfig.ollamaModel),
       requestTimeoutMs: Number.isFinite(timeout) && timeout >= 5000 ? timeout : defaults.aiConfig.requestTimeoutMs,

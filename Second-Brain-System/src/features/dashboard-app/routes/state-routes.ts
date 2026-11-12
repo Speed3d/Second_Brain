@@ -133,6 +133,9 @@ export function buildEditableSettings(): Record<string, unknown> {
       providerOrder: c.aiConfig.providerOrder ?? null,
       claudeModel: c.aiConfig.claudeModel,
       claudeEffort: c.aiConfig.claudeEffort,
+      claudeCliModel: c.aiConfig.claudeCliModel ?? 'sonnet',
+      claudeCliPath: c.aiConfig.claudeCliPath ?? '',
+      apiKeysEnabled: c.aiConfig.apiKeysEnabled === true,
       geminiModel: c.aiConfig.geminiModel,
       ollamaEndpoint: c.aiConfig.ollamaEndpoint,
       ollamaModel: c.aiConfig.ollamaModel,
@@ -280,7 +283,7 @@ export function getStateRoutes(): RouteDefinition[] {
           ? undefined
           : Array.isArray(ai.providerOrder)
             ? ai.providerOrder.map((p) => {
-                if (!['claude', 'gemini', 'ollama', 'local'].includes(String(p))) throw new HttpError(400, `مزوّد غير معروف: ${String(p)}`);
+                if (!['claude-cli', 'claude', 'gemini', 'ollama', 'local'].includes(String(p))) throw new HttpError(400, `مزوّد غير معروف: ${String(p)}`);
                 return p as AIProviderId;
               })
             : (() => { throw new HttpError(400, 'providerOrder يجب أن يكون قائمة.'); })();
@@ -297,6 +300,17 @@ export function getStateRoutes(): RouteDefinition[] {
           familyMemberTitle: validateSettingString(identity.familyMemberTitle, 'familyMemberTitle'),
         });
 
+        // مسار Claude Code المخصص (اختياري): مسار كامل لملف موجود، وعلى Windows ملف .exe فقط (يُشغَّل بلا shell)
+        let claudeCliPath: string | undefined;
+        if (ai.claudeCliPath !== undefined) {
+          claudeCliPath = validateSettingString(ai.claudeCliPath ?? '', 'claudeCliPath', { max: 500, allowEmpty: true });
+          if (claudeCliPath) {
+            if (!path.isAbsolute(claudeCliPath)) throw new HttpError(400, 'مسار Claude Code يجب أن يكون مساراً كاملاً.');
+            if (process.platform === 'win32' && !/\.exe$/i.test(claudeCliPath)) throw new HttpError(400, 'مسار Claude Code على Windows يجب أن ينتهي بـ claude.exe.');
+            if (!fs.existsSync(claudeCliPath)) throw new HttpError(400, 'لا يوجد ملف في مسار Claude Code المحدد.');
+          }
+        }
+
         const raw = readRawSettings();
         const currentAi = obj(raw.aiConfig);
         const newAi: Record<string, unknown> = {
@@ -305,6 +319,9 @@ export function getStateRoutes(): RouteDefinition[] {
           cloudProvider: ai.cloudProvider === 'gemini' ? 'gemini' : 'claude',
           claudeModel: validateSettingString(ai.claudeModel, 'claudeModel', { pattern: modelPattern }),
           claudeEffort: ['low', 'medium', 'high'].includes(String(ai.claudeEffort)) ? ai.claudeEffort : 'medium',
+          ...(ai.claudeCliModel !== undefined ? { claudeCliModel: validateSettingString(ai.claudeCliModel, 'claudeCliModel', { max: 80, pattern: /^[a-z0-9][a-z0-9.-]{0,79}$/i }) } : {}),
+          ...(claudeCliPath !== undefined ? { claudeCliPath } : {}),
+          ...(ai.apiKeysEnabled !== undefined ? { apiKeysEnabled: ai.apiKeysEnabled === true } : {}),
           geminiModel: validateSettingString(ai.geminiModel, 'geminiModel', { pattern: modelPattern }),
           ollamaEndpoint: validateLocalEndpoint(ai.ollamaEndpoint),
           ollamaModel: validateSettingString(ai.ollamaModel, 'ollamaModel', { pattern: modelPattern }),

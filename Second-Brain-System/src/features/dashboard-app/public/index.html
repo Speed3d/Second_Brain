@@ -122,37 +122,25 @@
           <h1 id="h-connect">دليل ربط النماذج</h1>
           <div class="toolbar"><button type="button" class="btn btn-ghost" data-action="refresh-providers-guide">🔄 تحديث الحالة</button></div>
         </div>
-        <p class="small muted">يجرّب المساعد المزوّدين بالترتيب المحدد في الإعدادات، وإن تعذّر الجميع يجيب من المعرفة المحلية. زر «اختبار الاتصال» يرسل رسالة قصيرة ثابتة فقط (بلا أي معلومات شخصية) ويعرض النتيجة.</p>
+        <p class="small muted">بلا فواتير إضافية: يجرّب المساعد Claude عبر اشتراكك، ثم Ollama، وإن تعذّر الجميع يجيب من المعرفة المحلية. زر «اختبار الاتصال» يرسل رسالة قصيرة ثابتة فقط (بلا أي معلومات شخصية) ويعرض النتيجة.</p>
 
-        <div class="card-grid two">
-          <article class="card connect-card" data-provider="claude">
-            <div class="card-head"><h2>🟠 Claude (Anthropic)</h2><span class="badge" data-status></span></div>
-            <ol class="steps">
-              <li>افتح <span class="mono">console.anthropic.com</span> وسجّل الدخول.</li>
-              <li>من <strong>Settings ← Billing</strong> أضف رصيداً (يُحاسب الاستخدام بعدد الكلمات).</li>
-              <li>من <strong>Settings ← API Keys</strong> اضغط <strong>Create Key</strong> وانسخ المفتاح (يبدأ بـ <span class="mono">sk-ant-</span>).</li>
-              <li>في هذا البرنامج: <strong>الخزنة ← مفاتيح الذكاء الاصطناعي</strong>، اختر Claude والصق المفتاح واحفظه.</li>
-              <li>النموذج الافتراضي في الإعدادات: <span class="mono">claude-opus-5-5</span> (الأقوى). للأسرع والأرخص: <span class="mono">claude-sonnet-5-5</span> أو <span class="mono">claude-haiku-5-5</span>.</li>
-              <li>اضغط «اختبار الاتصال» أدناه.</li>
-            </ol>
-            <div class="card-actions"><button type="button" class="btn btn-primary btn-sm" data-action="test-provider" data-provider="claude">🧪 اختبار الاتصال</button></div>
-            <div class="report" data-result hidden></div>
-          </article>
+        <article class="card connect-card" data-provider="claude-cli">
+          <div class="card-head"><h2>🟠 Claude عبر اشتراكك (Claude Pro)</h2><span class="badge" data-status></span></div>
+          <p class="small">يستخدم المساعد برنامج <strong>Claude Code</strong> المثبّت على جهازك، فيعمل باشتراك Pro نفسه <strong>بلا أي فاتورة إضافية</strong>، ويُحسب الاستخدام من حصة الاشتراك.</p>
+          <ol class="steps">
+            <li>إن لم يكن الأمر <span class="mono">claude</span> متاحاً في الطرفية، ثبّته مرة واحدة من PowerShell (يستخدم النسخة الموجودة داخل تطبيق Claude لسطح المكتب):<span class="mono cmd" dir="ltr">&amp; (Get-ChildItem "$env:APPDATA\Claude\claude-code" -Recurse -Filter claude.exe | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName install</span>على الماك:<span class="mono cmd" dir="ltr">curl -fsSL https://claude.ai/install.sh | bash</span></li>
+            <li>افتح نافذة طرفية جديدة وسجّل الدخول بحساب Claude Pro:<span class="mono cmd" dir="ltr">claude auth login</span></li>
+            <li>اضغط «اختبار الاتصال» أدناه.</li>
+          </ol>
+          <p class="small muted">العزل: يعمل Claude Code هنا بلا أي أدوات ولا خوادم MCP ولا حفظ للجلسات، في مجلد مؤقت فارغ، فلا يستطيع تعديل ملفاتك أو تنفيذ أوامر. النموذج يُختار من الإعدادات (<span class="mono">sonnet</span> افتراضياً لتوفير الحصة، أو <span class="mono">opus</span>).</p>
+          <div class="card-actions"><button type="button" class="btn btn-primary btn-sm" data-action="test-provider" data-provider="claude-cli">🧪 اختبار الاتصال</button></div>
+          <div class="report" data-result hidden></div>
+        </article>
 
-          <article class="card connect-card" data-provider="gemini">
-            <div class="card-head"><h2>🔵 Gemini (Google)</h2><span class="badge" data-status></span></div>
-            <ol class="steps">
-              <li>افتح <span class="mono">aistudio.google.com</span> بحساب Google.</li>
-              <li>اضغط <strong>Get API key</strong> ثم <strong>Create API key</strong> وانسخ المفتاح (يبدأ بـ <span class="mono">AIza</span>).</li>
-              <li>للاستخدام الكثيف فعّل الفوترة في مشروع Google Cloud المرتبط؛ الطبقة المجانية لها حدود يومية.</li>
-              <li>في هذا البرنامج: <strong>الخزنة ← مفاتيح الذكاء الاصطناعي</strong>، اختر Gemini والصق المفتاح واحفظه.</li>
-              <li>النموذج الافتراضي: <span class="mono">gemini-3.8-flash</span> (سريع ورخيص)، ويمكن تغييره من الإعدادات.</li>
-              <li>اضغط «اختبار الاتصال» أدناه.</li>
-            </ol>
-            <div class="card-actions"><button type="button" class="btn btn-primary btn-sm" data-action="test-provider" data-provider="gemini">🧪 اختبار الاتصال</button></div>
-            <div class="report" data-result hidden></div>
-          </article>
-        </div>
+        <article class="card">
+          <div class="card-head"><h2>🔵 Gemini عبر Antigravity</h2><span class="badge">عبر الذاكرة المشتركة</span></div>
+          <p class="small">أوقفت Google استخدام Gemini CLI لحسابات الأفراد ووجّهتها إلى Antigravity، و Antigravity لا يعمل من برنامج آخر دون واجهته. لذلك يبقى Gemini مربوطاً بـ Second Brain عبر <strong>الذاكرة المشتركة (MCP)</strong>: يقرأ ملفك وسياق مشاريعك ويسجّل القرارات أثناء عملك في Antigravity، باشتراكك وبلا تكلفة إضافية.</p>
+        </article>
 
         <article class="card connect-card" data-provider="ollama">
           <div class="card-head"><h2>🦙 Ollama (محلي، مجاني، بلا إنترنت)</h2><span class="badge" data-status></span></div>
@@ -185,6 +173,41 @@
           <div class="card-actions"><button type="button" class="btn btn-primary btn-sm" data-action="test-provider" data-provider="ollama">🧪 اختبار الاتصال</button></div>
           <div class="report" data-result hidden></div>
         </article>
+
+        <details class="card">
+          <summary>⚙️ متقدم: مفاتيح API (فوترة منفصلة عن الاشتراكات)</summary>
+          <p class="small muted">مفاتيح API تُحاسَب برصيد منفصل عن اشتراكَي Claude Pro و Google. لا يستخدمها المساعد إلا بعد تفعيل «استخدام مفاتيح API» في الإعدادات.</p>
+        <div class="card-grid two">
+          <article class="card connect-card" data-provider="claude">
+            <div class="card-head"><h2>🟠 Claude API (Anthropic)</h2><span class="badge" data-status></span></div>
+            <ol class="steps">
+              <li>افتح <span class="mono">console.anthropic.com</span> وسجّل الدخول.</li>
+              <li>من <strong>Settings ← Billing</strong> أضف رصيداً (يُحاسب الاستخدام بعدد الكلمات).</li>
+              <li>من <strong>Settings ← API Keys</strong> اضغط <strong>Create Key</strong> وانسخ المفتاح (يبدأ بـ <span class="mono">sk-ant-</span>).</li>
+              <li>في هذا البرنامج: <strong>الخزنة ← مفاتيح الذكاء الاصطناعي</strong>، اختر Claude والصق المفتاح واحفظه.</li>
+              <li>النموذج الافتراضي في الإعدادات: <span class="mono">claude-opus-5-5</span> (الأقوى). للأسرع والأرخص: <span class="mono">claude-sonnet-5-5</span> أو <span class="mono">claude-haiku-5-5</span>.</li>
+              <li>اضغط «اختبار الاتصال» أدناه.</li>
+            </ol>
+            <div class="card-actions"><button type="button" class="btn btn-primary btn-sm" data-action="test-provider" data-provider="claude">🧪 اختبار الاتصال</button></div>
+            <div class="report" data-result hidden></div>
+          </article>
+
+          <article class="card connect-card" data-provider="gemini">
+            <div class="card-head"><h2>🔵 Gemini API (Google)</h2><span class="badge" data-status></span></div>
+            <ol class="steps">
+              <li>افتح <span class="mono">aistudio.google.com</span> بحساب Google.</li>
+              <li>اضغط <strong>Get API key</strong> ثم <strong>Create API key</strong> وانسخ المفتاح (يبدأ بـ <span class="mono">AIza</span>).</li>
+              <li>للاستخدام الكثيف فعّل الفوترة في مشروع Google Cloud المرتبط؛ الطبقة المجانية لها حدود يومية.</li>
+              <li>في هذا البرنامج: <strong>الخزنة ← مفاتيح الذكاء الاصطناعي</strong>، اختر Gemini والصق المفتاح واحفظه.</li>
+              <li>النموذج الافتراضي: <span class="mono">gemini-3.8-flash</span> (سريع ورخيص)، ويمكن تغييره من الإعدادات.</li>
+              <li>اضغط «اختبار الاتصال» أدناه.</li>
+            </ol>
+            <div class="card-actions"><button type="button" class="btn btn-primary btn-sm" data-action="test-provider" data-provider="gemini">🧪 اختبار الاتصال</button></div>
+            <div class="report" data-result hidden></div>
+          </article>
+        </div>
+
+        </details>
 
         <details class="card">
           <summary>🧩 ربط الذاكرة المشتركة مع Claude Code و Antigravity (MCP)</summary>
@@ -264,7 +287,7 @@
           <div class="card-grid" id="secretsList"></div>
 
           <details class="card" data-commander-only>
-            <summary>🤖 مفاتيح الذكاء الاصطناعي (Claude / Gemini)</summary>
+            <summary>🤖 مفاتيح API (متقدم — فوترة منفصلة)</summary>
             <form data-form="ai-key" class="form-grid">
               <p class="small muted span-2">تُحفظ مشفرة داخل الخزنة، ولا يستخدمها المساعد إلا والخزنة مفتوحة. اترك الحقل فارغاً واحفظ لحذف المفتاح.</p>
               <label>المزوّد<select name="provider"><option value="claude">Claude (Anthropic)</option><option value="gemini">Gemini (Google)</option></select></label>
@@ -347,11 +370,19 @@
           </fieldset>
           <fieldset class="card form-grid">
             <legend>الذكاء الاصطناعي</legend>
-            <label>الوضع<select name="ai.defaultMode"><option value="hybrid">هجين (سحابي ثم محلي)</option><option value="cloud">سحابي فقط</option><option value="local">محلي فقط (بدون إنترنت)</option></select></label>
-            <label>المزوّد السحابي الأول<select name="ai.cloudProvider"><option value="claude">Claude</option><option value="gemini">Gemini</option></select></label>
-            <label>نموذج Claude<input name="ai.claudeModel" dir="ltr" maxlength="100" required /></label>
-            <label>مستوى جهد Claude<select name="ai.claudeEffort"><option value="low">منخفض (أسرع)</option><option value="medium">متوسط</option><option value="high">عالٍ (أعمق)</option></select></label>
-            <label>نموذج Gemini<input name="ai.geminiModel" dir="ltr" maxlength="100" required /></label>
+            <label>الوضع<select name="ai.defaultMode"><option value="hybrid">هجين (اشتراك Claude ثم Ollama)</option><option value="cloud">اشتراك Claude فقط</option><option value="local">محلي فقط (بدون إنترنت)</option></select></label>
+            <label>نموذج Claude عبر الاشتراك<input name="ai.claudeCliModel" dir="ltr" maxlength="80" required placeholder="sonnet" /></label>
+            <label class="span-2">مسار Claude Code (اختياري — فارغ يعني البحث التلقائي)<input name="ai.claudeCliPath" dir="ltr" maxlength="500" placeholder="C:\Users\...\.local\bin\claude.exe" /></label>
+            <details class="span-2 advanced-ai">
+              <summary>⚙️ متقدم: مفاتيح API (فوترة منفصلة)</summary>
+              <div class="form-grid">
+                <label class="check span-2"><input type="checkbox" name="ai.apiKeysEnabled" /> استخدام مفاتيح API بعد الاشتراك (تُحاسَب برصيد منفصل)</label>
+                <label>مزوّد API الأول<select name="ai.cloudProvider"><option value="claude">Claude</option><option value="gemini">Gemini</option></select></label>
+                <label>نموذج Claude API<input name="ai.claudeModel" dir="ltr" maxlength="100" required /></label>
+                <label>مستوى جهد Claude API<select name="ai.claudeEffort"><option value="low">منخفض (أسرع)</option><option value="medium">متوسط</option><option value="high">عالٍ (أعمق)</option></select></label>
+                <label>نموذج Gemini API<input name="ai.geminiModel" dir="ltr" maxlength="100" required /></label>
+              </div>
+            </details>
             <label>نموذج Ollama<input name="ai.ollamaModel" dir="ltr" maxlength="100" required /></label>
             <label class="span-2">عنوان Ollama (على هذا الجهاز فقط)<input name="ai.ollamaEndpoint" dir="ltr" maxlength="200" required /></label>
             <label>لغة الصوت<input name="ai.voiceLang" dir="ltr" maxlength="10" required /></label>
