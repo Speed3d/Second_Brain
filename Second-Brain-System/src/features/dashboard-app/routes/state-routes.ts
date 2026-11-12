@@ -50,7 +50,8 @@ export const STRICT_DASHBOARD_CSP = [
   "img-src 'self' data:",
   "connect-src 'self'",
   "font-src 'self'",
-  "media-src 'self'",
+  // الصوت العربي المولّد محلياً يُشغَّل من blob: (لا مصادر خارجية)
+  "media-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",

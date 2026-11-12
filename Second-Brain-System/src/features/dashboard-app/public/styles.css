@@ -378,3 +378,12 @@ details.advanced-ai { border-top: 1px solid var(--line); padding-top: .6rem; }
 details.advanced-ai > summary { cursor: pointer; font-weight: 600; }
 details.advanced-ai > .form-grid { margin-top: .6rem; }
 .steps .cmd { display: block; direction: ltr; text-align: left; white-space: pre-wrap; word-break: break-all; margin: 0.35rem 0; padding: 0.35rem 0.5rem; border: 1px solid var(--line); border-radius: 6px; }
+
+/* المحادثات المحفوظة */
+.conv-item { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.6rem 0.75rem; border: 1px solid var(--line); border-radius: 10px; }
+.conv-item.is-current { border-color: var(--line-strong); }
+.conv-info { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.conv-info strong { overflow-wrap: anywhere; }
+.conv-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
+#conversationsList { max-height: 60vh; overflow-y: auto; overflow-x: hidden; }
+@media (max-width: 560px) { .conv-item { flex-direction: column; align-items: stretch; } .conv-actions { justify-content: flex-end; } }

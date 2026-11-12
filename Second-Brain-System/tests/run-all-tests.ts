@@ -24,6 +24,7 @@ import { runProjectPageTests } from './09-project-page.test.ts';
 import { runMaintenanceTests } from './10-maintenance.test.ts';
 import { runConnectionGuideTests } from './11-connection-guide.test.ts';
 import { runClaudeSubscriptionTests } from './12-claude-subscription.test.ts';
+import { runConversationsAndVoiceTests } from './13-conversations-and-voice.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -94,6 +95,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '12. اختبارات Claude عبر الاشتراك (مزوّد Claude Code المعزول، بلا فواتير API، ترتيب التراجع)',
       file: 'tests/12-claude-subscription.test.ts',
       runner: runClaudeSubscriptionTests,
+    },
+    {
+      name: '13. اختبارات المحادثات المحفوظة المشفّرة والنطق العربي المحلي (الحفظ، الحذف، الصلاحيات، Piper)',
+      file: 'tests/13-conversations-and-voice.test.ts',
+      runner: runConversationsAndVoiceTests,
     },
   ];
 

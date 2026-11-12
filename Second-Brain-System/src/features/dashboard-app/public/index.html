@@ -71,7 +71,10 @@
           <div class="card chat-card">
             <div class="card-head">
               <h2 id="chatTitle">المحادثة</h2>
-              <button type="button" class="btn btn-ghost btn-sm" data-action="clear-chat" data-mode="commander">🧹 محادثة جديدة</button>
+              <div class="toolbar">
+                <button type="button" class="btn btn-ghost btn-sm" data-action="open-conversations" data-mode="commander">🗂 المحادثات المحفوظة</button>
+                <button type="button" class="btn btn-ghost btn-sm" data-action="clear-chat" data-mode="commander">🧹 محادثة جديدة</button>
+              </div>
             </div>
             <div class="chat-log" id="chatLog" role="log" aria-live="polite" aria-label="سجل المحادثة">
               <p class="chat-empty muted">اسأل عن مشاريعك أو أوامر التشغيل أو أي قرار سابق. اضغط <kbd>/</kbd> للكتابة.</p>
@@ -83,6 +86,7 @@
                 <button type="submit" class="btn btn-primary">إرسال</button>
                 <button type="button" class="btn btn-ghost" data-action="voice" data-mode="commander">🎤 بالصوت</button>
                 <button type="button" class="btn btn-ghost" data-action="speak" data-mode="commander">🔊 نطق آخر رد</button>
+                <button type="button" class="btn btn-ghost" data-action="toggle-auto-speak" aria-pressed="false">🔇 الرد الصوتي: متوقف</button>
               </div>
             </form>
             <p class="small muted" id="providerLine">جاري التحقق من مزوّدي الذكاء…</p>
@@ -172,6 +176,24 @@
           <p class="small muted">راجع الأسماء والأحجام المتاحة في <span class="mono">ollama.com/library</span>. ربط Ollama المكتبي من اللابتوب والماك عبر نطاقك على Cloudflare سيُضاف في المرحلة «د» من الخطة؛ حتى ذلك الحين يقبل البرنامج Ollama على نفس الجهاز فقط.</p>
           <div class="card-actions"><button type="button" class="btn btn-primary btn-sm" data-action="test-provider" data-provider="ollama">🧪 اختبار الاتصال</button></div>
           <div class="report" data-result hidden></div>
+        </article>
+
+        <article class="card" id="voiceCard">
+          <div class="card-head"><h2>🔊 الصوت العربي</h2><span class="badge" id="voiceStatusBadge"></span></div>
+          <p class="small">يُنطق الرد بصوت عربي يُولَّد <strong>على جهازك نفسه</strong>، بلا إنترنت وبلا أي خدمة خارجية، ويعمل في أي متصفح.</p>
+          <p class="small" id="voiceStatusText">جاري فحص الصوت…</p>
+          <label class="small" id="voiceSpeakerRow" hidden>الصوت المختار لهذا الجهاز
+            <select id="voiceSpeaker"></select>
+          </label>
+          <ul class="plain-list small">
+            <li><strong>XTTS-v2 (الأعلى جودة):</strong> صوتا Suad Qasim و Damien Black، يعمل على كرت الشاشة. يُثبَّت على الأجهزة الأخرى بالأمر <span class="mono">node src/tools/install-xtts-voice.ts --accept-license</span> (نحو 4.8GB، ورخصته للاستخدام غير التجاري)، وتفاصيله في الدليل.</li>
+            <li><strong>الصوت العربي المدمج Kareem (احتياطي خفيف):</strong> محرك Piper المفتوح المصدر مع الصوت العربي «Kareem». يُنزَّل مرة واحدة على كل جهاز (نحو 85MB من مصادره الرسمية: GitHub و Hugging Face) داخل مجلد <span class="mono">vendor</span> في المشروع.</li>
+            <li><strong>أو صوت Windows العربي:</strong> إن ثبّتّ «العربية (السعودية)» من إعدادات Windows ← الوقت واللغة ← الكلام، يستخدمه البرنامج تلقائياً.</li>
+          </ul>
+          <div class="card-actions">
+            <button type="button" class="btn btn-primary btn-sm" data-action="install-arabic-voice" data-commander-only>⬇️ تنزيل الصوت العربي المدمج</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-action="test-voice">🔊 تجربة الصوت</button>
+          </div>
         </article>
 
         <details class="card">
@@ -386,7 +408,7 @@
             <label>نموذج Ollama<input name="ai.ollamaModel" dir="ltr" maxlength="100" required /></label>
             <label class="span-2">عنوان Ollama (على هذا الجهاز فقط)<input name="ai.ollamaEndpoint" dir="ltr" maxlength="200" required /></label>
             <label>لغة الصوت<input name="ai.voiceLang" dir="ltr" maxlength="10" required /></label>
-            <label class="check"><input type="checkbox" name="ai.voiceEnabled" /> تفعيل النطق الصوتي للردود</label>
+            <label class="check"><input type="checkbox" name="ai.voiceEnabled" /> الرد الصوتي مفعّل افتراضياً (ويُبدَّل لكل جهاز من زر المحادثة)</label>
           </fieldset>
           <fieldset class="card form-grid">
             <legend>الموصلات والمراقبة</legend>
@@ -468,6 +490,8 @@
             <button type="submit" class="btn btn-family btn-lg">💬 اسألي</button>
             <button type="button" class="btn btn-ghost btn-lg" data-action="voice" data-mode="family">🎤 بالصوت</button>
             <button type="button" class="btn btn-ghost btn-lg" data-action="speak" data-mode="family">🔊 استمعي</button>
+            <button type="button" class="btn btn-ghost btn-lg" data-action="toggle-auto-speak" aria-pressed="false">🔇 الرد الصوتي: متوقف</button>
+            <button type="button" class="btn btn-ghost btn-lg" data-action="open-conversations" data-mode="family">🗂 المحادثات السابقة</button>
           </div>
         </form>
       </section>
@@ -539,6 +563,19 @@
       <h2 id="conversationDialogTitle">محادثة</h2>
       <pre class="report conversation-text" id="conversationText"></pre>
       <div class="form-actions">
+        <button type="button" class="btn btn-ghost" data-action="close-dialog">إغلاق</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- المحادثات المحفوظة (مشفّرة داخل الخزنة) -->
+  <dialog id="conversationsDialog" class="wide" aria-labelledby="conversationsDialogTitle">
+    <div class="stack">
+      <h2 id="conversationsDialogTitle">المحادثات المحفوظة</h2>
+      <p class="small muted">تُحفظ كل محادثة تلقائياً ومشفّرة بمفتاح الخزنة، ولا تُعرض إلا والخزنة مفتوحة. الحذف نهائي.</p>
+      <div id="conversationsList" class="stack"></div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-danger" data-action="delete-all-conversations">🗑️ حذف كل المحادثات</button>
         <button type="button" class="btn btn-ghost" data-action="close-dialog">إغلاق</button>
       </div>
     </div>

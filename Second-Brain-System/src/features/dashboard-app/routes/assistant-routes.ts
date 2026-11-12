@@ -6,13 +6,17 @@
  *               - حالة المزوّدين (مهيّأ / متاح) لعرضها في الواجهة.
  *               - حفظ مفاتيح Claude و Gemini داخل الخزنة المشفرة (للقائد فقط).
  *               - اختبار الاتصال بمزوّد واحد برسالة قصيرة ثابتة (/api/assistant/test).
+ *               - حفظ كل سؤال وجوابه في محادثة مشفّرة بمفتاح الخزنة (عندما تكون الخزنة مفتوحة).
  * ============================================================================
  */
 
 import { loadSystemConfig } from '../../../core/config-manager.ts';
+import { logSystemInfo } from '../../../core/logger.ts';
+import type { AIProviderId } from '../../../shared/types.ts';
 import { askSecondBrainAssistant } from '../../assistant/assistant-engine.ts';
 import { testProviderConnection, TESTABLE_PROVIDERS } from '../../assistant/provider-tester.ts';
 import { buildProviders, PROVIDER_KEY_SECRET_IDS, resolveProviderKeys } from '../../assistant/providers/provider-registry.ts';
+import { appendConversationTurn } from '../../conversations/conversation-store.ts';
 import { deleteVaultSecret, upsertVaultSecret } from '../../vault/vault-manager.ts';
 import { HttpError, readString, sendJson, type RouteContext, type RouteDefinition } from '../http-utils.ts';
 
@@ -23,10 +27,37 @@ export function readAssistantInput(body: Record<string, unknown>): {
   question: string;
   mode: 'commander' | 'wife_emergency';
   history: unknown;
+  conversationId?: string;
 } {
   const question = readString(body, 'question', 8000).trim();
   if (!question) throw new HttpError(400, 'يرجى كتابة السؤال.');
-  return { question, mode: body.mode === 'wife_emergency' ? 'wife_emergency' : 'commander', history: body.history };
+  const conversationId = typeof body.conversationId === 'string' && /^[a-z0-9-]{8,64}$/.test(body.conversationId) ? body.conversationId : undefined;
+  return { question, mode: body.mode === 'wife_emergency' ? 'wife_emergency' : 'commander', history: body.history, conversationId };
+}
+
+/**
+ * Hint بالعربي: دالة حفظ السؤال وجوابه في المحادثة المشفّرة إن كانت الخزنة مفتوحة.
+ *               تُرجع معرّف المحادثة، أو null إن لم يمكن الحفظ (الخزنة مقفلة أو خطأ في الكتابة).
+ */
+export function saveAssistantTurn(
+  session: RouteContext['session'],
+  input: ReturnType<typeof readAssistantInput>,
+  reply: { answerAr: string; providerUsed: AIProviderId; model: string }
+): string | null {
+  if (!session) return null;
+  try {
+    return appendConversationTurn(session.vault, {
+      conversationId: input.conversationId,
+      mode: input.mode === 'wife_emergency' ? 'family' : 'commander',
+      question: input.question,
+      answer: reply.answerAr,
+      providerUsed: reply.providerUsed,
+      model: reply.model,
+    });
+  } catch (err) {
+    logSystemInfo('Conversations', `تعذر حفظ المحادثة: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
 }
 
 /**
@@ -47,7 +78,8 @@ export function getAssistantRoutes(): RouteDefinition[] {
       handler: async ({ res, body, session }) => {
         const input = readAssistantInput(body);
         const reply = await askSecondBrainAssistant(input.question, input.mode, { history: input.history, vault: session?.vault });
-        sendJson(res, 200, reply);
+        const conversationId = saveAssistantTurn(session, input, reply);
+        sendJson(res, 200, { ...reply, conversationId, saved: Boolean(conversationId) });
       },
     },
     {
@@ -72,7 +104,8 @@ export function getAssistantRoutes(): RouteDefinition[] {
             onDelta: (text) => writeSseEvent(ctx, 'delta', { text }),
             onReset: () => writeSseEvent(ctx, 'reset', {}),
           });
-          writeSseEvent(ctx, 'done', { providerUsed: reply.providerUsed, model: reply.model, attempts: reply.attempts });
+          const conversationId = saveAssistantTurn(ctx.session, input, reply);
+          writeSseEvent(ctx, 'done', { providerUsed: reply.providerUsed, model: reply.model, attempts: reply.attempts, conversationId, saved: Boolean(conversationId) });
         } catch (err) {
           writeSseEvent(ctx, 'error', { error: err instanceof Error ? err.message : 'حدث خطأ غير متوقع' });
         }

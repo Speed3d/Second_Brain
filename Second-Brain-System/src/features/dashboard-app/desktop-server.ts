@@ -13,6 +13,7 @@ import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { loadSystemConfig, loadSystemConfigWithWarnings } from '../../core/config-manager.ts';
 import { startProjectWatcher } from '../project-indexer/project-watcher.ts';
+import { warmUpVoice } from '../voice/tts-service.ts';
 import { logSystemError, logSystemInfo } from '../../core/logger.ts';
 import {
   applySecurityHeaders,
@@ -30,6 +31,8 @@ import { getEmergencyRoutes } from './routes/emergency-routes.ts';
 import { getMemoryRoutes } from './routes/memory-routes.ts';
 import { getProjectRoutes } from './routes/project-routes.ts';
 import { getMaintenanceRoutes } from './routes/maintenance-routes.ts';
+import { getConversationRoutes } from './routes/conversation-routes.ts';
+import { getVoiceRoutes } from './routes/voice-routes.ts';
 import { getVaultRoutes } from './routes/vault-routes.ts';
 import { getStateRoutes } from './routes/state-routes.ts';
 import { getVaultSession, peekActiveVault } from './session-manager.ts';
@@ -57,6 +60,8 @@ export function buildRouteTable(): RouteDefinition[] {
     ...getAssistantRoutes(),
     ...getEmergencyRoutes(),
     ...getMaintenanceRoutes(),
+    ...getConversationRoutes(),
+    ...getVoiceRoutes(),
   ];
 }
 
@@ -159,6 +164,8 @@ if (process.argv[1] && process.argv[1].endsWith('desktop-server.ts')) {
       for (const w of warnings) console.log(`⚠️  ${w}`);
       const watcher = startProjectWatcher(peekActiveVault);
       if (watcher.intervalMinutes) console.log(`👁️  المراقب الدوري يعمل كل ${watcher.intervalMinutes} دقيقة.`);
+      // تحميل الصوت العربي عالي الجودة (XTTS) في الخلفية، فيكون جاهزاً لأول رد
+      warmUpVoice();
       console.log('');
     })
     .catch((err) => {

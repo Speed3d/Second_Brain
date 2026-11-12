@@ -6,6 +6,9 @@
 # بيانات النظام: الخزنة المشفرة، النسخ الاحتياطية، كتيب الطوارئ، الذاكرة، والسجلات
 Second-Brain-System/data/
 
+# أدوات ونماذج كبيرة تُنزَّل على كل جهاز (محرك النطق Piper والصوت العربي)
+Second-Brain-System/vendor/
+
 # الإعدادات الحقيقية (تحتوي مسارات المشاريع ودخلها وفواتيرها) — المرفوع هو branding.example.json
 Second-Brain-System/config/branding.json
 Second-Brain-System/config/settings.json

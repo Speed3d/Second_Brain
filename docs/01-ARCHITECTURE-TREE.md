@@ -72,6 +72,12 @@
     │   │   ├── 📁 family-emergency\
     │   │   │   ├── 📄 emergency-kit-service.ts # كتيب الطوارئ (في الذاكرة فقط)
     │   │   │   └── 📄 backup-service.ts        # النسخ v2 والاستعادة إلى مجلد جديد
+    │   │   ├── 📁 conversations\
+    │   │   │   └── 📄 conversation-store.ts    # حفظ المحادثات مشفّرة بمفتاح الخزنة، الفتح والحذف
+    │   │   ├── 📁 voice\
+    │   │   │   ├── 📄 tts-service.ts           # النطق العربي المحلي: XTTS ثم Piper ثم Windows ثم macOS
+    │   │   │   ├── 📄 xtts-engine.ts           # عامل XTTS-v2 الدائم (تحميل مرة واحدة، إطفاء بعد 30 دقيقة)
+    │   │   │   └── 📄 xtts-worker.py           # عامل Python: يحمّل النموذج ويولّد WAV لكل جملة
     │   │   ├── 📁 maintenance\
     │   │   │   └── 📄 reset-service.ts         # وضع التطوير: التصفير إلى السلة، الاسترجاع، إفراغ السلة
     │   │   └── 📁 dashboard-app\
@@ -105,7 +111,8 @@
         ├── 📄 09-project-page.test.ts          # صفحة المشروع
         ├── 📄 10-maintenance.test.ts           # التصفير والاسترجاع والاعتماد النهائي
         ├── 📄 11-connection-guide.test.ts      # اختبار الاتصال بالمزوّدين
-        └── 📄 12-claude-subscription.test.ts   # Claude عبر الاشتراك بمحاكي Claude Code وهمي
+        ├── 📄 12-claude-subscription.test.ts   # Claude عبر الاشتراك بمحاكي Claude Code وهمي
+        └── 📄 13-conversations-and-voice.test.ts # المحادثات المشفّرة والنطق العربي المحلي
 ```
 
 ---

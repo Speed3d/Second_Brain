@@ -108,6 +108,9 @@ export function setupIsolatedTestEnvironment(): IsolatedTestEnvironment {
   // لا تشغّل الاختبارات Claude Code الحقيقي أبداً (لا استهلاك لحصة الاشتراك ولا إرسال بيانات)؛ تستخدم محاكياً وهمياً عند الحاجة
   const previousClaudeCli = process.env.SECOND_BRAIN_CLAUDE_CLI;
   process.env.SECOND_BRAIN_CLAUDE_CLI = 'none';
+  // لا تفحص الاختبارات أصوات النظام الحقيقية؛ تستخدم محاكي Piper عند الحاجة فقط
+  const previousTts = process.env.SECOND_BRAIN_TTS;
+  process.env.SECOND_BRAIN_TTS = 'piper-only';
 
   return {
     rootDir,
@@ -118,6 +121,8 @@ export function setupIsolatedTestEnvironment(): IsolatedTestEnvironment {
       else process.env.SECOND_BRAIN_CONFIG_PATH = previousEnv;
       if (previousClaudeCli === undefined) delete process.env.SECOND_BRAIN_CLAUDE_CLI;
       else process.env.SECOND_BRAIN_CLAUDE_CLI = previousClaudeCli;
+      if (previousTts === undefined) delete process.env.SECOND_BRAIN_TTS;
+      else process.env.SECOND_BRAIN_TTS = previousTts;
       fs.rmSync(rootDir, { recursive: true, force: true });
     },
   };

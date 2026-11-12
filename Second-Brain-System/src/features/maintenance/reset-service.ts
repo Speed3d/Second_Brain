@@ -89,6 +89,7 @@ export function listResetTargets(configPath: string = resolveDefaultConfigPath()
     path.dirname(config.paths.encryptedVaultFile),
     config.paths.emergencyKitsDir,
     path.join(dataDir, 'ai-memory-store.json'),
+    path.join(dataDir, 'conversations'),
     path.join(dataDir, 'harvest-state.json'),
     path.join(dataDir, 'project-scan-state.json'),
     path.join(dataDir, 'logs'),

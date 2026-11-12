@@ -54,6 +54,9 @@
     mode: 'commander',
     view: 'command',
     chat: { commander: [], family: [] },
+    conversationId: { commander: null, family: null },
+    conversationsMode: 'commander',
+    unsavedWarned: { commander: false, family: false },
     lastAnswer: { commander: '', family: '' },
     busy: false,
     autoLockAt: null,
@@ -222,6 +225,7 @@
     try {
       const data = await api('/api/state');
       state.app = data.app;
+      renderAutoSpeakToggles();
       state.projects = data.projects;
       state.memories = data.memories;
       state.memoryCount = data.memoryCount;
@@ -824,6 +828,8 @@
 
   function clearChat(mode) {
     state.chat[mode] = [];
+    state.conversationId[mode] = null;
+    state.unsavedWarned[mode] = false;
     const log = chatLog(mode);
     log.replaceChildren();
     if (mode === 'commander') log.appendChild(el('p', { className: 'chat-empty muted', text: 'بدأت محادثة جديدة.' }));
@@ -834,7 +840,7 @@
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: question, mode: mode === 'family' ? 'wife_emergency' : 'commander', history: state.chat[mode].slice(-12) }),
+      body: JSON.stringify({ question: question, mode: mode === 'family' ? 'wife_emergency' : 'commander', history: state.chat[mode].slice(-12), conversationId: state.conversationId[mode] || undefined }),
     });
     if (!res.ok || !res.body) {
       let data = {};
@@ -890,6 +896,7 @@
       return;
     }
     state.busy = true;
+    stopSpeaking(); // سؤال جديد يوقف نطق الرد السابق
     input.value = '';
     appendMessage(mode, 'user', question);
     const reply = appendMessage(mode, 'assistant', '⏳ جاري التفكير…');
@@ -926,8 +933,13 @@
       if (result.meta) {
         const who = PROVIDER_NAMES[result.meta.providerUsed] || result.meta.providerUsed;
         reply.appendChild(el('span', { className: 'msg-meta', text: '— ' + who + (result.meta.providerUsed !== 'local' && result.meta.model ? ' (' + result.meta.model + ')' : '') }));
+        if (result.meta.conversationId) state.conversationId[mode] = result.meta.conversationId;
+        else if (result.meta.saved === false && !state.unsavedWarned[mode]) {
+          state.unsavedWarned[mode] = true;
+          reply.appendChild(el('span', { className: 'msg-meta', text: '— لم تُحفظ هذه المحادثة لأن الخزنة مقفلة. افتح الخزنة ليُحفظ ما بعدها.' }));
+        }
       }
-      if (state.app && state.app.voiceEnabled) speak(mode);
+      if (autoSpeakEnabled()) speak(mode, false);
     } catch (err) {
       reply.classList.remove('is-pending');
       reply.classList.add('is-error');
@@ -941,20 +953,347 @@
     }
   }
 
-  function speak(mode) {
-    const text = state.lastAnswer[mode];
-    if (!text || !('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text.replace(/[*#_`>|]/g, ''));
-    utter.lang = (state.app && state.app.voiceLang) || 'ar-SA';
+  // ===================== المحادثات المحفوظة =====================
+  function formatDateAr(iso) {
+    try {
+      return new Date(iso).toLocaleString('ar', { dateStyle: 'medium', timeStyle: 'short' });
+    } catch (e) {
+      return iso;
+    }
+  }
+
+  async function openConversations(mode) {
+    state.conversationsMode = mode;
+    const list = $('#conversationsList');
+    list.replaceChildren(el('p', { className: 'muted', text: '⏳ جاري التحميل…' }));
+    $('#conversationsDialog').showModal();
+    let data;
+    try {
+      data = await api('/api/conversations?mode=' + encodeURIComponent(mode));
+    } catch (err) {
+      list.replaceChildren(el('p', { className: 'muted', text: err.data && err.data.locked ? '🔒 افتح الخزنة أولاً لعرض المحادثات المحفوظة (محتواها مشفّر بمفتاحها).' : '❌ ' + err.message }));
+      return;
+    }
+    renderConversationList(data.conversations || []);
+  }
+
+  function renderConversationList(items) {
+    const list = $('#conversationsList');
+    $('[data-action="delete-all-conversations"]').hidden = !items.length;
+    if (!items.length) {
+      list.replaceChildren(el('p', { className: 'muted', text: 'لا توجد محادثات محفوظة بعد.' }));
+      return;
+    }
+    list.replaceChildren(
+      ...items.map((c) =>
+        el('div', {
+          className: 'conv-item' + (state.conversationId[state.conversationsMode] === c.id ? ' is-current' : ''),
+          children: [
+            el('div', {
+              className: 'conv-info',
+              children: [
+                el('strong', { text: c.title }),
+                el('span', { className: 'small muted', text: formatDateAr(c.updatedAt) + ' • ' + Math.ceil(c.messageCount / 2) + ' سؤال' }),
+              ],
+            }),
+            el('div', {
+              className: 'conv-actions',
+              children: [
+                button('فتح', 'btn-primary btn-sm', () => loadConversation(c.id)),
+                button('🗑️ حذف', 'btn-ghost btn-sm', () => removeConversation(c)),
+              ],
+            }),
+          ],
+        })
+      )
+    );
+  }
+
+  async function loadConversation(id) {
+    const mode = state.conversationsMode;
+    let conv;
+    try {
+      conv = await api('/api/conversations/' + encodeURIComponent(id));
+    } catch (err) {
+      toast('تعذر فتح المحادثة: ' + err.message, 'error');
+      return;
+    }
+    stopSpeaking();
+    clearChat(mode);
+    const log = chatLog(mode);
+    log.replaceChildren();
+    conv.messages.forEach((m) => {
+      const node = appendMessage(mode, m.role, m.content);
+      if (m.role === 'assistant' && m.providerUsed) {
+        node.appendChild(el('span', { className: 'msg-meta', text: '— ' + (PROVIDER_NAMES[m.providerUsed] || m.providerUsed) + ' • ' + formatDateAr(m.at) }));
+      }
+    });
+    state.chat[mode] = conv.messages.map((m) => ({ role: m.role, content: m.content }));
+    state.conversationId[mode] = conv.id;
+    const lastAnswer = conv.messages.filter((m) => m.role === 'assistant').pop();
+    state.lastAnswer[mode] = lastAnswer ? lastAnswer.content : '';
+    $('#conversationsDialog').close();
+    toast('📂 فُتحت المحادثة؛ أي سؤال جديد يُضاف إليها.', 'ok');
+  }
+
+  async function removeConversation(c) {
+    if (!window.confirm('حذف المحادثة "' + c.title + '" نهائياً؟ لا يمكن التراجع.')) return;
+    try {
+      await api('/api/conversations/' + encodeURIComponent(c.id) + '/delete', {});
+    } catch (err) {
+      toast('تعذر الحذف: ' + err.message, 'error');
+      return;
+    }
+    if (state.conversationId[state.conversationsMode] === c.id) state.conversationId[state.conversationsMode] = null;
+    toast('🗑️ حُذفت المحادثة.', 'ok');
+    openConversations(state.conversationsMode);
+  }
+
+  async function removeAllConversations() {
+    const mode = state.conversationsMode;
+    if (!window.confirm('حذف كل المحادثات المحفوظة' + (mode === 'family' ? ' لوضع العائلة' : ' لغرفة القيادة') + ' نهائياً؟ لا يمكن التراجع.')) return;
+    try {
+      const r = await api('/api/conversations/delete-all', { mode: mode });
+      toast(r.messageAr, 'ok');
+    } catch (err) {
+      toast('تعذر الحذف: ' + err.message, 'error');
+      return;
+    }
+    state.conversationId[mode] = null;
+    openConversations(mode);
+  }
+
+  // ===================== النطق الصوتي =====================
+  // يُستخدم صوت مطابق للغة الصوت في الإعدادات (العربية افتراضياً) ومثبّت على الجهاز فقط (localService)،
+  // فلا يُرسل نص الرد لأي خدمة نطق خارجية. إن لم يوجد صوت عربي لا ننطق بصوت إنجليزي، بل نشرح الحل.
+  let voiceWarned = false;
+
+  function speechLang() {
+    return (state.app && state.app.voiceLang) || 'ar-SA';
+  }
+
+  /** الرد الصوتي التلقائي: تفضيل هذا الجهاز (زر التبديل) وإلا قيمة الإعدادات */
+  function autoSpeakEnabled() {
+    const pref = store.get('autoSpeak', null);
+    return pref === null ? Boolean(state.app && state.app.voiceEnabled) : pref === true;
+  }
+
+  function renderAutoSpeakToggles() {
+    const on = autoSpeakEnabled();
+    $$('[data-action="toggle-auto-speak"]').forEach((b) => {
+      b.textContent = on ? '🔊 الرد الصوتي: يعمل' : '🔇 الرد الصوتي: متوقف';
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  function loadVoices() {
+    return new Promise((resolve) => {
+      const now = window.speechSynthesis.getVoices();
+      if (now.length) return resolve(now);
+      const timer = setTimeout(() => resolve(window.speechSynthesis.getVoices()), 1500);
+      window.speechSynthesis.addEventListener(
+        'voiceschanged',
+        () => {
+          clearTimeout(timer);
+          resolve(window.speechSynthesis.getVoices());
+        },
+        { once: true }
+      );
+    });
+  }
+
+  /** اختيار أفضل صوت محلي بنفس اللغة: المطابق تماماً (ar-SA) أولاً ثم أي لهجة عربية، والطبيعي (Natural) أفضل */
+  function pickVoice(voices, lang) {
+    const base = lang.split('-')[0].toLowerCase();
+    const norm = (v) => String(v.lang || '').replace('_', '-').toLowerCase();
+    const candidates = voices.filter((v) => v.localService && (norm(v) === base || norm(v).startsWith(base + '-')));
+    if (!candidates.length) return null;
+    const score = (v) => (norm(v) === lang.toLowerCase() ? 4 : 0) + (/natural|neural/i.test(v.name) ? 2 : 0) + (v.default ? 1 : 0);
+    return candidates.sort((a, b) => score(b) - score(a))[0];
+  }
+
+  /** تنظيف الرد للنطق: بلا رموز تنسيق أو كتل كود أو روابط أو رموز تعبيرية */
+  function textForSpeech(text) {
+    return String(text)
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/`([^`]*)`/g, '$1')
+      .replace(/https?:\/\/\S+/g, ' ')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/[*#_>|~]/g, ' ')
+      .replace(/\p{Extended_Pictographic}|️/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /** تقسيم النص إلى جمل قصيرة: المتصفحات تقطع النطق الطويل، والجمل تجعل النطق مطابقاً للنص حتى آخره */
+  function speechChunks(text, max) {
+    const out = [];
+    text.split(/(?<=[.!?؟،؛:])\s+/).forEach((sentence) => {
+      let rest = sentence;
+      while (rest.length > max) {
+        let cut = rest.lastIndexOf(' ', max);
+        if (cut < max / 2) cut = max;
+        out.push(rest.slice(0, cut));
+        rest = rest.slice(cut).trim();
+      }
+      if (rest) out.push(rest);
+    });
+    // دمج الجمل القصيرة المتتالية لنطق أكثر سلاسة
+    return out.reduce((acc, part) => {
+      if (acc.length && (acc[acc.length - 1] + ' ' + part).length <= max) acc[acc.length - 1] += ' ' + part;
+      else acc.push(part);
+      return acc;
+    }, []);
+  }
+
+  function setSpeakButtons(speaking) {
+    $$('[data-action="speak"]').forEach((b) => {
+      if (!b.dataset.label) b.dataset.label = b.textContent;
+      b.textContent = speaking ? '⏹ إيقاف الصوت' : b.dataset.label;
+    });
+  }
+
+  // النطق من الخادم (الأفضل): صوت عربي يُولَّد محلياً على الجهاز ويعمل في أي متصفح
+  let ttsStatus = null;
+  let speakRun = 0; // يزداد مع كل نطق جديد أو إيقاف، فتتوقف الحلقة القديمة
+  let currentAudio = null;
+
+  async function serverTts(refresh) {
+    if (!ttsStatus || refresh) {
+      try {
+        ttsStatus = await api('/api/tts/status');
+      } catch (e) {
+        ttsStatus = { available: false };
+      }
+    }
+    return ttsStatus;
+  }
+
+  function isSpeaking() {
+    return Boolean(currentAudio) || ('speechSynthesis' in window && window.speechSynthesis.speaking);
+  }
+
+  async function fetchSpeech(part) {
+    const res = await fetch('/api/tts', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: part, speaker: store.get('ttsSpeaker', 'Suad Qasim') }),
+    });
+    if (!res.ok) {
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (e) {
+        /* بلا JSON */
+      }
+      throw new Error(data.error || 'خطأ ' + res.status);
+    }
+    return URL.createObjectURL(await res.blob());
+  }
+
+  function playUrl(url, run) {
+    return new Promise((resolve) => {
+      if (run !== speakRun) return resolve();
+      const audio = new Audio(url);
+      currentAudio = audio;
+      const h = hologram();
+      // نبضات خفيفة أثناء التشغيل (الصوت المولّد لا يرسل حدود الكلمات)
+      const pulse = setInterval(() => h && h.pulse(false), 380);
+      const done = () => {
+        clearInterval(pulse);
+        if (currentAudio === audio) currentAudio = null;
+        URL.revokeObjectURL(url);
+        resolve();
+      };
+      audio.onended = done;
+      audio.onerror = done;
+      audio.onpause = done;
+      audio.play().catch(done);
+    });
+  }
+
+  async function speakViaServer(text) {
+    const run = ++speakRun;
+    const parts = speechChunks(text, (ttsStatus && ttsStatus.maxChars) || 280);
     const h = hologram();
-    utter.onstart = () => h && h.setState('SPEAKING');
-    // نبضة خفيفة مع كل كلمة يقرؤها المتصفح
-    utter.onboundary = (e) => {
-      if (h && e.name === 'word') h.pulse(false);
-    };
-    utter.onend = () => h && h.setState('IDLE');
-    window.speechSynthesis.speak(utter);
+    setSpeakButtons(true);
+    if (h) h.setState('SPEAKING');
+    try {
+      // تجهيز الجملة التالية أثناء تشغيل الحالية، حتى لا تظهر فجوات طويلة
+      let next = fetchSpeech(parts[0]);
+      for (let i = 0; i < parts.length; i += 1) {
+        const url = await next;
+        if (run !== speakRun) return URL.revokeObjectURL(url);
+        next = i + 1 < parts.length ? fetchSpeech(parts[i + 1]) : null;
+        if (next) next.catch(() => undefined);
+        await playUrl(url, run);
+      }
+    } catch (err) {
+      if (run === speakRun) {
+        ttsStatus = null;
+        toast('تعذر النطق: ' + err.message, 'warn', 8000);
+      }
+    } finally {
+      if (run === speakRun) {
+        setSpeakButtons(false);
+        if (h) h.setState('IDLE');
+      }
+    }
+  }
+
+  function stopSpeaking() {
+    speakRun += 1;
+    if (currentAudio) currentAudio.pause();
+    currentAudio = null;
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    setSpeakButtons(false);
+    const h = hologram();
+    if (h) h.setState('IDLE');
+  }
+
+  async function speak(mode, fromButton) {
+    if (fromButton && isSpeaking()) return stopSpeaking();
+    const text = textForSpeech(state.lastAnswer[mode] || '');
+    if (!text) return;
+    stopSpeaking();
+    const server = await serverTts(fromButton);
+    if (server.available) return speakViaServer(text);
+    const voice = 'speechSynthesis' in window ? pickVoice(await loadVoices(), speechLang()) : null;
+    if (!voice) {
+      if (fromButton || !voiceWarned) {
+        voiceWarned = true;
+        toast(
+          'لا يوجد صوت عربي على هذا الجهاز، لذلك لم يُنطق الرد بدل قراءته بصوت إنجليزي. ' +
+            'الحل الأسهل: نزّل الصوت العربي المدمج من قسم «🔌 الربط ← الصوت العربي».',
+          'warn',
+          12000
+        );
+      }
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const h = hologram();
+    const parts = speechChunks(text, 180);
+    setSpeakButtons(true);
+    parts.forEach((part, i) => {
+      const utter = new SpeechSynthesisUtterance(part);
+      utter.voice = voice;
+      utter.lang = voice.lang;
+      if (i === 0) utter.onstart = () => h && h.setState('SPEAKING');
+      // نبضة خفيفة مع كل كلمة يقرؤها المتصفح
+      utter.onboundary = (e) => {
+        if (h && e.name === 'word') h.pulse(false);
+      };
+      if (i === parts.length - 1) {
+        utter.onend = () => {
+          setSpeakButtons(false);
+          if (h) h.setState('IDLE');
+        };
+      }
+      utter.onerror = () => setSpeakButtons(false);
+      window.speechSynthesis.speak(utter);
+    });
   }
 
   function voiceInput(mode) {
@@ -989,7 +1328,39 @@
   }
 
   // ===================== دليل الربط =====================
+  async function renderVoiceStatus(refresh) {
+    const status = await serverTts(refresh);
+    const badge = $('#voiceStatusBadge');
+    const text = $('#voiceStatusText');
+    if (!badge || !text) return;
+    const engines = { xtts: 'XTTS-v2 (عالي الجودة)', piper: 'الصوت العربي المدمج Kareem', windows: 'صوت Windows العربي', macos: 'صوت macOS العربي' };
+    const picker = $('#voiceSpeakerRow');
+    if (picker) picker.hidden = !(status.speakers && status.speakers.length);
+    if (status.speakers && status.speakers.length) {
+      const select = $('#voiceSpeaker');
+      const current = store.get('ttsSpeaker', status.speakers[0]);
+      select.replaceChildren(...status.speakers.map((s) => el('option', { text: s, attrs: { value: s } })));
+      select.value = status.speakers.indexOf(current) >= 0 ? current : status.speakers[0];
+    }
+    if (status.available) {
+      badge.className = 'badge ok';
+      badge.textContent = '✓ جاهز';
+      let line = 'يعمل الآن: ' + (engines[status.engine] || status.engine) + (status.voiceName && status.engine !== 'xtts' ? ' (' + status.voiceName + ')' : '') + '.';
+      if (status.engine === 'xtts' && status.workerState !== 'ready') {
+        line += ' النموذج يُحمَّل في الخلفية (نحو نصف دقيقة)' + (status.fallbackEngine ? '، وحتى ذلك الحين يُستخدم ' + (engines[status.fallbackEngine] || status.fallbackEngine) : '') + '.';
+      }
+      text.textContent = line;
+    } else {
+      badge.className = 'badge warn';
+      badge.textContent = '✗ لا يوجد صوت عربي';
+      text.textContent = status.reasonAr || 'لا يوجد صوت عربي على هذا الجهاز.';
+    }
+    const installBtn = $('[data-action="install-arabic-voice"]');
+    if (installBtn) installBtn.hidden = status.engine === 'piper' || status.fallbackEngine === 'piper';
+  }
+
   async function loadProvidersGuide() {
+    renderVoiceStatus(true);
     let data;
     try {
       data = await api('/api/assistant/providers');
@@ -1185,8 +1556,31 @@
       store.set('sound', on);
     },
     'clear-chat': (b) => clearChat(b.dataset.mode),
+    'open-conversations': (b) => openConversations(b.dataset.mode),
+    'test-voice': () => {
+      state.lastAnswer.voiceTest = 'مرحباً، هذا اختبار الصوت العربي في العقل الثاني. إن سمعت هذه الجملة بوضوح فالنطق يعمل.';
+      speak('voiceTest', true);
+    },
+    'install-arabic-voice': async (b) => {
+      if (!window.confirm('سيُنزَّل محرك النطق Piper والصوت العربي «Kareem» (نحو 85MB) من GitHub و Hugging Face إلى مجلد vendor داخل المشروع. متابعة؟')) return;
+      toast('⏳ جاري التنزيل… قد يستغرق دقيقة أو أكثر حسب سرعة الإنترنت.', 'ok', 8000);
+      await busy(b, async () => {
+        const r = await api('/api/tts/install', {});
+        toast(r.messageAr, 'ok');
+        ttsStatus = r.status;
+        renderVoiceStatus(false);
+      });
+    },
+    'delete-all-conversations': () => removeAllConversations(),
     voice: (b) => voiceInput(b.dataset.mode),
-    speak: (b) => speak(b.dataset.mode),
+    speak: (b) => speak(b.dataset.mode, true),
+    'toggle-auto-speak': () => {
+      const on = !autoSpeakEnabled();
+      store.set('autoSpeak', on);
+      renderAutoSpeakToggles();
+      if (!on) stopSpeaking();
+      toast(on ? '🔊 سيُنطق كل رد تلقائياً.' : '🔇 أُوقف الرد الصوتي التلقائي.', 'ok');
+    },
     preset: (b) => ask('family', b.dataset.q),
     rescan: (b) => rescan(b),
     'toggle-add-project': () => {
@@ -1329,6 +1723,10 @@
     $('[data-form="setup"]').elements.masterPassword.addEventListener('input', (e) => updateStrength(e.target.value));
     $('#secretSearch').addEventListener('input', renderSecrets);
     $('#secretFilter').addEventListener('change', renderSecrets);
+    $('#voiceSpeaker').addEventListener('change', (e) => {
+      store.set('ttsSpeaker', e.target.value);
+      toast('🔊 الصوت المختار: ' + e.target.value, 'ok');
+    });
     $('#memorySearch').addEventListener('input', renderMemory);
 
     document.addEventListener('keydown', (e) => {
