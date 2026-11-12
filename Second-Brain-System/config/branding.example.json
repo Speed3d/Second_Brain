@@ -1,33 +1,9 @@
 {
-    "appName":  "Second Brain",
-    "appTitleAr":  "نظام العقل الثاني والخزنة الذكية",
-    "assistantName":  "Second Brain",
-    "assistantNameAr":  "العقل الثاني",
-    "commanderName":  "القائد",
-    "familyMemberTitle":  "زوجتي الغالية",
-    "version":  "1.0.0",
-    "serverPort":  4777,
-    "paths":  {
-                  "rootDir":  "D:\\Second Brain",
-                  "obsidianVaultDir":  "D:\\Second Brain\\Obsidian-Vault",
-                  "encryptedVaultFile":  "D:\\Second Brain\\Second-Brain-System\\data\\encrypted-vault\\vault.aes256.json",
-                  "emergencyKitsDir":  "D:\\Second Brain\\Second-Brain-System\\data\\emergency-kits",
-                  "encryptedBackupsDir":  "D:\\Second Brain\\Second-Brain-System\\data\\encrypted-backups",
-                  "docsDir":  "D:\\Second Brain\\docs",
-                  "antigravityLogsDir":  "C:\\Users\\\u003cUSERNAME\u003e\\.gemini\\antigravity\\brain",
-                  "claudeCodeLogsDir":  "C:\\Users\\\u003cUSERNAME\u003e\\.claude\\projects"
-              },
-    "aiConfig":  {
-                     "defaultMode":  "hybrid",
-                     "cloudProvider":  "gemini",
-                     "geminiModel":  "gemini-2.5-pro",
-                     "claudeModel":  "claude-3-7-sonnet-latest",
-                     "ollamaEndpoint":  "http://127.0.0.1:11434",
-                     "ollamaModel":  "llama3.2",
-                     "voiceEnabled":  true,
-                     "voiceLang":  "ar-SA"
-                 },
-    "watchedProjects":  [
-
-                        ]
+  "appName": "Second Brain",
+  "appTitleAr": "نظام العقل الثاني والخزنة الذكية",
+  "assistantName": "Second Brain",
+  "assistantNameAr": "العقل الثاني",
+  "commanderName": "القائد",
+  "familyMemberTitle": "زوجتي الغالية",
+  "version": "1.0.0"
 }

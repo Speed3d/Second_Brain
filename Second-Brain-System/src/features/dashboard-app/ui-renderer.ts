@@ -190,6 +190,10 @@ export function renderSecondBrainDesktopHTML(
           <button class="holo-btn" onclick="speakLastAnswer()">🔊 نطق الرد</button>
         </div>
         <div id="aiResponseBox" class="terminal-output">بانتظار أوامرك...</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:var(--text-muted);">
+          <span id="providerStatusLine">جاري التحقق من مزوّدي الذكاء...</span>
+          <button class="mini-btn" onclick="clearChat('commander')">🧹 محادثة جديدة</button>
+        </div>
       </div>
     </section>
 
@@ -226,6 +230,15 @@ export function renderSecondBrainDesktopHTML(
               <input id="secretUrl" dir="ltr" maxlength="500" placeholder="رابط الموقع (اختياري)" />
               <input id="secretWifeNote" maxlength="2000" placeholder="شرح مبسط لزوجتك حول هذا الحساب" />
               <button class="holo-btn" onclick="saveSecret()">🔒 تشفير وحفظ</button>
+            </div>
+          </details>
+          <details id="aiKeysDetails" style="margin-top:6px;">
+            <summary style="cursor:pointer;color:var(--amber-bright);font-weight:700;font-size:13px;">🤖 مفاتيح الذكاء الاصطناعي (Claude / Gemini)</summary>
+            <div style="margin-top:8px;">
+              <p style="font-size:12px;color:var(--text-muted);margin:0 0 6px 0;">تُحفظ مشفرة داخل الخزنة، ولا يستخدمها المساعد إلا والخزنة مفتوحة. اترك الحقل فارغاً واحفظ لحذف المفتاح.</p>
+              <select id="aiKeyProvider"><option value="claude">Claude (Anthropic)</option><option value="gemini">Gemini (Google)</option></select>
+              <input id="aiKeyValue" type="password" dir="ltr" autocomplete="off" placeholder="API key" />
+              <button class="holo-btn" onclick="saveProviderKey()">🔒 حفظ المفتاح</button>
             </div>
           </details>
           <input id="secretSearch" placeholder="🔎 بحث في الأسرار..." oninput="renderSecretsList('commanderSecretsList', true)" style="margin-top:8px;" />
@@ -336,25 +349,120 @@ export function renderSecondBrainDesktopHTML(
       askAssistant('wife_emergency');
     }
 
+    const chatHistory = { commander: [], wife_emergency: [] };
+    const PROVIDER_NAMES = { claude: 'Claude', gemini: 'Gemini', ollama: 'Ollama', local: 'المعرفة المحلية' };
+    let assistantBusy = false;
+
+    function clearChat(mode) {
+      chatHistory[mode] = [];
+      document.getElementById(mode === 'wife_emergency' ? 'wifeAiResponseBox' : 'aiResponseBox').textContent = 'بدأت محادثة جديدة.';
+    }
+
+    async function refreshProviderStatus() {
+      const line = document.getElementById('providerStatusLine');
+      if (!line) return;
+      try {
+        const data = await api('/api/assistant/providers');
+        line.textContent = 'المزوّدون بالترتيب: ' + data.providers.map(function (p) {
+          return (PROVIDER_NAMES[p.id] || p.id) + (p.available ? ' ✓' : ' ✗');
+        }).join(' ← ') + (data.vaultUnlocked ? '' : ' (افتح الخزنة لاستخدام المفاتيح المحفوظة فيها)');
+      } catch (e) {
+        line.textContent = '';
+      }
+    }
+
+    async function streamAssistant(question, mode, box) {
+      const res = await fetch('/api/assistant/stream', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: question, mode: mode, history: chatHistory[mode].slice(-12) })
+      });
+      if (!res.ok || !res.body) {
+        let data = {};
+        try { data = await res.json(); } catch (e) {}
+        throw new Error(data.error || ('خطأ ' + res.status));
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let answer = '';
+      let meta = null;
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        buffer += decoder.decode(chunk.value, { stream: true });
+        let sep;
+        while ((sep = buffer.indexOf('\\n\\n')) >= 0) {
+          const block = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          let eventName = 'message';
+          let data = '';
+          block.split('\\n').forEach(function (line) {
+            if (line.indexOf('event: ') === 0) eventName = line.slice(7);
+            else if (line.indexOf('data: ') === 0) data += line.slice(6);
+          });
+          const payload = data ? JSON.parse(data) : {};
+          if (eventName === 'delta') {
+            if (!answer) setSecondBrainAIState('SPEAKING');
+            answer += payload.text;
+            box.textContent = answer;
+            box.scrollTop = box.scrollHeight;
+          } else if (eventName === 'reset') {
+            answer = '';
+            box.textContent = '⏳ المزوّد الأول تعذّر، جاري تجربة التالي...';
+          } else if (eventName === 'done') {
+            meta = payload;
+          } else if (eventName === 'error') {
+            throw new Error(payload.error);
+          }
+        }
+      }
+      return { answer: answer, meta: meta };
+    }
+
     async function askAssistant(mode) {
+      if (assistantBusy) return;
       playSciFiTone(620, 1240, 0.1);
       setSecondBrainAIState('THINKING');
       energyPulse = 1.1;
       const inputId = mode === 'wife_emergency' ? 'wifeQuestionInput' : 'aiQuestionInput';
       const boxId = mode === 'wife_emergency' ? 'wifeAiResponseBox' : 'aiResponseBox';
-      const question = document.getElementById(inputId).value.trim() || 'اعطني ملخصاً شاملاً';
+      const input = document.getElementById(inputId);
+      const question = input.value.trim() || 'اعطني ملخصاً شاملاً';
       const box = document.getElementById(boxId);
-      box.textContent = '⏳ جاري التحليل...';
+      box.textContent = '⏳ جاري التفكير...';
+      assistantBusy = true;
       try {
-        const data = await api('/api/assistant', { body: { question: question, mode: mode } });
-        box.textContent = data.answerAr;
-        lastSpokenText = box.textContent;
-        setSecondBrainAIState('SPEAKING');
+        const result = await streamAssistant(question, mode, box);
+        chatHistory[mode].push({ role: 'user', content: question }, { role: 'assistant', content: result.answer });
+        input.value = '';
+        if (result.meta) {
+          const note = '\\n\\n— أجاب: ' + (PROVIDER_NAMES[result.meta.providerUsed] || result.meta.providerUsed) + (result.meta.model && result.meta.providerUsed !== 'local' ? ' (' + result.meta.model + ')' : '');
+          box.textContent = result.answer + note;
+        }
+        lastSpokenText = result.answer;
         speakLastAnswer();
       } catch (err) {
         box.textContent = '❌ ' + err.message;
       }
+      assistantBusy = false;
       setTimeout(function () { setSecondBrainAIState('IDLE'); }, 3200);
+    }
+
+    async function saveProviderKey() {
+      try {
+        const data = await api('/api/assistant/keys', { body: {
+          provider: document.getElementById('aiKeyProvider').value,
+          apiKey: document.getElementById('aiKeyValue').value
+        } });
+        document.getElementById('aiKeyValue').value = '';
+        showOutput('vaultOutputBox', data.messageAr);
+        await refreshVaultStatus();
+        refreshProviderStatus();
+      } catch (err) {
+        showOutput('vaultOutputBox', '❌ ' + err.message);
+      }
     }
 
     function speakLastAnswer() {
@@ -405,7 +513,13 @@ export function renderSecondBrainDesktopHTML(
       showOutput('projectsOutputBox', '⏳ جاري إعادة الفحص...');
       try {
         const data = await api('/api/projects/rescan', { body: {} });
-        const lines = data.projects.map(function (p) { return '• ' + p.name + ': ملفات حساسة ' + p.critical + '، مؤمَّن منها ' + p.secured; });
+        const lines = data.projects.map(function (p) {
+          let line = '• ' + p.name + ': ملفات حساسة ' + p.critical + '، مؤمَّن منها ' + p.secured;
+          if (p.error) line += '\\n   ❌ ' + p.error;
+          if (p.trackedByGit && p.trackedByGit.length) line += '\\n   ⚠️ مرفوع على Git: ' + p.trackedByGit.join('، ');
+          if (p.changes && p.changes.length) line += '\\n   ' + p.changes.join('\\n   ');
+          return line;
+        });
         showOutput('projectsOutputBox', '✅ اكتمل الفحص وتحديث Obsidian.\\n' + lines.join('\\n') + (data.vaultUnlocked ? '' : '\\n(الخزنة مقفلة: افتحها ثم أعد الفحص لتأمين الملفات)'));
       } catch (err) {
         showOutput('projectsOutputBox', '❌ ' + err.message);
@@ -422,7 +536,7 @@ export function renderSecondBrainDesktopHTML(
       }
     }
 
-    refreshVaultStatus();
+    refreshVaultStatus().then(refreshProviderStatus);
     loadBackupsList();
     setInterval(refreshVaultStatus, 30000);
   </script>

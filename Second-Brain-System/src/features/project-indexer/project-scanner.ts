@@ -13,6 +13,7 @@ import * as path from 'node:path';
 import type { ProjectScanReport, WatchedProjectConfig } from '../../shared/types.ts';
 import { formatTimestampIso, readJsonFileSafe } from '../../shared/file-helpers.ts';
 import { huntCriticalProjectFiles } from './secret-file-hunter.ts';
+import { inspectGitRepository } from './git-inspector.ts';
 import { backupCriticalFileToVault, MAX_CRITICAL_FILE_BYTES, type UnlockedVault } from '../vault/vault-manager.ts';
 import { logSystemError, logSystemInfo } from '../../core/logger.ts';
 
@@ -26,7 +27,7 @@ export function scanAndAnalyzeProject(projectConfig: WatchedProjectConfig, unloc
   const detectedStack: string[] = [];
   const runCommands: string[] = [];
   const buildCommands: string[] = [];
-  const updateCommands: string[] = ['git pull origin main'];
+  const updateCommands: string[] = [];
   const importantFiles: string[] = [];
 
   if (fs.existsSync(projectPath)) {
@@ -113,7 +114,17 @@ export function scanAndAnalyzeProject(projectConfig: WatchedProjectConfig, unloc
     }
   }
 
+  // 8. حالة Git (الفرع، آخر commit، التغييرات، والملفات الحساسة المرفوعة على Git)
+  const git = inspectGitRepository(projectPath, criticalFilesFound.map((c) => c.relativePath));
+  if (git.isRepo) updateCommands.unshift('git pull');
+
   const report: ProjectScanReport = {
+    gitBranch: git.branch,
+    lastCommitMessage: git.lastCommitMessage,
+    lastCommitHash: git.lastCommitHash,
+    lastCommitDate: git.lastCommitDate,
+    uncommittedChanges: git.uncommittedChanges,
+    criticalFilesTrackedByGit: git.trackedCriticalFiles,
     projectId: projectConfig.id,
     projectName: projectConfig.name,
     projectPath,

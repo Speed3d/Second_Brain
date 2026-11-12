@@ -27,7 +27,7 @@ export async function runToolsAndDashboardTests(): Promise<string[]> {
   const toolsListRes = handleMcpJsonRpcRequest({ method: 'tools/list', id: 2 }) as {
     result: { tools: Array<{ name: string }> };
   };
-  assert.equal(toolsListRes.result.tools.length, 3, 'يجب أن يوفر خادم MCP الأدوات الثلاث للذاكرة المشتركة');
+  assert.equal(toolsListRes.result.tools.length, 6, 'يجب أن يوفر خادم MCP الأدوات الست');
 
   const callContextRes = handleMcpJsonRpcRequest({
     method: 'tools/call',

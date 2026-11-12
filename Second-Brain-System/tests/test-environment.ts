@@ -52,7 +52,21 @@ export function setupIsolatedTestEnvironment(): IsolatedTestEnvironment {
       JSON.stringify({ type: 'PLANNER_RESPONSE', content: 'رد تجريبي للاختبار' }),
     ].join('\n')
   );
-  fs.mkdirSync(path.join(fixturesDir, 'claude-projects', 'test-project'), { recursive: true });
+  // جلسة Claude Code بنفس بنية الملفات الحقيقية: رسالة بشرية فيها سر مزروع، نتيجة أداة، تذكير نظام،
+  // تفكير داخلي، إشعار مهمة آلي، وردّ نصي — حتى نتحقق من الاستخراج والتنقية والربط بالمشروع.
+  const claudeLine = (o: Record<string, unknown>): string => JSON.stringify({ cwd: projectDir, sessionId: 'test-session-0001', ...o });
+  writeFixtureFile(
+    path.join(fixturesDir, 'claude-projects', 'D--test-project', 'test-session-0001.jsonl'),
+    [
+      JSON.stringify({ type: 'custom-title', customTitle: 'جلسة اختبار Claude Code', sessionId: 'test-session-0001' }),
+      claudeLine({ type: 'user', timestamp: '2026-11-12T10:00:00.000Z', origin: { kind: 'human' }, message: { role: 'user', content: 'أضف مفتاح API_KEY=test-only-key-123456 إلى الإعدادات <system-reminder>تذكير داخلي سري</system-reminder>' } }),
+      claudeLine({ type: 'assistant', timestamp: '2026-11-12T10:00:05.000Z', message: { role: 'assistant', content: [{ type: 'thinking', thinking: 'تفكير داخلي لا يُؤرشف' }] } }),
+      claudeLine({ type: 'assistant', timestamp: '2026-11-12T10:00:06.000Z', message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Read', input: {} }] } }),
+      claudeLine({ type: 'user', timestamp: '2026-11-12T10:00:07.000Z', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'محتوى ملف لا يُؤرشف' }] } }),
+      claudeLine({ type: 'user', timestamp: '2026-11-12T10:00:08.000Z', origin: { kind: 'task-notification' }, message: { role: 'user', content: 'إشعار مهمة آلي' } }),
+      claudeLine({ type: 'assistant', timestamp: '2026-11-12T10:00:09.000Z', message: { role: 'assistant', content: [{ type: 'text', text: 'تمت إضافة المفتاح بأمان.' }] } }),
+    ].join('\n')
+  );
 
   // 3. Obsidian معزول مع فهرس الذاكرة
   const obsidianDir = path.join(rootDir, 'Obsidian-Vault');
@@ -81,6 +95,9 @@ export function setupIsolatedTestEnvironment(): IsolatedTestEnvironment {
       antigravityLogsDir: path.join(fixturesDir, 'antigravity-brain'),
       claudeCodeLogsDir: path.join(fixturesDir, 'claude-projects'),
     },
+    // الاختبارات لا تتصل بأي مزوّد ذكاء خارجي، ولا تشغّل المراقب الدوري
+    aiConfig: { ...realConfig.aiConfig, providerOrder: ['local'] },
+    watcher: { enabled: false, intervalMinutes: 15, harvestTranscripts: false },
     watchedProjects: [fixtureProject],
   };
   const configPath = path.join(rootDir, 'config', 'branding.json');
@@ -100,6 +117,17 @@ export function setupIsolatedTestEnvironment(): IsolatedTestEnvironment {
     },
   };
 }
+
+/**
+ * Hint بالعربي: قيم وهمية تشبه الأسرار تُبنى أثناء التشغيل (وليست مكتوبة حرفياً في الكود)
+ *               حتى لا تعتبرها ماسحات الأسرار في GitHub مفاتيح حقيقية مسرّبة.
+ */
+export const FAKE_SECRETS = {
+  anthropicKey: ['sk', 'ant', 'api03', 'FAKE'.repeat(8)].join('-'),
+  googleKey: ['AI', 'za', 'Sy', 'FAKE'.repeat(8), 'A'].join(''), // البادئة AIza + 35 حرفاً بالضبط
+  githubToken: ['gh', 'p_', 'FAKE'.repeat(9)].join(''),
+  privateKey: ['-----BEGIN RSA PRIVATE', 'KEY-----\nFAKEKEYBODY\n-----END RSA PRIVATE', 'KEY-----'].join(' '),
+};
 
 /** كلمة مرور الخزنة التجريبية (بيئة الاختبار فقط) */
 export const TEST_MASTER_PASSWORD = 'Test-Only-Master-Pass-2026';

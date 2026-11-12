@@ -1,94 +1,188 @@
 /**
  * ============================================================================
  * الملف: src/features/assistant/assistant-engine.ts
- * القسم: Features -> Assistant (ميزة العقل الذكي لمساعد Second Brain)
- * Hint بالعربي: يشغّل هذا الملف عقل المساعد الذكي بوضعيه:
- *               1) وضع القائد (تقني، شامل، وسريع).
- *               2) وضع العائلة/الطوارئ للزوجة (مبسط، دافئ، وغير تقني).
- *               يدعم الربط السحابي (Gemini/Claude) والمحلي (Ollama) بالإضافة إلى محرك
- *               معرفة محلي مدمج يعمل حتى بدون إنترنت نهائياً في حالات الطوارئ القصوى!
+ * القسم: Features -> Assistant (عقل المساعد الذكي)
+ * Hint بالعربي: يبني سياق المساعد (ملف القائد، المشاريع، الذاكرة المشتركة) — دون أي محتوى من الخزنة —
+ *               ثم يمرّر السؤال لمزوّدي الذكاء بالترتيب (Claude / Gemini / Ollama / المعرفة المحلية).
+ *               للمساعد أسلوبان: تقني مختصر للقائد، ومبسّط دافئ وغير تقني لوضع العائلة.
  * ============================================================================
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import type { AIProviderId, ProjectScanReport, SharedAIMemoryEntry, SystemBrandingConfig } from '../../shared/types.ts';
+import { redactSecrets } from '../../shared/secret-redaction.ts';
 import { loadSystemConfig } from '../../core/config-manager.ts';
+import { logSystemInfo } from '../../core/logger.ts';
 import { querySharedAIMemory } from '../ai-memory/shared-memory-service.ts';
 import { scanAndAnalyzeProject } from '../project-indexer/project-scanner.ts';
+import type { UnlockedVault } from '../vault/vault-manager.ts';
+import type { ChatTurn } from './providers/provider-types.ts';
+import { buildProviders, resolveProviderKeys, runProvidersWithFallback, type ProviderAttempt } from './providers/provider-registry.ts';
+
+export { buildDeterministicKnowledgeResponse } from './providers/local-knowledge-provider.ts';
+
+/** حدود السياق والمحادثة حتى لا يتضخم الطلب */
+const MAX_PROFILE_CHARS = 6000;
+const MAX_MEMORY_ENTRIES = 15;
+const MAX_HISTORY_TURNS = 12;
+const MAX_TURN_CHARS = 8000;
 
 /**
- * Hint بالعربي: دالة التفاعل الرئيسية مع المساعد الذكي (العقل الثاني)؛ تستقبل سؤال المستخدم
- * وتحدد الوضع (القائد أم الزوجة) وتولد إجابة دقيقة مبنية على بيانات المشاريع والذاكرة الحية.
+ * Hint بالعربي: خيارات استدعاء المساعد: سجل المحادثة السابقة، الخزنة المفتوحة (لقراءة مفاتيح API فقط)،
+ *               ودوال البثّ التدريجي، وإشارة الإلغاء.
  */
-export async function askSecondBrainAssistant(
-  questionText: string,
-  mode: 'commander' | 'wife_emergency' = 'commander'
-): Promise<{
-  answerAr: string;
-  providerUsed: 'local-knowledge-core' | 'ollama-local' | 'cloud-ai';
-  referencedProjects: string[];
-}> {
-  const config = loadSystemConfig();
-  const normalizedQ = questionText.trim().toLowerCase();
-  const projects = config.watchedProjects;
-  const memories = querySharedAIMemory();
-  const referencedProjects = projects.map((p) => p.name);
-
-  // محاولة الاتصال بـ Ollama المحلي إذا كان مفعلاً ومتصلاً، وإلا الاعتماد الفوري على النواة المعرفية المدمجة
-  const localKnowledgeAnswer = buildDeterministicKnowledgeResponse(
-    questionText,
-    normalizedQ,
-    mode,
-    config.assistantNameAr,
-    config.familyMemberTitle,
-    projects,
-    memories.length
-  );
-
-  return {
-    answerAr: localKnowledgeAnswer,
-    providerUsed: 'local-knowledge-core',
-    referencedProjects,
-  };
+export interface AskAssistantOptions {
+  history?: ChatTurn[];
+  vault?: UnlockedVault | null;
+  onDelta?: (text: string) => void;
+  onReset?: () => void;
+  signal?: AbortSignal;
 }
 
 /**
- * Hint بالعربي: دالة بناء الإجابة الذكية المباشرة من قاعدة معرفة النظام الحية (Obsidian + Projects + Vault)
- * تضمن حصولك أو حصول زوجتك على إجابات فورية ودقيقة 100% حتى لو انقطع الإنترنت تماماً!
+ * Hint بالعربي: نتيجة المساعد: الإجابة، المزوّد الذي أجاب، النموذج، المشاريع المرجعية، وسجل المحاولات.
  */
-export function buildDeterministicKnowledgeResponse(
-  rawQuestion: string,
-  normalizedQ: string,
-  mode: 'commander' | 'wife_emergency',
-  assistantNameAr: string,
-  familyTitle: string,
-  projects: ReturnType<typeof loadSystemConfig>['watchedProjects'],
-  memoryCount: number
-): string {
-  if (mode === 'wife_emergency') {
-    const projectSummaries = projects
-      .map(
-        (p, i) =>
-          `${i + 1}. **مشروع ${p.name}:** ${p.wifeSummaryAr}\n   - **الدخل والعائد:** ${p.monthlyIncome}\n   - **الفواتير المطلوبة:** ${p.billingNotes}`
-      )
-      .join('\n');
+export interface AssistantReply {
+  answerAr: string;
+  providerUsed: AIProviderId;
+  model: string;
+  referencedProjects: string[];
+  attempts: ProviderAttempt[];
+}
 
-    if (normalizedQ.includes('فاتور') || normalizedQ.includes('دفع') || normalizedQ.includes('اشتراك') || normalizedQ.includes('سيرفر')) {
-      return `أهلاً بكِ يا ${familyTitle}، أنا المساعد الذكي (${assistantNameAr}). بخصوص الفواتير والاشتراكات لضمان عدم توقف أي مشروع:\n\n${projectSummaries}\n\n💡 **نصيحة مهمة:** لا توقفي الإيميل الرئيسي أبداً، ويمكنكِ من قسم "الخزنة السرية" بالأعلى نسخ بيانات دخول أي حساب بضغطة زر.`;
-    }
-
-    if (normalizedQ.includes('مبرمج') || normalizedQ.includes('صيان') || normalizedQ.includes('تحديث')) {
-      return `يا ${familyTitle}، عند التعامل مع أي مبرمج لصيانة أو تحديث المشاريع، اتبعي هذه القواعد الذهبية لحماية حقوقكِ:\n1. **لا تعطي المبرمج أبداً** باسوورد الإيميل الرئيسي أو ملكية حساب Google Play / Apple.\n2. جميع الملفات السرية التي لا تُعوض (مثل مفاتيح التوقيع \`.jks\` وملفات \`.env\`) محفوظة ومشفرة هنا داخل الخزنة.\n3. اطلبي من المبرمج العمل كـ (Developer/Collaborator) فقط.`;
-    }
-
-    return `مرحباً بكِ يا ${familyTitle}، أنا (${assistantNameAr}) المساعد الأمين الذي أعده زوجكِ لخدمتكِ.\n\nلدينا حالياً **(${projects.length}) مشاريع مسجلة ومؤمنة بالكامل** في النظام:\n${projectSummaries}\n\nيمكنكِ سؤالي عن **الفواتير**، أو **كيفية التعامل مع المبرمجين**، أو **فتح الخزنة السرية** بمفتاح الطوارئ للوصول إلى كافة الإيميلات وكلمات المرور.`;
+/**
+ * Hint بالعربي: دالة قراءة ملف هوية القائد من Obsidian (مع حد أقصى للطول).
+ */
+export function readCommanderProfile(config: SystemBrandingConfig): string {
+  const file = path.join(config.paths.obsidianVaultDir, '01-Commander-Profile', 'About-Commander.md');
+  try {
+    return fs.readFileSync(file, 'utf-8').slice(0, MAX_PROFILE_CHARS);
+  } catch {
+    return '';
   }
+}
 
-  // وضع القائد (Commander HUD Mode)
-  const detailedProjects = projects
-    .map((p) => {
-      const scan = scanAndAnalyzeProject(p);
-      return `* **${p.name}** (\`${p.path}\`)\n  - التقنيات: \`${scan.detectedStack.join(', ')}\`\n  - أوامر التشغيل: \`${scan.runCommands.join(' | ')}\`\n  - الملفات الحساسة المكتشفة: **${scan.criticalFilesFound.length} ملف**`;
-    })
-    .join('\n');
+/**
+ * Hint بالعربي: دالة بناء تعليمات النظام (System Prompt) للمساعد حسب الوضع، مع تنقية أي سر قد يظهر فيها.
+ */
+export function buildAssistantSystemPrompt(
+  mode: 'commander' | 'wife_emergency',
+  config: SystemBrandingConfig,
+  reports: ProjectScanReport[],
+  memories: SharedAIMemoryEntry[],
+  profile: string
+): string {
+  const today = new Date().toISOString().slice(0, 10);
+  let prompt: string;
 
-  return `أهلاً بك أيها القائد! معك **${assistantNameAr}**.\n\nتقرير الحالة الفوري لـ (\`${rawQuestion}\`):\n* **المشاريع تحت المراقبة:** (${projects.length})\n${detailedProjects}\n* **سجلات الذاكرة المشتركة (Antigravity & Claude Code):** (${memoryCount} سجل محفوظ في Obsidian).\n* **حالة الخزنة العسكرية (AES-256-GCM):** جاهزة ومؤمنة بالمغلف المزدوج (القائد + طوارئ العائلة).`;
+  if (mode === 'wife_emergency') {
+    const projects = config.watchedProjects
+      .map((p) => `- ${p.name}: ${p.wifeSummaryAr || 'بدون شرح'} | الدخل: ${p.monthlyIncome} | الفواتير: ${p.billingNotes || 'غير محددة'}`)
+      .join('\n');
+    prompt = `أنت "${config.assistantNameAr}"، مساعد عائلي أمين أعدّه ${config.commanderName} ليساعد ${config.familyMemberTitle} في إدارة مشاريعه وحساباته عند الطوارئ.
+التاريخ: ${today}.
+
+أسلوبك:
+- عربية بسيطة ودافئة وواضحة، بلا مصطلحات تقنية؛ وإن اضطررت لمصطلح فاشرحه بجملة.
+- خطوات مرقّمة قصيرة عند شرح أي إجراء.
+- إذا لم تعرف الجواب من المعلومات أدناه فقل ذلك بصراحة، واقترح استشارة شخص موثوق، ولا تخترع معلومات.
+
+قواعد أمان لا تُكسر:
+- لا تطلب كلمات مرور أو مفاتيح، ولا تكتبها أبداً. كلمات المرور موجودة في "الخزنة" داخل البرنامج وتُفتح بمفتاح الطوارئ المطبوع.
+- لا يُعطى أي مبرمج كلمة مرور الإيميل الرئيسي أو ملكية حسابات المتاجر؛ يُضاف كمتعاون (Developer) فقط.
+- لا تشارك مفتاح الطوارئ أو صورته مع أي أحد.
+
+المشاريع:
+${projects || '- لا توجد مشاريع مسجلة بعد.'}`;
+  } else {
+    const projects = reports
+      .map((r) => {
+        const git = r.gitBranch ? ` | Git: ${r.gitBranch}${r.lastCommitMessage ? ` — "${r.lastCommitMessage}"` : ''}${r.uncommittedChanges ? ` (${r.uncommittedChanges} تغيير غير محفوظ)` : ''}` : '';
+        const tracked = r.criticalFilesTrackedByGit?.length ? ` | ⚠️ ملفات حساسة مرفوعة على Git: ${r.criticalFilesTrackedByGit.join(', ')}` : '';
+        return `- ${r.projectName} (${r.projectPath}) | ${r.detectedStack.join(', ')} | تشغيل: ${r.runCommands[0] ?? '—'} | ملفات حساسة: ${r.criticalFilesFound.length}${git}${tracked}`;
+      })
+      .join('\n');
+    const memoryLines = memories
+      .slice(0, MAX_MEMORY_ENTRIES)
+      .map((m) => `- [${m.createdAt.slice(0, 10)}] (${m.sourceAI} → ${m.projectId}) ${m.title}: ${m.summaryAr}`)
+      .join('\n');
+    prompt = `أنت "${config.assistantNameAr}"، المساعد الشخصي لـ ${config.commanderName} داخل نظام "${config.appName}".
+التاريخ: ${today}.
+
+أسلوبك: عربية واضحة ومختصرة، تقنية عند الحاجة، مع أوامر دقيقة عند السؤال عن التشغيل. لا تخترع حقائق عن المشاريع؛ اعتمد على المعلومات أدناه وقل بوضوح ما لا تعرفه.
+لا تملك وصولاً إلى محتوى الخزنة المشفرة، ولا تطلب كلمات مرور أو مفاتيح.
+
+ملف القائد:
+${profile || '(غير متوفر)'}
+
+المشاريع تحت المراقبة:
+${projects || '- لا توجد مشاريع مسجلة بعد.'}
+
+آخر سجلات الذاكرة المشتركة:
+${memoryLines || '- لا توجد سجلات بعد.'}`;
+  }
+  return redactSecrets(prompt).text;
+}
+
+/**
+ * Hint بالعربي: دالة تنظيف سجل المحادثة القادم من الواجهة (أدوار صحيحة، حدود للطول والعدد، وتنقية الأسرار).
+ */
+export function sanitizeHistory(history: unknown): ChatTurn[] {
+  if (!Array.isArray(history)) return [];
+  const turns: ChatTurn[] = [];
+  for (const item of history.slice(-MAX_HISTORY_TURNS)) {
+    const role = (item as ChatTurn)?.role;
+    const content = (item as ChatTurn)?.content;
+    if ((role === 'user' || role === 'assistant') && typeof content === 'string' && content.trim()) {
+      turns.push({ role, content: redactSecrets(content.slice(0, MAX_TURN_CHARS)).text });
+    }
+  }
+  while (turns.length && turns[0].role !== 'user') turns.shift();
+  return turns;
+}
+
+/**
+ * Hint بالعربي: دالة التفاعل الرئيسية مع المساعد: تبني السياق، وتجرّب المزوّدين بالترتيب، وتبثّ الرد تدريجياً.
+ */
+export async function askSecondBrainAssistant(
+  questionText: string,
+  mode: 'commander' | 'wife_emergency' = 'commander',
+  options: AskAssistantOptions = {}
+): Promise<AssistantReply> {
+  const config = loadSystemConfig();
+  const question = questionText.trim().slice(0, MAX_TURN_CHARS);
+  const reports = config.watchedProjects.map((p) => scanAndAnalyzeProject(p));
+  const memories = querySharedAIMemory();
+
+  const providers = buildProviders(config, resolveProviderKeys(options.vault), {
+    assistantNameAr: config.assistantNameAr,
+    familyTitle: config.familyMemberTitle,
+    projects: config.watchedProjects,
+    projectReports: reports,
+    memoryCount: memories.length,
+  });
+
+  const history = sanitizeHistory(options.history);
+  const messages: ChatTurn[] = [...history, { role: 'user', content: redactSecrets(question).text }];
+  const result = await runProvidersWithFallback(
+    providers,
+    {
+      system: buildAssistantSystemPrompt(mode, config, reports, memories, mode === 'commander' ? readCommanderProfile(config) : ''),
+      messages,
+      question,
+      mode,
+      signal: options.signal,
+    },
+    { onDelta: options.onDelta, onReset: options.onReset }
+  );
+
+  logSystemInfo('Assistant', `أجاب المزوّد (${result.providerUsed}) في وضع (${mode}).`);
+  return {
+    answerAr: result.text,
+    providerUsed: result.providerUsed,
+    model: result.model,
+    referencedProjects: config.watchedProjects.map((p) => p.name),
+    attempts: result.attempts,
+  };
 }

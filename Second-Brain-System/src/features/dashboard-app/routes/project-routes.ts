@@ -11,9 +11,10 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { WatchedProjectConfig } from '../../../shared/types.ts';
-import { loadSystemConfig, registerWatchedProject } from '../../../core/config-manager.ts';
-import { countSecuredFiles, syncProjectToObsidianVault } from '../../project-indexer/obsidian-sync.ts';
+import { registerWatchedProject } from '../../../core/config-manager.ts';
+import { countSecuredFiles, syncProjectWithChanges } from '../../project-indexer/obsidian-sync.ts';
 import { scanAndAnalyzeProject } from '../../project-indexer/project-scanner.ts';
+import { rescanAllProjects } from '../../project-indexer/project-watcher.ts';
 import { HttpError, readString, sendJson, type RouteDefinition } from '../http-utils.ts';
 
 /**
@@ -64,13 +65,14 @@ export function getProjectRoutes(): RouteDefinition[] {
         };
         registerWatchedProject(project);
         const report = scanAndAnalyzeProject(project, session?.vault);
-        syncProjectToObsidianVault(project, report);
+        syncProjectWithChanges(project, report);
         const secured = countSecuredFiles(report);
+        const tracked = report.criticalFilesTrackedByGit ?? [];
         sendJson(res, 200, {
           ok: true,
           messageAr: `✅ تم فحص مشروع (${name}) وتوثيقه في Obsidian. ملفات حساسة: ${report.criticalFilesFound.length}، مؤمَّن منها: ${secured}${
             session ? '' : ' (افتح الخزنة ثم أعد الفحص لتأمين الباقي)'
-          }.`,
+          }.${tracked.length ? `\n⚠️ ملفات حساسة مرفوعة على Git: ${tracked.join('، ')}` : ''}`,
         });
       },
     },
@@ -78,13 +80,7 @@ export function getProjectRoutes(): RouteDefinition[] {
       method: 'POST',
       path: '/api/projects/rescan',
       handler: ({ res, session }) => {
-        const config = loadSystemConfig();
-        const summary = config.watchedProjects.map((p) => {
-          const report = scanAndAnalyzeProject(p, session?.vault);
-          syncProjectToObsidianVault(p, report);
-          return { name: p.name, critical: report.criticalFilesFound.length, secured: countSecuredFiles(report) };
-        });
-        sendJson(res, 200, { ok: true, vaultUnlocked: Boolean(session), projects: summary });
+        sendJson(res, 200, { ok: true, vaultUnlocked: Boolean(session), projects: rescanAllProjects(session?.vault) });
       },
     },
   ];

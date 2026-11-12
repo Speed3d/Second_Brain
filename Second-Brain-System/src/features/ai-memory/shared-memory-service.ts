@@ -18,6 +18,8 @@ import {
   writeJsonFileSafe,
   writeTextFileSafe,
 } from '../../shared/file-helpers.ts';
+import { writeFileAtomic } from '../../shared/file-helpers.ts';
+import { redactSecrets } from '../../shared/secret-redaction.ts';
 import { loadSystemConfig } from '../../core/config-manager.ts';
 import { logSystemInfo } from '../../core/logger.ts';
 
@@ -33,20 +35,28 @@ export function recordSharedAIMemory(
   const obsidianRoot = customObsidianDir ?? config.paths.obsidianVaultDir;
   const memoryStoreFile = path.join(config.paths.rootDir, 'Second-Brain-System', 'data', 'ai-memory-store.json');
 
+  // تنقية أي سر قد يرد في الملخص أو القرارات قبل الحفظ
   const fullEntry: SharedAIMemoryEntry = {
     ...entry,
+    title: redactSecrets(entry.title).text,
+    summaryAr: redactSecrets(entry.summaryAr).text,
+    keyDecisionsAr: entry.keyDecisionsAr.map((d) => redactSecrets(d).text),
     id: `MEM-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
     createdAt: formatTimestampIso(),
   };
 
   const allEntries = readJsonFileSafe<SharedAIMemoryEntry[]>(memoryStoreFile, []);
   allEntries.unshift(fullEntry);
-  writeJsonFileSafe(memoryStoreFile, allEntries);
+  writeFileAtomic(memoryStoreFile, JSON.stringify(allEntries, null, 2), 2);
 
   // كتابة ملف Markdown مستقل للمحادثة داخل Obsidian
-  const safeTitle = fullEntry.title.replace(/[\\/:*?"<>|]/g, '-');
+  const safeTitle = fullEntry.title.replace(/[\\/:*?"<>|\r\n]/g, '-').slice(0, 80);
   const targetSubfolder =
-    fullEntry.sourceAI === 'claude-code' ? 'Claude-Code-Sessions' : 'Antigravity-Sessions';
+    fullEntry.sourceAI === 'claude-code'
+      ? 'Claude-Code-Sessions'
+      : fullEntry.sourceAI === 'antigravity-gemini'
+        ? 'Antigravity-Sessions'
+        : 'Second-Brain-Sessions';
   const sessionFolder = path.join(obsidianRoot, '03-AI-Shared-Memory', targetSubfolder);
   ensureDirectoryExists(sessionFolder);
 
@@ -68,13 +78,13 @@ ${fullEntry.keyDecisionsAr.map((d) => `* ${d}`).join('\n')}
 
   writeTextFileSafe(path.join(sessionFolder, `${fullEntry.id}-${safeTitle}.md`), sessionMd);
 
-  // إضافة سطر في الفهرس الرئيسي للذاكرة المشتركة داخل Obsidian
-  const memoryIndexPath = path.join(obsidianRoot, '03-AI-Shared-Memory', 'Memory-Index.md');
-  if (fs.existsSync(memoryIndexPath)) {
-    const currentIndex = fs.readFileSync(memoryIndexPath, 'utf-8');
-    const bullet = `\n* **[${fullEntry.createdAt}] (${fullEntry.sourceAI} -> ${fullEntry.projectId}):** **${fullEntry.title}** — ${fullEntry.summaryAr}`;
-    writeTextFileSafe(memoryIndexPath, currentIndex + bullet);
-  }
+  // إضافة سطر في "سجل الذاكرة الحي" (ملف شخصي منفصل عن الفهرس العام ومستبعد من Git)
+  const streamPath = path.join(obsidianRoot, '03-AI-Shared-Memory', 'Memory-Stream.md');
+  const currentStream = fs.existsSync(streamPath)
+    ? fs.readFileSync(streamPath, 'utf-8')
+    : '# 📝 سجل الذاكرة المشتركة الحي\n\n> يُضاف هنا تلقائياً كل قرار أو ملخص تحفظه أدوات الذكاء الاصطناعي. هذا الملف شخصي ولا يُرفع إلى GitHub.\n';
+  const bullet = `\n* **[${fullEntry.createdAt}] (${fullEntry.sourceAI} -> ${fullEntry.projectId}):** **${fullEntry.title}** — ${fullEntry.summaryAr.replace(/\s+/g, ' ').slice(0, 400)}`;
+  writeTextFileSafe(streamPath, currentStream + bullet);
 
   logSystemInfo('SharedAIMemory', `تم حفظ سجل ذاكرة مشترك جديد (${fullEntry.id}) من (${fullEntry.sourceAI}).`);
   return fullEntry;

@@ -18,11 +18,15 @@ export function getMemoryRoutes(): RouteDefinition[] {
       method: 'POST',
       path: '/api/memory/harvest',
       commanderOnly: true,
-      handler: ({ res }) => {
-        const harvested = harvestLocalAITranscripts();
+      handler: ({ res, body }) => {
+        const harvested = harvestLocalAITranscripts({ force: body.force === true });
         sendJson(res, 200, {
           ok: true,
-          messageAr: `✅ تم سحب وأرشفة (${harvested.antigravityCount}) محادثة من Antigravity، واكتشاف (${harvested.claudeCodeCount}) مجلد مشاريع في Claude Code.`,
+          ...harvested,
+          archivedFiles: harvested.archivedFiles.length,
+          messageAr: `✅ تمت أرشفة ${harvested.claudeCodeCount} محادثة من Claude Code و ${harvested.antigravityCount} من Antigravity (جديدة أو محدَّثة)، وتُرك ${harvested.skippedUnchanged} دون تغيير${
+            harvested.redactions ? `، وحُذف ${harvested.redactions} سر تلقائياً` : ''
+          }${harvested.errors ? `، وتعذرت ${harvested.errors} جلسة (راجع السجل)` : ''}.`,
         });
       },
     },

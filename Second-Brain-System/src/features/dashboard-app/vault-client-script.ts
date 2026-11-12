@@ -70,6 +70,8 @@ export function getVaultClientScript(): string {
       document.getElementById('vaultUnlockBox').hidden = !s.exists || s.unlocked;
       document.getElementById('vaultOpenBox').hidden = !s.unlocked;
       document.getElementById('addSecretDetails').hidden = s.unlockedBy !== 'commander';
+      const keysBox = document.getElementById('aiKeysDetails');
+      if (keysBox) keysBox.hidden = s.unlockedBy !== 'commander';
       const line = document.getElementById('vaultStatusLine');
       const wifeLine = document.getElementById('wifeVaultStatus');
       const telemetry = document.getElementById('telemetryVault');
@@ -227,6 +229,7 @@ export function getVaultClientScript(): string {
         input.value = '';
         document.getElementById('vaultOutputBox').hidden = true;
         await refreshVaultStatus();
+        if (typeof refreshProviderStatus === 'function') refreshProviderStatus();
       } catch (err) {
         showOutput(outId, '❌ ' + err.message);
       }
@@ -235,6 +238,7 @@ export function getVaultClientScript(): string {
     async function lockVaultUI() {
       try { await api('/api/vault/lock', { body: {} }); } catch (e) {}
       await refreshVaultStatus();
+      if (typeof refreshProviderStatus === 'function') refreshProviderStatus();
     }
 
     async function saveSecret() {

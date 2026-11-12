@@ -9,13 +9,15 @@ Second-Brain-System/data/
 # الإعدادات الحقيقية (تحتوي مسارات المشاريع ودخلها وفواتيرها) — المرفوع هو branding.example.json
 Second-Brain-System/config/branding.json
 Second-Brain-System/config/settings.json
+Second-Brain-System/config/*.bak-*
+Second-Brain-System/config/*.tmp-*
 
 # محتوى Obsidian الشخصي
 Obsidian-Vault/01-Commander-Profile/*
 !Obsidian-Vault/01-Commander-Profile/AI-Coding-Standards.md
 Obsidian-Vault/02-Projects/
-Obsidian-Vault/03-AI-Shared-Memory/Antigravity-Sessions/
-Obsidian-Vault/03-AI-Shared-Memory/Claude-Code-Sessions/
+Obsidian-Vault/03-AI-Shared-Memory/*-Sessions/
+Obsidian-Vault/03-AI-Shared-Memory/Memory-Stream.md
 Obsidian-Vault/04-Family-Emergency-Guide/
 
 # حالة واجهة Obsidian المحلية

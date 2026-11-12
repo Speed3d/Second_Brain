@@ -34,12 +34,27 @@ export interface SystemBrandingConfig {
   aiConfig: {
     defaultMode: 'hybrid' | 'cloud' | 'local';
     cloudProvider: 'gemini' | 'claude';
+    /** ترتيب تجربة المزوّدين (الأول فالأول)؛ المحلي يُضاف آخراً دائماً */
+    providerOrder?: AIProviderId[];
     geminiModel: string;
     claudeModel: string;
+    claudeEffort?: 'low' | 'medium' | 'high';
     ollamaEndpoint: string;
     ollamaModel: string;
+    requestTimeoutMs?: number;
     voiceEnabled: boolean;
     voiceLang: string;
+  };
+  /** تفعيل/تعطيل موصلات سحب المحادثات */
+  connectors?: {
+    antigravity?: { enabled: boolean };
+    claudeCode?: { enabled: boolean };
+  };
+  /** المراقب الدوري للمشاريع */
+  watcher?: {
+    enabled: boolean;
+    intervalMinutes: number;
+    harvestTranscripts: boolean;
   };
   watchedProjects: WatchedProjectConfig[];
   /** إعدادات الأمان (اختيارية؛ لها قيم افتراضية آمنة) */
@@ -49,6 +64,19 @@ export interface SystemBrandingConfig {
     extraBackupDir?: string;
   };
 }
+
+/**
+ * Hint بالعربي: معرّفات مزوّدي الذكاء الاصطناعي المدعومين.
+ */
+export type AIProviderId = 'claude' | 'gemini' | 'ollama' | 'local';
+
+/**
+ * Hint بالعربي: حقول الهوية فقط (تُحفظ في branding.json)؛ بقية الإعدادات في settings.json.
+ */
+export type BrandingIdentity = Pick<
+  SystemBrandingConfig,
+  'appName' | 'appTitleAr' | 'assistantName' | 'assistantNameAr' | 'commanderName' | 'familyMemberTitle' | 'version'
+>;
 
 /**
  * Hint بالعربي: بيانات المشروع المضاف للمراقبة والتوثيق التلقائي.
@@ -150,6 +178,11 @@ export interface ProjectScanReport {
   importantFiles: string[];
   gitBranch?: string;
   lastCommitMessage?: string;
+  lastCommitHash?: string;
+  lastCommitDate?: string;
+  uncommittedChanges?: number;
+  /** ملفات حساسة مرفوعة فعلاً على Git (خطر تسريب) */
+  criticalFilesTrackedByGit?: string[];
   scannedAt: string;
 }
 

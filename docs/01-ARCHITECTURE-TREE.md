@@ -32,7 +32,11 @@
     ├── 📄 package.json                         # تعريف الحزم وأوامر التشغيل والاختبار
     ├── 📄 tsconfig.json                        # إعدادات TypeScript الصارمة
     ├── 📁 config\                              # الإعدادات المركزية القابلة للتعديل في أي وقت
-    │   └── 📄 branding.json                    # إعدادات اسم البرنامج والشعار والمسارات
+    │   ├── 📄 branding.json                    # الهوية فقط (اسم البرنامج والمساعد) — لا يُرفع
+    │   ├── 📄 settings.json                    # المسارات، الذكاء، الموصلات، المراقب، المشاريع — لا يُرفع
+    │   └── 📄 *.example.json                   # نماذج مرفوعة على GitHub
+    │   (المرحلة 2 أضافت: features/assistant/providers/ ، features/ai-memory/connectors/ ،
+    │    project-indexer/git-inspector.ts و project-watcher.ts ، shared/secret-redaction.ts ، tests/07-integration.test.ts)
     ├── 📁 data\                                # البيانات المشفرة والنسخ الاحتياطية
     │   ├── 📁 encrypted-vault\                 # ملفات الخزنة المشفرة بـ AES-256-GCM
     │   ├── 📁 emergency-kits\                  # كتيبات الطوارئ المولدة لزوجتك

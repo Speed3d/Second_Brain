@@ -1,0 +1,34 @@
+{
+  "serverPort": 4777,
+  "paths": {},
+  "aiConfig": {
+    "defaultMode": "hybrid",
+    "cloudProvider": "claude",
+    "providerOrder": ["claude", "gemini", "ollama", "local"],
+    "claudeModel": "claude-opus-5-5",
+    "claudeEffort": "medium",
+    "geminiModel": "gemini-3.8-flash",
+    "ollamaEndpoint": "http://127.0.0.1:11434",
+    "ollamaModel": "llama3.2",
+    "requestTimeoutMs": 120000,
+    "voiceEnabled": true,
+    "voiceLang": "ar-SA"
+  },
+  "connectors": {
+    "antigravity": { "enabled": true },
+    "claudeCode": { "enabled": true }
+  },
+  "watcher": { "enabled": true, "intervalMinutes": 15, "harvestTranscripts": true },
+  "security": { "autoLockMinutes": 10, "backupRetention": 10 },
+  "watchedProjects": [
+    {
+      "id": "my-app",
+      "name": "My-App",
+      "path": "D:\\Projects\\MyApp",
+      "descriptionAr": "وصف تقني للمشروع",
+      "wifeSummaryAr": "شرح مبسط للعائلة",
+      "monthlyIncome": "غير محدد بعد",
+      "billingNotes": "الاستضافة والدومين"
+    }
+  ]
+}

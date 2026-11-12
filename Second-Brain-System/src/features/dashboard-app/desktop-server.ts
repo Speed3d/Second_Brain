@@ -11,7 +11,8 @@
 
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { loadSystemConfig } from '../../core/config-manager.ts';
+import { loadSystemConfig, loadSystemConfigWithWarnings } from '../../core/config-manager.ts';
+import { startProjectWatcher } from '../project-indexer/project-watcher.ts';
 import { logSystemError, logSystemInfo } from '../../core/logger.ts';
 import { querySharedAIMemory } from '../ai-memory/shared-memory-service.ts';
 import { scanAndAnalyzeProject } from '../project-indexer/project-scanner.ts';
@@ -32,7 +33,7 @@ import { getEmergencyRoutes } from './routes/emergency-routes.ts';
 import { getMemoryRoutes } from './routes/memory-routes.ts';
 import { getProjectRoutes } from './routes/project-routes.ts';
 import { getVaultRoutes } from './routes/vault-routes.ts';
-import { getVaultSession } from './session-manager.ts';
+import { getVaultSession, peekActiveVault } from './session-manager.ts';
 import { renderSecondBrainDesktopHTML } from './ui-renderer.ts';
 
 /** العنوان الوحيد الذي يستمع عليه الخادم */
@@ -159,12 +160,16 @@ export function startSecondBrainDesktopServer(port: number = loadSystemConfig().
 
 // تشغيل الخادم إذا تم استدعاء الملف مباشرة
 if (process.argv[1] && process.argv[1].endsWith('desktop-server.ts')) {
-  const config = loadSystemConfig();
+  const { config, warnings } = loadSystemConfigWithWarnings();
   startSecondBrainDesktopServer(config.serverPort)
     .then(() => {
       logSystemInfo('DesktopServer', `تم تشغيل واجهة سطح المكتب على الرابط: http://localhost:${config.serverPort}`);
       console.log(`\n🛡️  ${config.appTitleAr}`);
-      console.log(`🚀 الواجهة تعمل الآن على: http://localhost:${config.serverPort} (متاحة لهذا الجهاز فقط)\n`);
+      console.log(`🚀 الواجهة تعمل الآن على: http://localhost:${config.serverPort} (متاحة لهذا الجهاز فقط)`);
+      for (const w of warnings) console.log(`⚠️  ${w}`);
+      const watcher = startProjectWatcher(peekActiveVault);
+      if (watcher.intervalMinutes) console.log(`👁️  المراقب الدوري يعمل كل ${watcher.intervalMinutes} دقيقة.`);
+      console.log('');
     })
     .catch((err) => {
       console.error(`❌ تعذر تشغيل الخادم على المنفذ ${config.serverPort}:`, err instanceof Error ? err.message : err);

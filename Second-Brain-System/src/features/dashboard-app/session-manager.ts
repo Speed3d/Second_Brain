@@ -68,6 +68,19 @@ export function getVaultSession(token: string | undefined | null, touch: boolean
 }
 
 /**
+ * Hint بالعربي: دالة إرجاع الخزنة المفتوحة حالياً للمهام الخلفية (مثل المراقب الدوري) دون تمديد الجلسة؛
+ *               إذا انتهت مدة الخمول تُقفل الخزنة وتُرجع null.
+ */
+export function peekActiveVault(): UnlockedVault | null {
+  if (!activeSession) return null;
+  if (Date.now() - activeSession.lastActivityAt > getAutoLockMs()) {
+    closeVaultSession();
+    return null;
+  }
+  return activeSession.vault;
+}
+
+/**
  * Hint بالعربي: دالة قفل الخزنة فوراً ومسح مفتاح البيانات من الذاكرة.
  */
 export function closeVaultSession(): void {
