@@ -1,7 +1,7 @@
 # 📑 الفهرس الحي الشامل للدوال والأكواد والأدوات (Live Code & Function Registry)
 
 > **تطبيقاً للقانون السابع (7):** يتم توليد وتحديث هذا الفهرس تلقائياً بواسطة الأداة `src/tools/code-registry-scanner.ts`.  
-> **تاريخ آخر فحص آلي:** `2026-11-12T23:20:44.280Z`  
+> **تاريخ آخر فحص آلي:** `2026-11-14T19:59:31.942Z`  
 > **إجمالي الدوال المفحوصة:** `224` | **المستخدمة حالياً (Active):** `224` | **الجاهزة للتوسع المستقبلي:** `0`
 
 ---
@@ -10,7 +10,7 @@
 
 | اسم الدالة / الأداة | القسم (Layer) | الملف ورقم السطر | لماذا كُتبت؟ (Hint بالعربي) | أين تم استخدامها واستدعاؤها؟ | الحالة الراهنة |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `readAppVersion` | **Core** | `src/core/config-manager.ts#L27` | دالة قراءة إصدار البرنامج من package.json — المصدر الوحيد للإصدار (يُرفع مع كل تحديث، وتُوثَّق تغييراته في CHANGELOG.md). لا يُقرأ من branding.json حتى لا يختلف بين الأجهزة. | `src/core/config-manager.ts (داخلي)`, `tests/14-installer.test.ts` | **مستخدم (Active)** |
+| `readAppVersion` | **Core** | `src/core/config-manager.ts#L27` | دالة قراءة إصدار البرنامج من package.json — المصدر الوحيد للإصدار (يُرفع مع كل تحديث، وتُوثَّق تغييراته في CHANGELOG.md). لا يُقرأ من branding.json حتى لا يختلف بين الأجهزة. | `src/core/config-manager.ts (داخلي)`, `src/tools/mcp-memory-server.ts`, `tests/14-installer.test.ts` | **مستخدم (Active)** |
 | `getSystemRootDir` | **Core** | `src/core/config-manager.ts#L54` | دالة تُرجع المسار الفعلي لمجلد Second-Brain-System محسوباً من موقع هذا الملف، بحيث تعمل أدوات النظام من أي قرص أو مسار دون الاعتماد على مسارات ثابتة. | `src/core/config-manager.ts (داخلي)`, `src/tools/code-registry-scanner.ts`, `tests/06-security.test.ts`, `tests/07-integration.test.ts` | **مستخدم (Active)** |
 | `resolveDefaultConfigPath` | **Core** | `src/core/config-manager.ts#L62` | دالة تحدد مسار ملف الهوية الافتراضي وقت الاستدعاء. متغير البيئة SECOND_BRAIN_CONFIG_PATH يوجّه النظام لملف آخر (تستخدمه الاختبارات). | `src/core/config-manager.ts (داخلي)`, `src/features/family-emergency/backup-service.ts`, `src/features/maintenance/reset-service.ts`, `tests/10-maintenance.test.ts` | **مستخدم (Active)** |
 | `resolveSettingsPath` | **Core** | `src/core/config-manager.ts#L69` | دالة تحديد مسار ملف الإعدادات المرافق لملف الهوية (settings.json في نفس المجلد). | `src/core/config-manager.ts (داخلي)`, `src/features/family-emergency/backup-service.ts`, `src/features/maintenance/reset-service.ts`, `tests/10-maintenance.test.ts` | **مستخدم (Active)** |
@@ -227,10 +227,10 @@
 | `scanAndGenerateCodeRegistry` | **Tools** | `src/tools/code-registry-scanner.ts#L21` | دالة فحص جميع ملفات الكود في src/ و tests/ وبناء الفهرس الشامل للدوال والأدوات. | `src/tools/code-registry-scanner.ts (داخلي)`, `tests/05-tools-and-dashboard.test.ts`, `tests/run-all-tests.ts` | **مستخدم (Active)** |
 | `installArabicVoice` | **Tools** | `src/tools/install-arabic-voice.ts#L51` | الدالة الرئيسية: تنزيل Piper وفك ضغطه، ثم تنزيل الصوت العربي. | `src/features/dashboard-app/routes/voice-routes.ts`, `src/tools/install-arabic-voice.ts (داخلي)` | **مستخدم (Active)** |
 | `installXttsVoice` | **Tools** | `src/tools/install-xtts-voice.ts#L34` | الدالة الرئيسية لتثبيت XTTS-v2 في مجلد vendor. | `src/tools/install-xtts-voice.ts (داخلي)` | **مستخدم (Active)** |
-| `optionalString` | **Tools** | `src/tools/mcp-memory-server.ts#L45` | دالة قراءة نص اختياري من معاملات الأداة مع حد للطول. | `src/tools/mcp-memory-server.ts (داخلي)` | **مستخدم (Active)** |
-| `requiredString` | **Tools** | `src/tools/mcp-memory-server.ts#L56` | دالة قراءة نص إلزامي من معاملات الأداة. | `src/tools/mcp-memory-server.ts (داخلي)` | **مستخدم (Active)** |
-| `compactMemory` | **Tools** | `src/tools/mcp-memory-server.ts#L65` | دالة تلخيص سجل ذاكرة بشكل مضغوط لإرساله للذكاء الاصطناعي. | `src/tools/mcp-memory-server.ts (داخلي)` | **مستخدم (Active)** |
-| `buildMcpTools` | **Tools** | `src/tools/mcp-memory-server.ts#L72` | دالة بناء قائمة أدوات الخادم مع منفّذ كل أداة. | `src/tools/mcp-memory-server.ts (داخلي)` | **مستخدم (Active)** |
-| `jsonRpcError` | **Tools** | `src/tools/mcp-memory-server.ts#L233` | دالة بناء رد خطأ JSON-RPC. | `src/tools/mcp-memory-server.ts (داخلي)` | **مستخدم (Active)** |
-| `handleMcpJsonRpcRequest` | **Tools** | `src/tools/mcp-memory-server.ts#L240` | دالة معالجة رسالة JSON-RPC واحدة. المخرجات: الرد، أو null للإشعارات (لا يُرسل عليها رد). | `src/tools/mcp-memory-server.ts (داخلي)`, `tests/05-tools-and-dashboard.test.ts`, `tests/07-integration.test.ts` | **مستخدم (Active)** |
-| `processMcpLine` | **Tools** | `src/tools/mcp-memory-server.ts#L296` | دالة معالجة سطر نصي واحد قادم عبر stdio. المخرجات: نص الرد أو null إذا لا يُرسل رد. | `src/tools/mcp-memory-server.ts (داخلي)`, `tests/07-integration.test.ts` | **مستخدم (Active)** |
+| `optionalString` | **Tools** | `src/tools/mcp-memory-server.ts#L46` | دالة قراءة نص اختياري من معاملات الأداة مع حد للطول. | `src/tools/mcp-memory-server.ts (داخلي)` | **مستخدم (Active)** |
+| `requiredString` | **Tools** | `src/tools/mcp-memory-server.ts#L57` | دالة قراءة نص إلزامي من معاملات الأداة. | `src/tools/mcp-memory-server.ts (داخلي)` | **مستخدم (Active)** |
+| `compactMemory` | **Tools** | `src/tools/mcp-memory-server.ts#L66` | دالة تلخيص سجل ذاكرة بشكل مضغوط لإرساله للذكاء الاصطناعي. | `src/tools/mcp-memory-server.ts (داخلي)` | **مستخدم (Active)** |
+| `buildMcpTools` | **Tools** | `src/tools/mcp-memory-server.ts#L73` | دالة بناء قائمة أدوات الخادم مع منفّذ كل أداة. | `src/tools/mcp-memory-server.ts (داخلي)` | **مستخدم (Active)** |
+| `jsonRpcError` | **Tools** | `src/tools/mcp-memory-server.ts#L234` | دالة بناء رد خطأ JSON-RPC. | `src/tools/mcp-memory-server.ts (داخلي)` | **مستخدم (Active)** |
+| `handleMcpJsonRpcRequest` | **Tools** | `src/tools/mcp-memory-server.ts#L241` | دالة معالجة رسالة JSON-RPC واحدة. المخرجات: الرد، أو null للإشعارات (لا يُرسل عليها رد). | `src/tools/mcp-memory-server.ts (داخلي)`, `tests/05-tools-and-dashboard.test.ts`, `tests/07-integration.test.ts` | **مستخدم (Active)** |
+| `processMcpLine` | **Tools** | `src/tools/mcp-memory-server.ts#L297` | دالة معالجة سطر نصي واحد قادم عبر stdio. المخرجات: نص الرد أو null إذا لا يُرسل رد. | `src/tools/mcp-memory-server.ts (داخلي)`, `tests/07-integration.test.ts` | **مستخدم (Active)** |

@@ -16,13 +16,14 @@ import * as path from 'node:path';
 import * as readline from 'node:readline';
 import type { SharedAIMemoryEntry } from '../shared/types.ts';
 import { redactSecrets } from '../shared/secret-redaction.ts';
-import { loadSystemConfig } from '../core/config-manager.ts';
+import { loadSystemConfig, readAppVersion } from '../core/config-manager.ts';
 import { querySharedAIMemory, recordSharedAIMemory } from '../features/ai-memory/shared-memory-service.ts';
 import { scanAndAnalyzeProject } from '../features/project-indexer/project-scanner.ts';
 
 /** إصدارات البروتوكول المدعومة (الأحدث أولاً) */
 export const SUPPORTED_MCP_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
-const SERVER_VERSION = '2.0.0';
+/** إصدار الخادم = إصدار البرنامج (package.json) حتى يعرف Claude Code و Antigravity أي نسخة يتصلان بها */
+const SERVER_VERSION = readAppVersion();
 const SOURCE_AI_VALUES = ['antigravity-gemini', 'claude-code', 'second-brain-assistant', 'manual'] as const;
 
 /**
