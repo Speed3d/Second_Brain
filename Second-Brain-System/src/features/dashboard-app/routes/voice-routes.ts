@@ -33,15 +33,16 @@ export function getVoiceRoutes(): RouteDefinition[] {
       handler: async ({ res }) => {
         if (installing) throw new HttpError(409, 'التنزيل جارٍ بالفعل.');
         installing = true;
+        let messageAr: string;
         try {
-          await installArabicVoice(resolveVendorDir());
+          ({ messageAr } = await installArabicVoice(resolveVendorDir()));
         } catch (err) {
           throw new HttpError(502, `تعذر تنزيل الصوت العربي: ${err instanceof Error ? err.message : String(err)}`);
         } finally {
           installing = false;
           resetTtsCache();
         }
-        sendJson(res, 200, { ok: true, status: await detectTtsEngine(), messageAr: '🎉 نُزّل الصوت العربي المدمج.' });
+        sendJson(res, 200, { ok: true, status: await detectTtsEngine(), messageAr });
       },
     },
     {

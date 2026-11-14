@@ -1356,7 +1356,7 @@
       text.textContent = status.reasonAr || 'لا يوجد صوت عربي على هذا الجهاز.';
     }
     const installBtn = $('[data-action="install-arabic-voice"]');
-    if (installBtn) installBtn.hidden = status.engine === 'piper' || status.fallbackEngine === 'piper';
+    if (installBtn) installBtn.hidden = status.engine === 'piper' || status.fallbackEngine === 'piper' || status.engine === 'macos' || status.fallbackEngine === 'macos';
   }
 
   async function loadProvidersGuide() {

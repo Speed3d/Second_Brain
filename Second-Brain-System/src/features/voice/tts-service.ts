@@ -163,25 +163,40 @@ export async function detectTtsEngine(): Promise<TtsStatus> {
 async function detectBaseEngine(): Promise<TtsStatus> {
   if (cache && Date.now() - cache.at < DETECT_CACHE_MS) return cache.status;
   let status: TtsStatus;
-  if (resolvePiperPaths()) {
+  const piper = resolvePiperPaths();
+  const piperProblem = piper ? await probePiper(piper) : null;
+  const missing = piperProblem ?? 'لم يُنزَّل الصوت العربي المدمج (Piper) بعد.';
+  if (piper && !piperProblem) {
     status = { available: true, engine: 'piper', voiceName: 'Piper — Kareem (عربي)', maxChars: 280 };
   } else if (process.platform === 'win32' && process.env.SECOND_BRAIN_TTS !== 'piper-only') {
     const r = await run('powershell.exe', powershellArgs(['-List']), '', 20000);
     const first = r.stdout.split(/\r?\n/).map((l) => l.trim()).find(Boolean);
     status = first
       ? { available: true, engine: 'windows', voiceName: first.split('|')[0], maxChars: 280 }
-      : { available: false, engine: null, reasonAr: 'لا يوجد صوت عربي في Windows، ولم يُنزَّل الصوت العربي المدمج (Piper) بعد.', maxChars: 280 };
+      : { available: false, engine: null, reasonAr: `لا يوجد صوت عربي في Windows، و${missing}`, maxChars: 280 };
   } else if (process.platform === 'darwin' && process.env.SECOND_BRAIN_TTS !== 'piper-only') {
     const r = await run('say', ['-v', '?'], '', 10000);
     const line = r.stdout.split('\n').find((l) => /\sar[_-]/.test(l));
     status = line
       ? { available: true, engine: 'macos', voiceName: line.trim().split(/\s{2,}/)[0], maxChars: 280 }
-      : { available: false, engine: null, reasonAr: 'لا يوجد صوت عربي في macOS، ولم يُنزَّل الصوت العربي المدمج (Piper) بعد.', maxChars: 280 };
+      : { available: false, engine: null, reasonAr: `لا يوجد صوت عربي في macOS (أضِف «Majed» من إعدادات النظام ← إمكانية الوصول ← المحتوى المنطوق)، و${missing}`, maxChars: 280 };
   } else {
-    status = { available: false, engine: null, reasonAr: 'لم يُنزَّل الصوت العربي المدمج (Piper) بعد.', maxChars: 280 };
+    status = { available: false, engine: null, reasonAr: missing, maxChars: 280 };
   }
   cache = { at: Date.now(), status };
   return status;
+}
+
+/**
+ * Hint بالعربي: دالة التأكد من أن محرك Piper يعمل فعلاً على هذا الجهاز، لا أن ملفه موجود فقط
+ *               (مثلاً: حزمة الماك الرسمية 2023.11.14-2 فيها ملف x86_64 تنقصه libespeak-ng).
+ *               تعيد null إن كان سليماً، أو وصف المشكلة بالعربية.
+ */
+async function probePiper(p: { command: string; prefixArgs: string[] }): Promise<string | null> {
+  const r = await run(p.command, [...p.prefixArgs, '--version'], '', 15000);
+  if (r.code === 0) return null;
+  const detail = r.stderr.trim().split('\n')[0]?.slice(0, 160) || `رمز ${r.code}`;
+  return `محرك Piper الموجود في vendor/piper لا يعمل على هذا الجهاز (${detail}).`;
 }
 
 let queue: Promise<unknown> = Promise.resolve();

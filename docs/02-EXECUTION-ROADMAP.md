@@ -55,7 +55,8 @@
 
 ## 🍎 الخطوة الجارية: الانتقال إلى الماك (2026-11-13)
 - **الإصدار:** 1.8.1. المرحلة ب مكتملة على Windows، وتجربتها على الماك هي الخطوة التالية.
-- **التعليمات الكاملة لجلسة الماك:** [`09-MAC-SETUP-HANDOFF.md`](./09-MAC-SETUP-HANDOFF.md).
+- **التعليمات الكاملة لجلسة الماك:** [`09-MAC-SETUP-HANDOFF.md`](./09-MAC-SETUP-HANDOFF.md) (✅ مكتملة 2026-11-15).
+- **العودة إلى Windows:** [`10-WINDOWS-RETURN-HANDOFF.md`](./10-WINDOWS-RETURN-HANDOFF.md).
 - **بعدها:** العودة إلى Windows للمرحلة ج (المزامنة)، ثم د وهـ حسب [`07-EXPANSION-PLAN.md`](./07-EXPANSION-PLAN.md).
 - **سجل الإصدارات:** [`../CHANGELOG.md`](../CHANGELOG.md).
 

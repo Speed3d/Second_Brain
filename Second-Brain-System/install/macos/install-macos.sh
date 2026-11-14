@@ -40,14 +40,23 @@ echo ""
 echo "سيقوم المثبّت بما يلي (بلا sudo):"
 echo "  1. تشغيل تلقائي في الخلفية عند تسجيل الدخول : $PLIST"
 echo "  2. ملف فتح البرنامج على سطح المكتب          : $DESKTOP_CMD"
-echo "  3. اسم هذا الجهاز                            : $DEVICE_NAME ($DEVICE_FILE)"
+echo "  3. هوية هذا الجهاز                           : $DEVICE_NAME ($DEVICE_FILE)"
 echo "  4. تشغيل الخادم الآن"
 echo ""
 
 if [ -z "$NODE" ]; then echo "❌ Node.js غير مثبّت. ثبّت Node.js 24 أو أحدث من https://nodejs.org"; exit 1; fi
 MAJOR="$("$NODE" --version | sed 's/^v//' | cut -d. -f1)"
 if [ "$MAJOR" -lt 24 ]; then echo "❌ إصدار Node.js قديم ($MAJOR). المطلوب 24 أو أحدث."; exit 1; fi
-if [ "$PREVIEW" = "1" ]; then echo "وضع المعاينة: لم يُغيَّر أي شيء."; exit 0; fi
+DEVICE_TOOL="$SYSTEM_DIR/install/device-identity.ts"
+if [ "$PREVIEW" = "1" ]; then
+  "$NODE" "$DEVICE_TOOL" --file "$DEVICE_FILE" --platform macos --name "$DEVICE_NAME" --preview
+  echo ""
+  echo "وضع المعاينة: لم يُغيَّر أي شيء."
+  exit 0
+fi
+
+# هوية الجهاز أولاً، قبل تشغيل الخادم
+"$NODE" "$DEVICE_TOOL" --file "$DEVICE_FILE" --platform macos --name "$DEVICE_NAME"
 
 mkdir -p "$HOME/Library/LaunchAgents" "$LOG_DIR"
 cat > "$PLIST" <<PLIST
@@ -80,14 +89,6 @@ exec "$SCRIPT_DIR/open-app.sh"
 CMD
 chmod +x "$DESKTOP_CMD" "$SCRIPT_DIR/open-app.sh"
 echo "✔ ملف «Second Brain» على سطح المكتب"
-
-if [ ! -f "$DEVICE_FILE" ]; then
-  mkdir -p "$(dirname "$DEVICE_FILE")"
-  "$NODE" -e 'const fs=require("fs");fs.writeFileSync(process.argv[1], JSON.stringify({deviceId:require("crypto").randomUUID(),deviceName:process.argv[2],platform:"macos",createdAt:new Date().toISOString()},null,2))' "$DEVICE_FILE" "$DEVICE_NAME"
-  echo "✔ اسم الجهاز: $DEVICE_NAME"
-else
-  echo "✔ هوية الجهاز موجودة مسبقاً (لم تتغير)"
-fi
 
 echo ""
 echo "🎉 اكتمل التثبيت. افتح البرنامج من «Second Brain» على سطح المكتب. للإزالة: install/macos/uninstall-macos.sh"

@@ -27,6 +27,7 @@ import { resetSessionStateForTests } from '../src/features/dashboard-app/session
 import { listResetTargets } from '../src/features/maintenance/reset-service.ts';
 import { unlockVault } from '../src/features/vault/vault-manager.ts';
 import { detectTtsEngine, PIPER_VOICE_FILE, resetTtsCache } from '../src/features/voice/tts-service.ts';
+import { installArabicVoice } from '../src/tools/install-arabic-voice.ts';
 import { xttsWorker } from '../src/features/voice/xtts-engine.ts';
 import { postJson, rawRequest } from './06-security.test.ts';
 import { ensureTestVault, TEST_MASTER_PASSWORD, writeFixtureFile } from './test-environment.ts';
@@ -35,6 +36,7 @@ import { ensureTestVault, TEST_MASTER_PASSWORD, writeFixtureFile } from './test-
 const FAKE_PIPER = `
 import fs from 'node:fs';
 const args = process.argv.slice(2);
+if (args.includes('--version')) { console.log('1.2.0'); process.exit(0); }
 const out = args[args.indexOf('--output_file') + 1];
 let text = '';
 process.stdin.on('data', (d) => (text += d));
@@ -151,6 +153,32 @@ export async function runConversationsAndVoiceTests(): Promise<string[]> {
     assert.equal((await postJson(port, '/api/tts', { text: '   ' })).status, 400);
     assert.equal((await postJson(port, '/api/tts/install', {})).status, 401, 'التنزيل يتطلب خزنة مفتوحة للقائد');
     passedChecks.push('اختبار النطق العربي المحلي بمحرك Piper (اكتشاف المحرك، توليد WAV، النص عبر stdin لا سطر الأوامر، حدود الطول، وصلاحية التنزيل) بنجاح.');
+
+    // 4ب. Piper موجود لكنه لا يعمل (مثل حزمة الماك المعطوبة): لا يُختار، والسبب واضح بالعربية
+    const goodPiper = fs.readFileSync(path.join(fakeVendor, 'piper', 'piper.mjs'), 'utf8');
+    fs.writeFileSync(path.join(fakeVendor, 'piper', 'piper.mjs'), "process.stderr.write('dyld: Library not loaded: @rpath/libespeak-ng.1.dylib\\n'); process.exit(134);");
+    resetTtsCache();
+    const brokenStatus = await detectTtsEngine();
+    assert.equal(brokenStatus.available, false, 'Piper المعطوب لا يُعتبر محركاً متاحاً');
+    assert.match(brokenStatus.reasonAr ?? '', /لا يعمل على هذا الجهاز.*libespeak-ng/);
+    assert.equal((await postJson(port, '/api/tts', { text: 'نص' })).status, 503);
+    fs.writeFileSync(path.join(fakeVendor, 'piper', 'piper.mjs'), goodPiper);
+    resetTtsCache();
+    assert.equal((await detectTtsEngine()).engine, 'piper', 'بعد إصلاحه يعود Piper');
+
+    // 4ج. مثبّت الصوت على الماك لا ينزّل حزمة Piper المعطوبة
+    const before = fs.readdirSync(fakeVendor).sort();
+    if (process.platform === 'darwin') {
+      try {
+        assert.match((await installArabicVoice(fakeVendor, 'darwin')).messageAr, /صوت النظام العربي/);
+      } catch (err) {
+        assert.match(String(err), /Majed/, 'بلا صوت عربي في النظام: رسالة تشرح إضافة Majed');
+      }
+    } else {
+      await assert.rejects(installArabicVoice(fakeVendor, 'darwin'), /Majed/, 'خارج الماك لا يوجد say، فتظهر رسالة إضافة Majed');
+    }
+    assert.deepEqual(fs.readdirSync(fakeVendor).sort(), before, 'لا تنزيل ولا ملفات جديدة على الماك');
+    passedChecks.push('اختبار Piper المعطوب (لا يُختار ويُشرح السبب ثم يعود بعد إصلاحه) وأن مثبّت الصوت على الماك لا ينزّل الحزمة المعطوبة بنجاح.');
 
     // 5. XTTS-v2 عبر عامل وهمي: Piper أثناء التحميل، ثم XTTS بالصوت المختار، والصوت غير المعتمد يُستبدل بالافتراضي
     const xttsLog = path.join(fakeVendor, 'xtts-calls.ndjson');

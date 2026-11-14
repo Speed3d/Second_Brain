@@ -6,6 +6,7 @@
  *               ويضعهما في Second-Brain-System/vendor/ (غير مرفوع إلى Git). بعدها يعمل النطق العربي
  *               على هذا الجهاز بلا إنترنت، وفي أي متصفح. يُشغَّل مرة واحدة لكل جهاز:
  *                 node src/tools/install-arabic-voice.ts
+ *               على الماك لا يُنزَّل شيء: حزمة Piper الرسمية للماك معطوبة، فيُستخدم صوت النظام العربي «Majed».
  * ============================================================================
  */
 
@@ -17,10 +18,13 @@ import { fileURLToPath } from 'node:url';
 const PIPER_RELEASE = 'https://github.com/rhasspy/piper/releases/download/2023.11.14-2';
 const VOICE_BASE = 'https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/ar/ar_JO/kareem/medium';
 
-/** حزمة Piper حسب النظام، مع الحجم المتوقع بالبايت للتحقق من اكتمال التنزيل */
+/**
+ * حزمة Piper حسب النظام، مع الحجم المتوقع بالبايت للتحقق من اكتمال التنزيل.
+ * لا توجد حزمة للماك عمداً: piper_macos_aarch64.tar.gz في الإصدار 2023.11.14-2 فيها ملف تنفيذي x86_64
+ * تنقصه libespeak-ng.1.dylib فلا يعمل (جُرّب على MacBook في 2026-11-14). الماك يستخدم «Majed» عبر say.
+ */
 const PIPER_PACKAGES: Record<string, { file: string; bytes: number }> = {
   'win32-x64': { file: 'piper_windows_amd64.zip', bytes: 22477236 },
-  'darwin-arm64': { file: 'piper_macos_aarch64.tar.gz', bytes: 19146957 },
 };
 const VOICE_FILES = [
   { file: 'ar_JO-kareem-medium.onnx', bytes: 63201294 },
@@ -48,8 +52,9 @@ async function download(url: string, target: string, expectedBytes: number): Pro
 /**
  * Hint بالعربي: الدالة الرئيسية: تنزيل Piper وفك ضغطه، ثم تنزيل الصوت العربي.
  */
-export async function installArabicVoice(vendorDir: string): Promise<void> {
-  const key = `${process.platform}-${process.arch}`;
+export async function installArabicVoice(vendorDir: string, platform: NodeJS.Platform = process.platform): Promise<{ messageAr: string }> {
+  if (platform === 'darwin') return { messageAr: macosVoiceMessage() };
+  const key = `${platform}-${process.arch}`;
   const pkg = PIPER_PACKAGES[key];
   if (!pkg) throw new Error(`هذا النظام (${key}) غير مدعوم حالياً للصوت المدمج.`);
   const downloads = path.join(vendorDir, 'downloads');
@@ -62,12 +67,25 @@ export async function installArabicVoice(vendorDir: string): Promise<void> {
   if (extract.status !== 0) throw new Error('تعذر فك ضغط Piper.');
   for (const v of VOICE_FILES) await download(`${VOICE_BASE}/${v.file}`, path.join(vendorDir, 'voices', v.file), v.bytes);
   fs.rmSync(downloads, { recursive: true, force: true });
-  console.log('🎉 اكتمل تثبيت الصوت العربي المدمج. أعد تحميل صفحة Second Brain.');
+  return { messageAr: '🎉 اكتمل تثبيت الصوت العربي المدمج. أعد تحميل صفحة Second Brain.' };
+}
+
+/**
+ * Hint بالعربي: على الماك: لا تنزيل. يتحقق من وجود صوت عربي في النظام (مثل Majed) ويشرح الخطوة إن لم يوجد.
+ */
+function macosVoiceMessage(): string {
+  const list = spawnSync('say', ['-v', '?'], { encoding: 'utf8' });
+  const line = (list.stdout || '').split('\n').find((l) => /\sar[_-]/.test(l));
+  if (line) {
+    const name = line.trim().split(/\s{2,}/)[0];
+    return `✔ على الماك يُستخدم صوت النظام العربي «${name}» مباشرة، ولا حاجة لتنزيل شيء (حزمة Piper للماك لا تعمل).`;
+  }
+  throw new Error('على الماك يُستخدم صوت النظام العربي بدل Piper، ولا يوجد صوت عربي مثبّت. أضِف «Majed» من: إعدادات النظام ← إمكانية الوصول ← المحتوى المنطوق ← صوت النظام ← إدارة الأصوات ← العربية.');
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const vendor = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'vendor');
-  installArabicVoice(vendor).catch((err) => {
+  installArabicVoice(vendor).then((r) => console.log(r.messageAr)).catch((err) => {
     console.error('❌', err instanceof Error ? err.message : err);
     process.exit(1);
   });

@@ -34,7 +34,7 @@ Write-Host 'سيقوم المثبّت بما يلي (اختصارات فقط، �
 Write-Host ("  1. تشغيل تلقائي مخفي عند تسجيل الدخول : {0}" -f $startupLnk)
 if (-not $NoDesktopShortcut) { Write-Host ("  2. اختصار على سطح المكتب              : {0}" -f $desktopLnk) }
 Write-Host ("  3. اختصار في قائمة ابدأ               : {0}" -f $menuLnk)
-Write-Host ("  4. اسم هذا الجهاز                      : {0}  ({1})" -f $DeviceName, $deviceFile)
+Write-Host ("  4. هوية هذا الجهاز                     : {0}  ({1})" -f $DeviceName, $deviceFile)
 Write-Host '  5. تشغيل الخادم الآن في الخلفية'
 Write-Host ''
 
@@ -42,7 +42,13 @@ if (-not $node) { throw 'Node.js غير مثبّت. ثبّت Node.js 24 أو أ�
 $major = [int]((& $node --version).TrimStart('v').Split('.')[0])
 if ($major -lt 24) { throw "إصدار Node.js قديم ($major). المطلوب 24 أو أحدث." }
 
-if ($Preview) { Write-Host 'وضع المعاينة: لم يُغيَّر أي شيء.'; exit 0 }
+$deviceTool = Join-Path $script:SBSystemDir 'install\device-identity.ts'
+if ($Preview) {
+  & $node $deviceTool --file $deviceFile --platform windows --name $DeviceName --preview
+  Write-Host ''
+  Write-Host 'وضع المعاينة: لم يُغيَّر أي شيء.'
+  exit 0
+}
 
 function New-SBShortcut([string]$Path, [string]$Script, [string]$Description) {
   $shell = New-Object -ComObject WScript.Shell
@@ -61,14 +67,9 @@ if (-not $NoDesktopShortcut) { New-SBShortcut $desktopLnk 'open-app.vbs' 'Second
 New-SBShortcut $menuLnk 'open-app.vbs' 'Second Brain — العقل الثاني'
 Write-Host '✔ اختصار قائمة ابدأ'
 
-if (-not (Test-Path -LiteralPath $deviceFile)) {
-  New-Item -ItemType Directory -Force -Path (Split-Path $deviceFile) | Out-Null
-  $device = [ordered]@{ deviceId = [guid]::NewGuid().ToString(); deviceName = $DeviceName; platform = 'windows'; createdAt = (Get-Date).ToString('o') }
-  [System.IO.File]::WriteAllText($deviceFile, ($device | ConvertTo-Json), (New-Object System.Text.UTF8Encoding $false))
-  Write-Host ("✔ اسم الجهاز: {0}" -f $DeviceName)
-} else {
-  Write-Host '✔ هوية الجهاز موجودة مسبقاً (لم تتغير)'
-}
+# هوية الجهاز: تُكتب جديدة إن كان الملف لجهاز بنظام آخر (منقول) أو تالفاً، مع نسخة احتياطية
+& $node $deviceTool --file $deviceFile --platform windows --name $DeviceName
+if ($LASTEXITCODE -ne 0) { throw 'تعذّر تجهيز هوية الجهاز (data\device.json).' }
 
 # خادم الذاكرة (MCP): فحص فقط — التسجيل اليدوي موثّق في docs/08
 $claudeJson = Join-Path $env:USERPROFILE '.claude.json'

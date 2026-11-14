@@ -3,7 +3,8 @@
  * الملف: tests/14-installer.test.ts
  * القسم: Tests (الاختبارات الدائمة الموثقة — القانون الثامن)
  * Hint بالعربي: اختبارات المرحلة ب (المثبّت والتشغيل التلقائي): سلامة صياغة سكربتات Windows و macOS،
- *               وأن وضع المعاينة في مثبّت Windows لا يغيّر أي شيء، وأن الأيقونات موجودة وتُخدَم للواجهة.
+ *               وأن وضع المعاينة في مثبّت Windows لا يغيّر أي شيء، وأن الأيقونات موجودة وتُخدَم للواجهة،
+ *               وأن هوية الجهاز المنقولة من نظام آخر تُستبدل بنسخة احتياطية (في مجلد مؤقت فقط).
  *               لا تُنشئ هذه الاختبارات أي اختصار ولا تشغّل الخادم في الخلفية.
  * ============================================================================
  */
@@ -18,6 +19,7 @@ import type { AddressInfo } from 'node:net';
 import { loadSystemConfig, readAppVersion } from '../src/core/config-manager.ts';
 import { startSecondBrainDesktopServer } from '../src/features/dashboard-app/desktop-server.ts';
 import { rawRequest } from './06-security.test.ts';
+import { applyDeviceIdentity, planDeviceIdentity } from '../install/device-identity.ts';
 
 const INSTALL_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'install');
 
@@ -40,6 +42,7 @@ export async function runInstallerTests(): Promise<string[]> {
     'macos/install-macos.sh',
     'macos/open-app.sh',
     'macos/uninstall-macos.sh',
+    'device-identity.ts',
   ];
   for (const f of expected) assert.ok(fs.existsSync(path.join(INSTALL_DIR, f)), `الملف موجود: ${f}`);
   const ico = fs.readFileSync(path.join(INSTALL_DIR, 'second-brain.ico'));
@@ -64,6 +67,51 @@ export async function runInstallerTests(): Promise<string[]> {
     }
   }
   passedChecks.push('اختبار صياغة سكربتات PowerShell (مع ترميز UTF-8 BOM) وسكربتات bash للماك بنجاح.');
+
+  // 2ب. هوية الجهاز: إنشاء، إبقاء لنفس النظام، واستبدال المنقول من نظام آخر أو التالف مع نسخة احتياطية
+  const devDir = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-device-'));
+  try {
+    const devFile = path.join(devDir, 'data', 'device.json');
+    assert.equal(planDeviceIdentity(devFile, 'macos').kind, 'create');
+    const created = applyDeviceIdentity(devFile, 'macos', 'Test-Mac');
+    assert.equal(created.plan.kind, 'create');
+    assert.equal(JSON.parse(fs.readFileSync(devFile, 'utf8')).platform, 'macos');
+    const kept = applyDeviceIdentity(devFile, 'macos', 'Other-Name');
+    assert.equal(kept.plan.kind, 'keep', 'نفس النظام: تبقى الهوية');
+    assert.equal(kept.identity.deviceId, created.identity.deviceId);
+
+    // ملف منقول من Windows (مع BOM كما يكتبه PowerShell أحياناً)
+    const windowsIdentity = { deviceId: 'win-id-1', deviceName: 'DESKTOP-TEST', platform: 'windows', createdAt: '2026-01-01T00:00:00Z' };
+    fs.writeFileSync(devFile, '\uFEFF' + JSON.stringify(windowsIdentity));
+    const cli = path.join(INSTALL_DIR, 'device-identity.ts');
+    const preview = spawnSync(process.execPath, [cli, '--file', devFile, '--platform', 'macos', '--name', 'Test-Mac', '--preview'], { encoding: 'utf8' });
+    assert.equal(preview.status, 0, preview.stderr);
+    assert.match(preview.stdout, /DESKTOP-TEST/);
+    assert.match(preview.stdout, /device\.windows\.json\.bak/);
+    assert.equal(JSON.parse(fs.readFileSync(devFile, 'utf8').replace(/^\uFEFF/, '')).deviceId, 'win-id-1', 'المعاينة لا تغيّر شيئاً');
+    const real = spawnSync(process.execPath, [cli, '--file', devFile, '--platform', 'macos', '--name', 'Test-Mac'], { encoding: 'utf8' });
+    assert.equal(real.status, 0, real.stderr);
+    const fresh = JSON.parse(fs.readFileSync(devFile, 'utf8'));
+    assert.equal(fresh.platform, 'macos');
+    assert.equal(fresh.deviceName, 'Test-Mac');
+    assert.notEqual(fresh.deviceId, 'win-id-1', 'هوية جديدة للجهاز الجديد');
+    const backup = path.join(devDir, 'data', 'device.windows.json.bak');
+    assert.equal(JSON.parse(fs.readFileSync(backup, 'utf8').replace(/^\uFEFF/, '')).deviceId, 'win-id-1', 'الهوية القديمة محفوظة لا محذوفة');
+
+    // نسخة احتياطية سابقة لا يُكتب فوقها، والملف التالف يُستبدل
+    fs.writeFileSync(devFile, JSON.stringify({ ...windowsIdentity, deviceId: 'win-id-2' }));
+    applyDeviceIdentity(devFile, 'macos', 'Test-Mac');
+    assert.equal(JSON.parse(fs.readFileSync(backup, 'utf8').replace(/^\uFEFF/, '')).deviceId, 'win-id-1', 'النسخة الاحتياطية الأولى سليمة');
+    assert.equal(fs.readdirSync(path.join(devDir, 'data')).filter((f) => f.startsWith('device.windows.')).length, 2);
+    fs.writeFileSync(devFile, '{ not json');
+    const broken = applyDeviceIdentity(devFile, 'windows', 'Test-PC');
+    assert.equal(broken.plan.kind, 'replace');
+    assert.ok(fs.existsSync(path.join(devDir, 'data', 'device.invalid.json.bak')));
+    assert.equal(spawnSync(process.execPath, [cli, '--file', devFile], { encoding: 'utf8' }).status, 2, 'معاملات ناقصة تُرفض');
+  } finally {
+    fs.rmSync(devDir, { recursive: true, force: true });
+  }
+  passedChecks.push('اختبار هوية الجهاز عند التثبيت (إنشاء، إبقاء لنفس النظام، واستبدال المنقول من نظام آخر أو التالف بنسخة احتياطية دون حذف، والمعاينة لا تغيّر شيئاً) بنجاح.');
 
   // 3. وضع المعاينة لا يغيّر أي شيء
   if (process.platform === 'win32') {
