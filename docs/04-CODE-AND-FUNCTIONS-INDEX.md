@@ -1,8 +1,8 @@
 # 📑 الفهرس الحي الشامل للدوال والأكواد والأدوات (Live Code & Function Registry)
 
 > **تطبيقاً للقانون السابع (7):** يتم توليد وتحديث هذا الفهرس تلقائياً بواسطة الأداة `src/tools/code-registry-scanner.ts`.  
-> **تاريخ آخر فحص آلي:** `2026-11-15T13:51:25.922Z`  
-> **إجمالي الدوال المفحوصة:** `254` | **المستخدمة حالياً (Active):** `254` | **الجاهزة للتوسع المستقبلي:** `0`
+> **تاريخ آخر فحص آلي:** `2026-11-15T15:52:41.955Z`  
+> **إجمالي الدوال المفحوصة:** `255` | **المستخدمة حالياً (Active):** `255` | **الجاهزة للتوسع المستقبلي:** `0`
 
 ---
 
@@ -199,10 +199,11 @@
 | `hashSharedState` | **Features** | `src/features/sync/snapshot-sync.ts#L95` | دالة بصمة المحتوى (SHA-256 على المفاتيح مرتبة) لمعرفة وجود تغييرات. | `src/features/sync/snapshot-sync.ts (داخلي)` | **مستخدم (Active)** |
 | `readManifest` | **Features** | `src/features/sync/snapshot-sync.ts#L114` | دالة قراءة manifest.json: null فقط إن لم يُنشر شيء بعد (الملف غير موجود). إن تعذّرت قراءته أو كانت صيغته غير معروفة ← خطأ، لا null (حتى لا يُظن أنه أول جهاز). | `src/features/sync/snapshot-sync.ts (داخلي)`, `src/features/sync/sync-service.ts`, `tests/15-sync.test.ts` | **مستخدم (Active)** |
 | `hasAnySnapshots` | **Features** | `src/features/sync/snapshot-sync.ts#L126` | هل يوجد أي نسخة منشورة في snapshots/؟ (حماية إضافية قبل اعتبار الجهاز «أول جهاز») | `src/features/sync/sync-service.ts` | **مستخدم (Active)** |
-| `checkSync` | **Features** | `src/features/sync/snapshot-sync.ts#L214` | دالة فحص: هل على Drive إصدار أحدث؟ وهل لدى هذا الجهاز تغييرات غير منشورة؟ | `src/features/sync/sync-service.ts`, `tests/15-sync.test.ts` | **مستخدم (Active)** |
-| `importLatestSnapshot` | **Features** | `src/features/sync/snapshot-sync.ts#L231` | دالة استيراد أحدث نسخة إن كانت أحدث من أساس هذا الجهاز. 1) تتحقق من التشفير والبصمة، 2) تحفظ نسخة احتياطية من الحالة المحلية، 3) تطبّق النسخة. تحتاج مفتاح بيانات الخزنة (الخزنة مفتوحة، أو عند فتحها). | `src/features/sync/sync-service.ts`, `tests/15-sync.test.ts` | **مستخدم (Active)** |
-| `publishSnapshot` | **Features** | `src/features/sync/snapshot-sync.ts#L271` | دالة نشر الحالة المحلية كنسخة جديدة. الشروط: - هذا الجهاز يحمل قفل الكتابة. - لا يوجد على Drive إصدار أحدث من أساس هذا الجهاز (وإلا يجب الاستيراد أولاً). - المحتوى تغيّر منذ آخر استيراد أو نشر (إلا مع force). | `src/features/sync/sync-service.ts`, `tests/15-sync.test.ts` | **مستخدم (Active)** |
-| `writeDeviceStatus` | **Features** | `src/features/sync/snapshot-sync.ts#L317` | دالة كتابة ملف حالة هذا الجهاز في devices/ (آخر ظهور، الإصدار، المنصة) — لصفحة «أجهزتي» لاحقاً. | `src/features/sync/sync-service.ts` | **مستخدم (Active)** |
+| `forgetMissingArchives` | **Features** | `src/features/sync/snapshot-sync.ts#L207` | دالة تنظيف سجل الأرشفة المحلي بعد الاستيراد. الاستيراد يطابق Obsidian مع النسخة القادمة، فقد يحذف محادثة أرشفها هذا الجهاز ولم تُنشر بعد. السجل (data/harvest-state.json، محلي) كان سيظنها مؤرشفة فلا يعيدها أبداً، لذلك يُنسى كل ما حُذف ملفه، فتُعاد أرشفته في الدورة التالية. المخرجات: عدد الجلسات التي ستُعاد أرشفتها. | `src/features/sync/snapshot-sync.ts (داخلي)` | **مستخدم (Active)** |
+| `checkSync` | **Features** | `src/features/sync/snapshot-sync.ts#L235` | دالة فحص: هل على Drive إصدار أحدث؟ وهل لدى هذا الجهاز تغييرات غير منشورة؟ | `src/features/sync/sync-service.ts`, `tests/15-sync.test.ts` | **مستخدم (Active)** |
+| `importLatestSnapshot` | **Features** | `src/features/sync/snapshot-sync.ts#L252` | دالة استيراد أحدث نسخة إن كانت أحدث من أساس هذا الجهاز. 1) تتحقق من التشفير والبصمة، 2) تحفظ نسخة احتياطية من الحالة المحلية، 3) تطبّق النسخة. تحتاج مفتاح بيانات الخزنة (الخزنة مفتوحة، أو عند فتحها). | `src/features/sync/sync-service.ts`, `tests/15-sync.test.ts` | **مستخدم (Active)** |
+| `publishSnapshot` | **Features** | `src/features/sync/snapshot-sync.ts#L293` | دالة نشر الحالة المحلية كنسخة جديدة. الشروط: - هذا الجهاز يحمل قفل الكتابة. - لا يوجد على Drive إصدار أحدث من أساس هذا الجهاز (وإلا يجب الاستيراد أولاً). - المحتوى تغيّر منذ آخر استيراد أو نشر (إلا مع force). | `src/features/sync/sync-service.ts`, `tests/15-sync.test.ts` | **مستخدم (Active)** |
+| `writeDeviceStatus` | **Features** | `src/features/sync/snapshot-sync.ts#L339` | دالة كتابة ملف حالة هذا الجهاز في devices/ (آخر ظهور، الإصدار، المنصة) — لصفحة «أجهزتي» لاحقاً. | `src/features/sync/sync-service.ts` | **مستخدم (Active)** |
 | `readDeviceInfo` | **Features** | `src/features/sync/sync-context.ts#L78` | دالة قراءة هوية الجهاز من data/device.json (null إن لم يُثبَّت البرنامج بعد بالمثبّت). | `src/features/sync/sync-context.ts (داخلي)`, `src/features/sync/sync-service.ts` | **مستخدم (Active)** |
 | `readSyncSettings` | **Features** | `src/features/sync/sync-context.ts#L91` | إعدادات المزامنة لهذا الجهاز (من settings.json؛ خاصة بالجهاز ولا تُزامَن). | `src/features/sync/sync-context.ts (داخلي)`, `src/features/sync/sync-service.ts` | **مستخدم (Active)** |
 | `buildSyncContext` | **Features** | `src/features/sync/sync-context.ts#L101` | دالة بناء سياق المزامنة من إعدادات هذا الجهاز. ترجع null إن كانت المزامنة مطفأة أو المجلد غير موجود أو الجهاز بلا هوية. | `src/features/sync/sync-context.ts (داخلي)`, `src/features/sync/sync-service.ts` | **مستخدم (Active)** |

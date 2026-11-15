@@ -130,6 +130,29 @@ export async function runSyncTests(): Promise<string[]> {
   assert.equal(readLeaseStatus(A).kind, 'none');
   passedChecks.push('اختبار منع التعارض (رفض النشر فوق إصدار أحدث، الاستيراد مع حفظ التغييرات المحلية، رفض النشر بلا صلاحية، ترك القفل) بنجاح.');
 
+  // 3.5 الأرشفة بعد الاستيراد: محادثة أرشفها الجهاز ولم تُنشر تُحذف بالمطابقة، فيُنسى سجلها لتُعاد أرشفتها
+  const H = makeDevice(base, 'Harvest-Laptop', syncRoot, config.paths.encryptedVaultFile);
+  const keptArchive = path.join(H.obsidianDir, '02-Projects', 'App', 'Overview.md');
+  const unpublishedArchive = path.join(H.obsidianDir, '03-AI-Shared-Memory', 'Claude-Code-Sessions', 'Claude-Code-local-only.md');
+  writeFixtureFile(unpublishedArchive, '# محادثة مؤرشفة محلياً ولم تُنشر');
+  writeFixtureFile(
+    path.join(H.dataDir, 'harvest-state.json'),
+    JSON.stringify({
+      version: 1,
+      sessions: {
+        'claude-code:published': { modifiedMs: 1, sizeBytes: 1, outFile: keptArchive, archivedAt: '2026-11-15T00:00:00Z' },
+        'claude-code:unpublished': { modifiedMs: 1, sizeBytes: 1, outFile: unpublishedArchive, archivedAt: '2026-11-15T00:00:00Z' },
+      },
+    })
+  );
+  const hImp = importLatestSnapshot(H, unlockVault(TEST_MASTER_PASSWORD, H.vaultFile));
+  assert.equal(hImp.reharvest, 1, 'جلسة واحدة ستُعاد أرشفتها');
+  assert.equal(fs.existsSync(unpublishedArchive), false, 'المطابقة حذفت الأرشيف غير المنشور');
+  const hState = JSON.parse(read(path.join(H.dataDir, 'harvest-state.json'))).sessions;
+  assert.ok(hState['claude-code:published'], 'سجل الأرشيف الموجود في النسخة يبقى');
+  assert.equal(hState['claude-code:unpublished'], undefined, 'سجل الأرشيف المحذوف يُنسى فتُعاد أرشفته');
+  passedChecks.push('اختبار إعادة الأرشفة بعد الاستيراد (يُنسى سجل المحادثة التي حذفتها المطابقة، ويبقى سجل الموجود) بنجاح.');
+
   // 4. خزنة مختلفة ونسخة معدّلة وملف لم يصل بعد
   const D = makeDevice(base, 'Stranger', syncRoot, config.paths.encryptedVaultFile);
   fs.rmSync(D.vaultFile);

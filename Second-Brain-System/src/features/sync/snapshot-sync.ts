@@ -199,6 +199,27 @@ function applySharedState(ctx: SyncContext, entries: SharedEntries): void {
 }
 
 /**
+ * Hint بالعربي: دالة تنظيف سجل الأرشفة المحلي بعد الاستيراد. الاستيراد يطابق Obsidian مع النسخة القادمة،
+ *               فقد يحذف محادثة أرشفها هذا الجهاز ولم تُنشر بعد. السجل (data/harvest-state.json، محلي)
+ *               كان سيظنها مؤرشفة فلا يعيدها أبداً، لذلك يُنسى كل ما حُذف ملفه، فتُعاد أرشفته في الدورة التالية.
+ *               المخرجات: عدد الجلسات التي ستُعاد أرشفتها.
+ */
+export function forgetMissingArchives(ctx: SyncContext): number {
+  const file = path.join(ctx.dataDir, 'harvest-state.json');
+  const state = readJsonFileSafe<{ version?: number; sessions?: Record<string, { outFile?: string }> } | null>(file, null);
+  if (!state || !state.sessions) return 0;
+  let forgotten = 0;
+  for (const [key, entry] of Object.entries(state.sessions)) {
+    if (!entry?.outFile || !fs.existsSync(entry.outFile)) {
+      delete state.sessions[key];
+      forgotten += 1;
+    }
+  }
+  if (forgotten) writeFileAtomic(file, JSON.stringify(state, null, 2));
+  return forgotten;
+}
+
+/**
  * Hint بالعربي: نتيجة فحص حالة المزامنة.
  */
 export interface SyncCheck {
@@ -231,7 +252,7 @@ export function checkSync(ctx: SyncContext): SyncCheck {
 export function importLatestSnapshot(
   ctx: SyncContext,
   vault: UnlockedVault
-): { imported: boolean; version?: number; from?: string; localBackup?: string; hadLocalChanges?: boolean } {
+): { imported: boolean; version?: number; from?: string; localBackup?: string; hadLocalChanges?: boolean; reharvest?: number } {
   const manifest = readManifest(ctx);
   const state = readLocalSyncState(ctx);
   if (!manifest || manifest.latestVersion <= state.baseVersion) return { imported: false };
@@ -257,9 +278,10 @@ export function importLatestSnapshot(
   const hadLocalChanges = hashSharedState(local) !== state.baseHash && state.baseVersion > 0;
   const localBackup = saveLocalBackup(ctx, vault, local);
   applySharedState(ctx, entries);
+  const reharvest = forgetMissingArchives(ctx);
   writeLocalSyncState(ctx, { baseVersion: snap.snapshotVersion, baseHash: snap.contentHash, lastImportAt: new Date().toISOString(), lastError: undefined });
-  logSystemInfo('Sync', `استُورد الإصدار ${snap.snapshotVersion} من «${snap.device.deviceName}». نسخة احتياطية محلية: ${localBackup}`);
-  return { imported: true, version: snap.snapshotVersion, from: snap.device.deviceName, localBackup, hadLocalChanges };
+  logSystemInfo('Sync', `استُورد الإصدار ${snap.snapshotVersion} من «${snap.device.deviceName}». نسخة احتياطية محلية: ${localBackup}` + (reharvest ? `، وستُعاد أرشفة ${reharvest} محادثة حُذفت بالمطابقة.` : ''));
+  return { imported: true, version: snap.snapshotVersion, from: snap.device.deviceName, localBackup, hadLocalChanges, reharvest };
 }
 
 /**
