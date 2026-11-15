@@ -18,16 +18,20 @@ import { assertSettingsAuth } from './state-routes.ts';
 
 const PROJECT_LOCATE_PATH = /^\/api\/projects\/([a-z0-9_-]{1,80})\/locate$/;
 
+/** اسم المجلد المعتمد داخل My Drive لكل ما يخص Second Brain (المزامنة والنسخ الإضافية) */
+export const DRIVE_APP_FOLDER = 'Second Brain';
+
 /**
  * Hint بالعربي: دالة اقتراح مجلدات Google Drive الموجودة على هذا الجهاز (لتسهيل الإعداد).
+ *               المجلد المعتمد «My Drive/Second Brain» يأتي أولاً إن وُجد، ثم My Drive نفسه.
  */
 export function detectDriveFolders(): string[] {
-  const found: string[] = [];
+  const roots: string[] = [];
   if (process.platform === 'win32') {
     for (const letter of 'DEFGHIJKLMNOPQRSTUVWXYZ') {
       for (const name of ['My Drive', 'ملفاتي في Drive']) {
         const p = `${letter}:\\${name}`;
-        if (fs.existsSync(p)) found.push(p);
+        if (fs.existsSync(p)) roots.push(p);
       }
     }
   } else if (process.platform === 'darwin') {
@@ -37,14 +41,15 @@ export function detectDriveFolders(): string[] {
         if (!d.startsWith('GoogleDrive-')) continue;
         for (const name of ['My Drive', 'ملفاتي في Drive']) {
           const p = path.join(cloud, d, name);
-          if (fs.existsSync(p)) found.push(p);
+          if (fs.existsSync(p)) roots.push(p);
         }
       }
     } catch {
       // لا يوجد Google Drive
     }
   }
-  return found;
+  const preferred = roots.map((r) => path.join(r, DRIVE_APP_FOLDER)).filter((p) => fs.existsSync(p));
+  return [...preferred, ...roots];
 }
 
 function failAs400(fn: () => { messageAr: string }): { messageAr: string } {
