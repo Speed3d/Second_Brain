@@ -48,6 +48,7 @@
       <button type="button" class="nav-btn" data-action="view" data-view="memory"><span aria-hidden="true">🧠</span><span>الذاكرة</span></button>
       <button type="button" class="nav-btn" data-action="view" data-view="emergency"><span aria-hidden="true">🛡️</span><span>الطوارئ</span></button>
       <button type="button" class="nav-btn" data-action="view" data-view="connect"><span aria-hidden="true">🔌</span><span>الربط</span></button>
+      <button type="button" class="nav-btn" data-action="view" data-view="sync"><span aria-hidden="true">🔄</span><span>المزامنة</span></button>
       <button type="button" class="nav-btn" data-action="view" data-view="settings"><span aria-hidden="true">⚙️</span><span>الإعدادات</span></button>
       <div class="sidebar-foot">
         <button type="button" class="icon-btn" id="soundToggle" data-action="toggle-sound" aria-pressed="false" title="المؤثرات الصوتية">🔇</button>
@@ -56,6 +57,10 @@
     </nav>
 
     <main id="main" class="views" tabindex="-1">
+      <div class="readonly-banner" id="readonlyBanner" role="status" hidden>
+        <span id="readonlyText"></span>
+        <button type="button" class="btn btn-ghost btn-sm" data-action="view" data-view="sync">🔄 المزامنة</button>
+      </div>
 
       <!-- القيادة: النواة + المحادثة -->
       <section class="view is-active" data-panel="command" aria-labelledby="h-command">
@@ -119,6 +124,42 @@
         </form>
         <div class="report" id="projectsReport" hidden></div>
         <div class="card-grid" id="projectsList"></div>
+      </section>
+
+      <!-- المزامنة بين الأجهزة (المرحلة ج) -->
+      <section class="view" data-panel="sync" aria-labelledby="h-sync" hidden>
+        <div class="view-head">
+          <h1 id="h-sync">المزامنة بين الأجهزة</h1>
+          <div class="toolbar"><button type="button" class="btn btn-ghost" data-action="sync-refresh">🔄 تحديث الحالة</button></div>
+        </div>
+        <p class="small muted">كل جهاز يعمل وحده بالكامل، وتنتقل البيانات بينها بنسخ <strong>مشفّرة بمفتاح الخزنة</strong> عبر مجلد Google Drive، فلا يرى Google أي محتوى. جهاز واحد فقط يكتب في كل مرة، والباقي في وضع القراءة، حتى لا تتعارض التعديلات.</p>
+
+        <article class="card">
+          <div class="card-head"><h2 id="syncDeviceTitle">هذا الجهاز</h2><span class="badge" id="syncModeBadge"></span></div>
+          <dl class="kv" id="syncFacts"></dl>
+          <p class="small" id="syncProblem" hidden></p>
+          <div class="card-actions" data-commander-only>
+            <button type="button" class="btn btn-primary btn-sm" data-action="sync-take" hidden>✍️ انقل الكتابة إلى هذا الجهاز</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-action="sync-publish" hidden>⬆️ انشر الآن</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-action="sync-release" hidden>🔓 اترك الكتابة (للانتقال إلى جهاز آخر)</button>
+          </div>
+          <p class="small muted">التغييرات تُنشر تلقائياً كل دقيقتين وعند قفل الخزنة. وعند فتح الخزنة يُستورد أي إصدار أحدث من الأجهزة الأخرى، بعد حفظ نسخة احتياطية من حالة هذا الجهاز.</p>
+        </article>
+
+        <details class="card" data-commander-only>
+          <summary>⚙️ إعداد المزامنة على هذا الجهاز (يتطلب كلمة المرور الرئيسية)</summary>
+          <ol class="steps small">
+            <li>ثبّت <strong>Google Drive for desktop</strong> من <span class="mono">google.com/drive/download</span> وسجّل الدخول بحسابك (على كل جهاز).</li>
+            <li>اختر مجلد «My Drive» أدناه (أو أي مجلد مُزامَن)، وفعّل المزامنة.</li>
+            <li>على الجهاز الأول: «انقل الكتابة إلى هذا الجهاز» فيُنشر أول إصدار. على الأجهزة الأخرى: افتح الخزنة فيُستورد تلقائياً.</li>
+          </ol>
+          <form data-form="sync-settings" class="form-grid">
+            <label class="check span-2"><input type="checkbox" name="enabled" /> تفعيل المزامنة على هذا الجهاز</label>
+            <label class="span-2">مجلد المزامنة<input name="folder" dir="ltr" maxlength="500" placeholder="G:\My Drive" list="syncFolderSuggestions" /></label>
+            <datalist id="syncFolderSuggestions"></datalist>
+            <div class="span-2 form-actions"><button type="submit" class="btn btn-primary">💾 حفظ</button></div>
+          </form>
+        </details>
       </section>
 
       <!-- دليل ربط النماذج -->
@@ -250,6 +291,7 @@
             <button type="button" class="btn btn-ghost" data-action="project-open" data-target="folder">📂 فتح المجلد</button>
             <button type="button" class="btn btn-ghost" data-action="project-open" data-target="vscode">🧑‍💻 فتح في VS Code</button>
             <button type="button" class="btn btn-primary" data-action="project-rescan">🔄 إعادة الفحص</button>
+            <button type="button" class="btn btn-ghost" data-action="project-locate">📍 مكانه على هذا الجهاز</button>
             <button type="button" class="btn btn-ghost" data-action="project-edit">✏️ تعديل</button>
             <button type="button" class="btn btn-danger" data-action="project-remove">⏹️ إيقاف المراقبة</button>
           </div>

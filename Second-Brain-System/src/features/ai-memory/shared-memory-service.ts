@@ -96,7 +96,12 @@ ${fullEntry.keyDecisionsAr.map((d) => `* ${d}`).join('\n')}
 export function querySharedAIMemory(filterProjectId?: string): SharedAIMemoryEntry[] {
   const config = loadSystemConfig();
   const memoryStoreFile = path.join(config.paths.rootDir, 'Second-Brain-System', 'data', 'ai-memory-store.json');
-  const allEntries = readJsonFileSafe<SharedAIMemoryEntry[]>(memoryStoreFile, []);
+  const raw = readJsonFileSafe<unknown>(memoryStoreFile, []);
+  // سجل ناقص الحقول (ملف تالف أو مستورد من جهاز آخر) يُتجاهل بدل أن يُسقط المساعد والواجهة
+  const allEntries = (Array.isArray(raw) ? raw : []).filter(
+    (e): e is SharedAIMemoryEntry =>
+      Boolean(e) && typeof e === 'object' && ['id', 'projectId', 'title', 'summaryAr', 'createdAt'].every((k) => typeof (e as Record<string, unknown>)[k] === 'string')
+  ).map((e) => ({ ...e, keyDecisionsAr: Array.isArray(e.keyDecisionsAr) ? e.keyDecisionsAr.filter((d) => typeof d === 'string') : [] }));
 
   if (!filterProjectId) {
     return allEntries;

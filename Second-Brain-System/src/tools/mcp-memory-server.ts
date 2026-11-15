@@ -19,6 +19,7 @@ import { redactSecrets } from '../shared/secret-redaction.ts';
 import { loadSystemConfig, readAppVersion } from '../core/config-manager.ts';
 import { querySharedAIMemory, recordSharedAIMemory } from '../features/ai-memory/shared-memory-service.ts';
 import { scanAndAnalyzeProject } from '../features/project-indexer/project-scanner.ts';
+import { checkWriteAccess } from '../features/sync/sync-context.ts';
 
 /** إصدارات البروتوكول المدعومة (الأحدث أولاً) */
 export const SUPPORTED_MCP_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
@@ -215,6 +216,9 @@ export function buildMcpTools(): ToolDefinition[] {
         if (decisions !== undefined && (!Array.isArray(decisions) || decisions.some((d) => typeof d !== 'string'))) {
           throw new McpInvalidParamsError('keyDecisionsAr يجب أن تكون قائمة نصوص.');
         }
+        // وضع القراءة (المرحلة ج): الذاكرة المشتركة يكتبها حامل صلاحية الكتابة فقط، وإلا ضاع التسجيل عند الاستيراد
+        const access = checkWriteAccess();
+        if (!access.allowed) throw new Error(`لم يُحفظ: ${access.reasonAr}`);
         const saved = recordSharedAIMemory({
           sourceAI: sourceAI as SharedAIMemoryEntry['sourceAI'],
           projectId: requiredString(args, 'projectId', 200),

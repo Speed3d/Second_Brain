@@ -183,4 +183,4 @@ powershell -ExecutionPolicy Bypass -File install\windows\install-windows.ps1 -Pr
 | 3. مثبّت Windows (معاينة + تثبيت) | ✅ | 2026-11-15: المعاينة ثم التثبيت الفعلي بموافقة القائد. «✔ هوية الجهاز موجودة مسبقاً لهذا الجهاز «DESKTOP-…» (لم تتغير)»، ونفس `deviceId`، ولا نسخة `.bak`. أُعيد إنشاء الاختصارات، والخادم يعمل، والعربية سليمة |
 | 4. الصوت (XTTS + Kareem احتياطي) | ✅ | 2026-11-15: `piper.exe --version` يعيد `1.2.0` (رمز 0)، فـ `probePiper()` يقبله. بعد إعادة تشغيل الخادم: `engine=xtts`، و `workerState=ready`، و `fallbackEngine=piper` (Kareem). توليد فعلي عبر `/api/tts` بـ XTTS نجح (Suad Qasim). `/api/health` = 1.8.4 |
 | 5. التوثيق والرفع | ✅ | 2026-11-15: الإصدار **1.8.5**، و `CHANGELOG.md`، و `docs/03`. الرفع مع الوسم `v1.8.5` بموافقة القائد |
-| المرحلة ج | ⏳ | |
+| المرحلة ج | 🔶 | 2026-11-15: الكود مكتمل (الإصدار **1.9.0**)، و 79/79 اختباراً. التجربة الفعلية بانتظار تثبيت Google Drive for desktop على الجهازين |

@@ -14,6 +14,7 @@ import { harvestLocalAITranscripts } from '../ai-memory/transcript-harvester.ts'
 import type { UnlockedVault } from '../vault/vault-manager.ts';
 import { countSecuredFiles, syncProjectWithChanges } from './obsidian-sync.ts';
 import { scanAndAnalyzeProject } from './project-scanner.ts';
+import { checkWriteAccess } from '../sync/sync-context.ts';
 
 /**
  * Hint بالعربي: ملخص فحص مشروع واحد.
@@ -64,6 +65,12 @@ export function startProjectWatcher(getVault: () => UnlockedVault | null): { run
 
   const runNow = (): void => {
     if (running) return;
+    // وضع القراءة (المرحلة ج): المراقب يكتب في Obsidian المشترك، فلا يعمل إلا على حامل صلاحية الكتابة
+    const access = checkWriteAccess();
+    if (!access.allowed) {
+      logSystemInfo('ProjectWatcher', `دورة المراقبة مؤجلة: ${access.reasonAr}`);
+      return;
+    }
     running = true;
     try {
       const summary = rescanAllProjects(getVault());

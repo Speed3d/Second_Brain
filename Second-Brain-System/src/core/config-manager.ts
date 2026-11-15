@@ -44,7 +44,7 @@ const IDENTITY_KEYS: Array<keyof BrandingIdentity> = [
   'version',
 ];
 /** مفاتيح الإعدادات التي تُنقل إلى settings.json */
-const SETTINGS_KEYS = ['serverPort', 'paths', 'aiConfig', 'connectors', 'watcher', 'security', 'developerMode', 'watchedProjects'] as const;
+const SETTINGS_KEYS = ['serverPort', 'paths', 'aiConfig', 'connectors', 'watcher', 'security', 'developerMode', 'watchedProjects', 'sync'] as const;
 const VALID_PROVIDERS: AIProviderId[] = ['claude-cli', 'claude', 'gemini', 'ollama', 'local'];
 
 /**
@@ -185,6 +185,8 @@ export function normalizeSystemConfig(raw: Record<string, unknown>): { config: S
   const interval = Number(watcher.intervalMinutes);
 
   const projects: WatchedProjectConfig[] = [];
+  // مسار المشروع على هذا الجهاز (المرحلة ج): ملف محلي غير مُزامَن يتقدّم على المسار المشترك
+  const devicePaths = readDevicePathOverrides(rootDir);
   if (Array.isArray(raw.watchedProjects)) {
     for (const item of raw.watchedProjects) {
       const o = obj(item);
@@ -192,7 +194,7 @@ export function normalizeSystemConfig(raw: Record<string, unknown>): { config: S
         projects.push({
           id: o.id,
           name: o.name,
-          path: resolveConfiguredPath(o.path, o.path, rootDir),
+          path: typeof devicePaths[o.id] === 'string' ? devicePaths[o.id] : resolveConfiguredPath(o.path, o.path, rootDir),
           descriptionAr: str(o.descriptionAr, ''),
           wifeSummaryAr: str(o.wifeSummaryAr, ''),
           monthlyIncome: str(o.monthlyIncome, 'غير محدد بعد'),
@@ -369,9 +371,35 @@ export function registerWatchedProject(
   const raw = readRawSettings(customConfigPath);
   const list = Array.isArray(raw.watchedProjects) ? (raw.watchedProjects as WatchedProjectConfig[]) : [];
   const idx = list.findIndex((p) => p.id === project.id);
-  if (idx >= 0) list[idx] = project;
-  else list.push(project);
+  if (idx >= 0) {
+    // إن كان المسار الحالي هو مسار هذا الجهاز المحلي فلا يُكتب فوق المسار المشترك (الأصلي)
+    const override = readDevicePathOverrides(loadSystemConfig(customConfigPath).paths.rootDir)[project.id];
+    list[idx] = override && override === project.path ? { ...project, path: list[idx].path } : project;
+  } else list.push(project);
   return updateSystemSettings({ watchedProjects: list }, customConfigPath);
+}
+
+/**
+ * Hint بالعربي: دالة قراءة مسارات المشاريع الخاصة بهذا الجهاز (data/device-paths.json — لا تُزامَن).
+ */
+export function readDevicePathOverrides(rootDir: string): Record<string, string> {
+  const file = path.join(rootDir, 'Second-Brain-System', 'data', 'device-paths.json');
+  const raw = readJsonFileSafe<Record<string, unknown>>(file, {});
+  const out: Record<string, string> = {};
+  for (const [id, value] of Object.entries(raw)) if (typeof value === 'string' && path.isAbsolute(value)) out[id] = value;
+  return out;
+}
+
+/**
+ * Hint بالعربي: دالة تحديد مكان مشروع على هذا الجهاز فقط (زر «حدّد مكانه»). قيمة فارغة تحذف التحديد.
+ */
+export function setDeviceProjectPath(projectId: string, projectPath: string | null, customConfigPath: string = resolveDefaultConfigPath()): void {
+  const rootDir = loadSystemConfig(customConfigPath).paths.rootDir;
+  const file = path.join(rootDir, 'Second-Brain-System', 'data', 'device-paths.json');
+  const current = readDevicePathOverrides(rootDir);
+  if (projectPath) current[projectId] = path.resolve(projectPath);
+  else delete current[projectId];
+  writeFileAtomic(file, JSON.stringify(current, null, 2));
 }
 
 /**

@@ -189,6 +189,8 @@ export function getStateRoutes(): RouteDefinition[] {
             id: p.id,
             name: p.name,
             path: p.path,
+            // المرحلة ج: المشروع قد يكون مسجّلاً بمسار جهاز آخر
+            existsOnDevice: fs.existsSync(p.path),
             descriptionAr: p.descriptionAr,
             wifeSummaryAr: p.wifeSummaryAr,
             monthlyIncome: p.monthlyIncome,

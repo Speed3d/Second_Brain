@@ -17,6 +17,7 @@ import { askSecondBrainAssistant } from '../../assistant/assistant-engine.ts';
 import { testProviderConnection, TESTABLE_PROVIDERS } from '../../assistant/provider-tester.ts';
 import { buildProviders, PROVIDER_KEY_SECRET_IDS, resolveProviderKeys } from '../../assistant/providers/provider-registry.ts';
 import { appendConversationTurn } from '../../conversations/conversation-store.ts';
+import { checkWriteAccess } from '../../sync/sync-context.ts';
 import { deleteVaultSecret, upsertVaultSecret } from '../../vault/vault-manager.ts';
 import { HttpError, readString, sendJson, type RouteContext, type RouteDefinition } from '../http-utils.ts';
 
@@ -45,6 +46,8 @@ export function saveAssistantTurn(
   reply: { answerAr: string; providerUsed: AIProviderId; model: string }
 ): string | null {
   if (!session) return null;
+  // وضع القراءة (المرحلة ج): المحادثات مشتركة بين الأجهزة، فلا تُحفظ إلا على حامل صلاحية الكتابة
+  if (!checkWriteAccess().allowed) return null;
   try {
     return appendConversationTurn(session.vault, {
       conversationId: input.conversationId,
@@ -58,6 +61,16 @@ export function saveAssistantTurn(
     logSystemInfo('Conversations', `تعذر حفظ المحادثة: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
+}
+
+/**
+ * Hint بالعربي: دالة سبب عدم حفظ المحادثة (لعرضه تحت الرد): الخزنة مقفلة، أو الجهاز في وضع القراءة.
+ */
+export function unsavedReasonAr(session: RouteContext['session'], conversationId: string | null): string | null {
+  if (conversationId) return null;
+  if (!session) return 'لم تُحفظ هذه المحادثة لأن الخزنة مقفلة. افتح الخزنة ليُحفظ ما بعدها.';
+  const access = checkWriteAccess();
+  return access.allowed ? 'تعذر حفظ المحادثة.' : `لم تُحفظ هذه المحادثة: ${access.reasonAr}`;
 }
 
 /**
@@ -79,7 +92,7 @@ export function getAssistantRoutes(): RouteDefinition[] {
         const input = readAssistantInput(body);
         const reply = await askSecondBrainAssistant(input.question, input.mode, { history: input.history, vault: session?.vault });
         const conversationId = saveAssistantTurn(session, input, reply);
-        sendJson(res, 200, { ...reply, conversationId, saved: Boolean(conversationId) });
+        sendJson(res, 200, { ...reply, conversationId, saved: Boolean(conversationId), saveBlockedAr: unsavedReasonAr(session, conversationId) });
       },
     },
     {
@@ -105,7 +118,7 @@ export function getAssistantRoutes(): RouteDefinition[] {
             onReset: () => writeSseEvent(ctx, 'reset', {}),
           });
           const conversationId = saveAssistantTurn(ctx.session, input, reply);
-          writeSseEvent(ctx, 'done', { providerUsed: reply.providerUsed, model: reply.model, attempts: reply.attempts, conversationId, saved: Boolean(conversationId) });
+          writeSseEvent(ctx, 'done', { providerUsed: reply.providerUsed, model: reply.model, attempts: reply.attempts, conversationId, saved: Boolean(conversationId), saveBlockedAr: unsavedReasonAr(ctx.session, conversationId) });
         } catch (err) {
           writeSseEvent(ctx, 'error', { error: err instanceof Error ? err.message : 'حدث خطأ غير متوقع' });
         }
@@ -147,6 +160,7 @@ export function getAssistantRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/assistant/keys',
+      sharedWrite: true,
       requiresSession: true,
       commanderOnly: true,
       handler: ({ res, body, session }) => {

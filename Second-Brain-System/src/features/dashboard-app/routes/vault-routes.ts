@@ -24,9 +24,11 @@ import {
   getSecondsUntilAutoLock,
   getUnlockRetryAfterMs,
   openVaultSession,
+  peekActiveVault,
   recordUnlockFailure,
   recordUnlockSuccess,
 } from '../session-manager.ts';
+import { syncOnUnlock, syncTick } from '../../sync/sync-service.ts';
 
 const ALLOWED_CATEGORIES: VaultSecretItem['category'][] = ['email_account', 'password', 'api_key', 'recovery_code', 'billing'];
 
@@ -85,6 +87,7 @@ export function getVaultRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/vault/setup',
+      sharedWrite: true,
       handler: ({ res, body }) => {
         const masterPassword = readString(body, 'masterPassword', 512);
         const confirmPassword = readString(body, 'confirmPassword', 512);
@@ -121,11 +124,20 @@ export function getVaultRoutes(): RouteDefinition[] {
           throw new HttpError(401, 'كلمة المرور الرئيسية أو مفتاح الطوارئ غير صحيح!');
         }
         recordUnlockSuccess();
+        // المزامنة: استيراد أي إصدار أحدث من الأجهزة الأخرى قبل إنشاء الجلسة، ثم فتح الخزنة من الملف الجديد
+        const sync = syncOnUnlock(vault);
+        if (sync.imported) {
+          try {
+            vault = unlockVault(key);
+          } catch {
+            throw new HttpError(401, 'استُوردت خزنة أحدث من جهاز آخر وكلمة مرورها مختلفة. استخدم كلمة المرور الجديدة.');
+          }
+        }
         const token = openVaultSession(vault);
         sendJson(
           res,
           200,
-          { ok: true, unlockedBy: vault.unlockedBy, secretsCount: vault.secrets.length },
+          { ok: true, unlockedBy: vault.unlockedBy, secretsCount: vault.secrets.length, syncMessageAr: sync.messageAr ?? null },
           { 'Set-Cookie': buildSessionCookie(token) }
         );
       },
@@ -134,6 +146,8 @@ export function getVaultRoutes(): RouteDefinition[] {
       method: 'POST',
       path: '/api/vault/lock',
       handler: ({ res }) => {
+        // نشر آخر التغييرات قبل إغلاق الخزنة (إن كان هذا الجهاز حامل الكتابة)
+        syncTick(peekActiveVault());
         closeVaultSession();
         sendJson(res, 200, { ok: true }, { 'Set-Cookie': buildSessionCookie(null) });
       },
@@ -149,6 +163,7 @@ export function getVaultRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/vault/secrets',
+      sharedWrite: true,
       requiresSession: true,
       commanderOnly: true,
       handler: ({ res, body, session }) => {
@@ -178,6 +193,7 @@ export function getVaultRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/vault/secrets/delete',
+      sharedWrite: true,
       requiresSession: true,
       commanderOnly: true,
       handler: ({ res, body, session }) => {
@@ -189,6 +205,7 @@ export function getVaultRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/vault/change-password',
+      sharedWrite: true,
       requiresSession: true,
       commanderOnly: true,
       handler: ({ res, body, session }) => {
@@ -199,6 +216,7 @@ export function getVaultRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/vault/rotate-emergency-key',
+      sharedWrite: true,
       requiresSession: true,
       commanderOnly: true,
       handler: ({ res, body, session }) => {

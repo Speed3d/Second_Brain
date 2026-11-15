@@ -26,6 +26,7 @@ import { runConnectionGuideTests } from './11-connection-guide.test.ts';
 import { runClaudeSubscriptionTests } from './12-claude-subscription.test.ts';
 import { runConversationsAndVoiceTests } from './13-conversations-and-voice.test.ts';
 import { runInstallerTests } from './14-installer.test.ts';
+import { runSyncTests } from './15-sync.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -106,6 +107,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '14. اختبارات المثبّت والتشغيل التلقائي (سكربتات Windows و macOS، وضع المعاينة، الأيقونة)',
       file: 'tests/14-installer.test.ts',
       runner: runInstallerTests,
+    },
+    {
+      name: '15. اختبارات المزامنة بين الأجهزة (3 أجهزة وهمية: قفل الكتابة، النشر والاستيراد، منع التعارض، وضع القراءة)',
+      file: 'tests/15-sync.test.ts',
+      runner: runSyncTests,
     },
   ];
 

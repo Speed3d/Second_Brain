@@ -186,6 +186,90 @@
     if (view === 'emergency') loadBackups();
     if (view === 'settings') requireSettingsAuth();
     if (view === 'connect') loadProvidersGuide();
+    if (view === 'sync') loadSync();
+  }
+
+  // ===================== المزامنة (المرحلة ج) =====================
+  async function loadSync() {
+    let s;
+    try {
+      s = await api('/api/sync/status');
+    } catch (err) {
+      return;
+    }
+    state.sync = s;
+    renderReadonlyBanner();
+    if (!$('#syncFacts')) return;
+    const badge = $('#syncModeBadge');
+    if (!s.enabled) {
+      badge.className = 'badge';
+      badge.textContent = 'المزامنة مطفأة';
+    } else if (!s.ready) {
+      badge.className = 'badge warn';
+      badge.textContent = '⚠️ غير جاهزة';
+    } else if (s.canWrite) {
+      badge.className = 'badge ok';
+      badge.textContent = '✍️ حامل صلاحية الكتابة';
+    } else {
+      badge.className = 'badge warn';
+      badge.textContent = '📖 وضع القراءة';
+    }
+    $('#syncDeviceTitle').textContent = s.device ? 'هذا الجهاز: ' + s.device.deviceName : 'هذا الجهاز';
+    const fmt = (iso) => (iso ? formatDateAr(iso) : '—');
+    const leaseText = !s.lease
+      ? '—'
+      : s.lease.kind === 'none'
+        ? 'لا أحد'
+        : s.lease.kind === 'mine'
+          ? 'هذا الجهاز'
+          : s.lease.holder + (s.lease.kind === 'other-expired' ? ' (منتهي: لم يرسل إشارة حياة منذ أكثر من 30 دقيقة)' : '');
+    const facts = [
+      ['مجلد المزامنة', s.folder || '—'],
+      ['صلاحية الكتابة', leaseText],
+      ['إصدار هذا الجهاز', s.ready ? String(s.baseVersion) : '—'],
+      ['آخر إصدار منشور', s.ready ? String(s.latestVersion) + (s.latestFrom ? ' — من ' + s.latestFrom : '') : '—'],
+      ['تغييرات غير منشورة', s.ready ? (s.hasLocalChanges ? 'نعم' : 'لا') : '—'],
+      ['آخر استيراد', fmt(s.lastImportAt)],
+      ['آخر نشر', fmt(s.lastPublishAt)],
+    ];
+    if (s.lastError) facts.push(['آخر خطأ', s.lastError]);
+    $('#syncFacts').replaceChildren(...facts.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: v })]));
+    const problem = $('#syncProblem');
+    problem.hidden = !s.problemAr && !s.newerAvailable;
+    problem.textContent = s.problemAr || (s.newerAvailable ? '⬇️ يوجد إصدار أحدث من جهاز آخر؛ يُستورد عند فتح الخزنة أو عند نقل الكتابة إلى هنا.' : '');
+    $('[data-action="sync-take"]').hidden = !s.ready || s.canWrite;
+    $('[data-action="sync-publish"]').hidden = !s.ready || !s.canWrite;
+    $('[data-action="sync-release"]').hidden = !s.ready || !s.canWrite;
+    const form = $('[data-form="sync-settings"]');
+    if (form && !form.dataset.filled) {
+      form.elements.enabled.checked = Boolean(s.enabled);
+      form.elements.folder.value = s.folder || (s.suggestedFolders && s.suggestedFolders[0]) || '';
+      form.dataset.filled = '1';
+    }
+    $('#syncFolderSuggestions').replaceChildren(...(s.suggestedFolders || []).map((f) => el('option', { attrs: { value: f } })));
+  }
+
+  function renderReadonlyBanner() {
+    const s = state.sync;
+    const banner = $('#readonlyBanner');
+    if (!banner) return;
+    const readOnly = s && s.ready && !s.canWrite;
+    banner.hidden = !readOnly;
+    if (readOnly) {
+      $('#readonlyText').textContent =
+        s.lease && s.lease.holder
+          ? '📖 وضع القراءة: الكتابة الآن على «' + s.lease.holder + '». المحادثات لا تُحفظ، والتعديلات معطّلة حتى تنقل الكتابة إلى هنا.'
+          : '📖 وضع القراءة: لا يحمل أي جهاز صلاحية الكتابة بعد.';
+    }
+  }
+
+  async function syncAction(btn, pathName, body) {
+    const r = await busy(btn, () => api(pathName, body || {}));
+    if (!r) return;
+    toast(r.messageAr, 'ok', 7000);
+    state.sync = null;
+    await loadSync();
+    await loadState();
   }
 
   // ===================== حماية الإعدادات بكلمة المرور =====================
@@ -936,7 +1020,7 @@
         if (result.meta.conversationId) state.conversationId[mode] = result.meta.conversationId;
         else if (result.meta.saved === false && !state.unsavedWarned[mode]) {
           state.unsavedWarned[mode] = true;
-          reply.appendChild(el('span', { className: 'msg-meta', text: '— لم تُحفظ هذه المحادثة لأن الخزنة مقفلة. افتح الخزنة ليُحفظ ما بعدها.' }));
+          reply.appendChild(el('span', { className: 'msg-meta', text: '— ' + (result.meta.saveBlockedAr || 'لم تُحفظ هذه المحادثة.') }));
         }
       }
       if (autoSpeakEnabled()) speak(mode, false);
@@ -1406,6 +1490,22 @@
 
   // ===================== معالجات النماذج =====================
   const formHandlers = {
+    async 'sync-settings'(form, btn) {
+      await busy(btn, async () => {
+        try {
+          const r = await api('/api/sync/settings', { enabled: form.elements.enabled.checked, folder: form.elements.folder.value });
+          toast(r.messageAr, 'ok');
+          await loadSync();
+        } catch (err) {
+          if (err.data && err.data.needsSettingsAuth) {
+            toast('أدخل كلمة المرور الرئيسية ثم أعد الحفظ.', 'warn');
+            openSettingsAuth();
+            return;
+          }
+          throw err;
+        }
+      });
+    },
     async chat(form) {
       await ask(form.dataset.mode);
     },
@@ -1444,11 +1544,16 @@
     },
     async unlock(form, btn) {
       await busy(btn, async () => {
-        await api('/api/vault/unlock', formData(form));
+        const r = await api('/api/vault/unlock', formData(form));
         form.reset();
         await refreshVault();
         refreshProviders();
         toast('🔓 فُتحت الخزنة.', 'ok');
+        if (r.syncMessageAr) {
+          toast(r.syncMessageAr, 'ok', 9000);
+          await loadState();
+        }
+        loadSync();
       });
     },
     async 'family-unlock'(form, btn) {
@@ -1557,6 +1662,32 @@
     },
     'clear-chat': (b) => clearChat(b.dataset.mode),
     'open-conversations': (b) => openConversations(b.dataset.mode),
+    'sync-refresh': () => loadSync(),
+    'sync-publish': (b) => syncAction(b, '/api/sync/publish'),
+    'sync-release': (b) => {
+      if (!window.confirm('ستُنشر آخر التغييرات ثم تُترك صلاحية الكتابة، ويصبح هذا الجهاز في وضع القراءة. متابعة؟')) return;
+      syncAction(b, '/api/sync/release');
+    },
+    'sync-take': (b) => {
+      const s = state.sync || {};
+      let force = false;
+      if (s.lease && s.lease.kind === 'other') {
+        if (!window.confirm('الكتابة نشطة الآن على «' + s.lease.holder + '». نقلها قسراً قد يُضيع تغييراته غير المنشورة. هل الجهاز الآخر مطفأ أو معطّل فعلاً؟')) return;
+        force = true;
+      }
+      syncAction(b, '/api/sync/take-lease', { force: force });
+    },
+    'project-locate': async (b) => {
+      const d = state.projectDetails;
+      if (!d) return;
+      const target = window.prompt('المسار الكامل لمجلد «' + d.project.name + '» على هذا الجهاز (اتركه فارغاً لإلغاء التحديد المحلي):', d.project.pathExists ? d.project.path : '');
+      if (target === null) return;
+      const r = await busy(b, () => api('/api/projects/' + encodeURIComponent(d.project.id) + '/locate', { path: target.trim() }));
+      if (!r) return;
+      toast(r.messageAr, 'ok');
+      await loadState();
+      openProject(d.project.id);
+    },
     'test-voice': () => {
       state.lastAnswer.voiceTest = 'مرحباً، هذا اختبار الصوت العربي في العقل الثاني. إن سمعت هذه الجملة بوضوح فالنطق يعمل.';
       speak('voiceTest', true);
@@ -1757,9 +1888,13 @@
     setMode('commander');
     loadState();
     refreshVault().then(refreshProviders);
+    loadSync();
     setInterval(() => {
       if (!document.hidden) refreshVault();
     }, 30000);
+    setInterval(() => {
+      if (!document.hidden) loadSync();
+    }, 60000);
     setInterval(updateAutoLockBadge, 15000);
   }
 

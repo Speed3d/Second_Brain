@@ -52,6 +52,7 @@ export function getProjectRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/projects/add',
+      sharedWrite: true,
       commanderOnly: true,
       handler: ({ res, body, session }) => {
         const name = readString(body, 'name', 120).trim();
@@ -82,6 +83,7 @@ export function getProjectRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/projects/rescan',
+      sharedWrite: true,
       handler: ({ res, session }) => {
         sendJson(res, 200, { ok: true, vaultUnlocked: Boolean(session), projects: rescanAllProjects(session?.vault) });
       },
@@ -105,6 +107,7 @@ export function getProjectRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: /^\/api\/projects\/([a-z0-9_-]{1,80})\/summary$/,
+      sharedWrite: true,
       commanderOnly: true,
       handler: async ({ res, params, session }) => {
         const project = requireProject(params[0]);
@@ -116,6 +119,7 @@ export function getProjectRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: /^\/api\/projects\/([a-z0-9_-]{1,80})\/update$/,
+      sharedWrite: true,
       requiresSession: true,
       commanderOnly: true,
       handler: ({ res, params, body }) => {
@@ -136,6 +140,7 @@ export function getProjectRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: /^\/api\/projects\/([a-z0-9_-]{1,80})\/remove$/,
+      sharedWrite: true,
       requiresSession: true,
       commanderOnly: true,
       handler: ({ res, params }) => {
