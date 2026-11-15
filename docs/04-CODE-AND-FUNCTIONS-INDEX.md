@@ -1,7 +1,7 @@
 # 📑 الفهرس الحي الشامل للدوال والأكواد والأدوات (Live Code & Function Registry)
 
 > **تطبيقاً للقانون السابع (7):** يتم توليد وتحديث هذا الفهرس تلقائياً بواسطة الأداة `src/tools/code-registry-scanner.ts`.  
-> **تاريخ آخر فحص آلي:** `2026-11-15T10:53:29.284Z`  
+> **تاريخ آخر فحص آلي:** `2026-11-15T11:41:41.379Z`  
 > **إجمالي الدوال المفحوصة:** `252` | **المستخدمة حالياً (Active):** `252` | **الجاهزة للتوسع المستقبلي:** `0`
 
 ---
@@ -136,8 +136,8 @@
 | `assertSettingsAuth` | **Features** | `src/features/dashboard-app/routes/state-routes.ts#L111` | دالة التأكد من صلاحية الإعدادات: قبل إنشاء الخزنة مسموح (أول تشغيل)، وبعدها تُطلب كلمة المرور الرئيسية حديثاً (خلال 5 دقائق) — مفتاح الطوارئ لا يكفي. | `src/features/dashboard-app/routes/maintenance-routes.ts`, `src/features/dashboard-app/routes/state-routes.ts (داخلي)`, `src/features/dashboard-app/routes/sync-routes.ts` | **مستخدم (Active)** |
 | `buildEditableSettings` | **Features** | `src/features/dashboard-app/routes/state-routes.ts#L121` | دالة بناء الإعدادات القابلة للتعديل من الواجهة (بدون المسارات والمشاريع). | `src/features/dashboard-app/routes/state-routes.ts (داخلي)` | **مستخدم (Active)** |
 | `getStateRoutes` | **Features** | `src/features/dashboard-app/routes/state-routes.ts#L157` | دالة إرجاع مسارات الصفحة والملفات الثابتة والحالة والإعدادات. | `src/features/dashboard-app/desktop-server.ts` | **مستخدم (Active)** |
-| `detectDriveFolders` | **Features** | `src/features/dashboard-app/routes/sync-routes.ts#L28` | دالة اقتراح مجلدات Google Drive الموجودة على هذا الجهاز (لتسهيل الإعداد). المجلد المعتمد «My Drive/Second Brain» يأتي أولاً إن وُجد، ثم My Drive نفسه. | `src/features/dashboard-app/routes/sync-routes.ts (داخلي)` | **مستخدم (Active)** |
-| `getSyncRoutes` | **Features** | `src/features/dashboard-app/routes/sync-routes.ts#L67` | دالة إرجاع مسارات المزامنة. | `src/features/dashboard-app/desktop-server.ts` | **مستخدم (Active)** |
+| `detectDriveFolders` | **Features** | `src/features/dashboard-app/routes/sync-routes.ts#L34` | دالة اقتراح مجلدات Google Drive الموجودة على هذا الجهاز (لتسهيل الإعداد). المجلد المعتمد «My Drive/Second Brain» يأتي أولاً إن وُجد، ثم My Drive نفسه. | `src/features/dashboard-app/routes/sync-routes.ts (داخلي)`, `tests/15-sync.test.ts` | **مستخدم (Active)** |
+| `getSyncRoutes` | **Features** | `src/features/dashboard-app/routes/sync-routes.ts#L74` | دالة إرجاع مسارات المزامنة. | `src/features/dashboard-app/desktop-server.ts` | **مستخدم (Active)** |
 | `toClientSecret` | **Features** | `src/features/dashboard-app/routes/vault-routes.ts#L38` | دالة تحويل السر إلى شكل آمن للإرسال للواجهة (الملفات الحساسة تُرسل بدون محتواها). | `src/features/dashboard-app/routes/vault-routes.ts (داخلي)` | **مستخدم (Active)** |
 | `assertUnlockAllowed` | **Features** | `src/features/dashboard-app/routes/vault-routes.ts#L60` | دالة التأكد من عدم وجود تأخير بسبب محاولات فاشلة سابقة (ترمي 429 إذا كان هناك انتظار). | `src/features/dashboard-app/routes/emergency-routes.ts`, `src/features/dashboard-app/routes/state-routes.ts`, `src/features/dashboard-app/routes/vault-routes.ts (داخلي)` | **مستخدم (Active)** |
 | `getVaultRoutes` | **Features** | `src/features/dashboard-app/routes/vault-routes.ts#L72` | دالة إرجاع قائمة مسارات الخزنة لتسجيلها في الموجّه الرئيسي. | `src/features/dashboard-app/desktop-server.ts` | **مستخدم (Active)** |

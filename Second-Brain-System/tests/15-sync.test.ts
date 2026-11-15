@@ -16,6 +16,7 @@ import type { AddressInfo } from 'node:net';
 import { loadSystemConfig, readDevicePathOverrides, readRawSettings, registerWatchedProject, setDeviceProjectPath, updateSystemSettings } from '../src/core/config-manager.ts';
 import { startSecondBrainDesktopServer } from '../src/features/dashboard-app/desktop-server.ts';
 import { resetSessionStateForTests } from '../src/features/dashboard-app/session-manager.ts';
+import { detectDriveFolders, DRIVE_APP_FOLDER } from '../src/features/dashboard-app/routes/sync-routes.ts';
 import { acquireLease, checkWriteAccess, heartbeatLease, LEASE_EXPIRY_MS, readLeaseStatus, readLocalSyncState, releaseLease, type SyncContext } from '../src/features/sync/sync-context.ts';
 import { checkSync, importLatestSnapshot, publishSnapshot, readManifest } from '../src/features/sync/snapshot-sync.ts';
 import { createVault, unlockVault } from '../src/features/vault/vault-manager.ts';
@@ -162,6 +163,23 @@ export async function runSyncTests(): Promise<string[]> {
   setDeviceProjectPath(project.id, null);
   assert.equal(loadSystemConfig().watchedProjects.find((p) => p.id === project.id)!.path, project.path);
   passedChecks.push('اختبار مسارات المشاريع لكل جهاز (التحديد المحلي، تقدّمه على المشترك، عدم الكتابة فوق المسار المشترك، الإلغاء) بنجاح.');
+
+  // اقتراح مجلد Google Drive على الماك بكل لغات الواجهة («My Drive»، و«ملفاتي» على الماك العربي)
+  const fakeHome = path.join(loadSystemConfig().paths.rootDir, 'fake-mac-home');
+  const cloud = path.join(fakeHome, 'Library', 'CloudStorage');
+  assert.deepEqual(detectDriveFolders({ platform: 'darwin', homeDir: fakeHome }), [], 'بلا Google Drive لا اقتراحات');
+  const arabicRoot = path.join(cloud, 'GoogleDrive-arabic', 'ملفاتي');
+  const englishRoot = path.join(cloud, 'GoogleDrive-english', 'My Drive');
+  fs.mkdirSync(path.join(arabicRoot, DRIVE_APP_FOLDER), { recursive: true });
+  fs.mkdirSync(englishRoot, { recursive: true });
+  fs.mkdirSync(path.join(cloud, 'Dropbox', 'My Drive'), { recursive: true });
+  const suggested = detectDriveFolders({ platform: 'darwin', homeDir: fakeHome });
+  assert.equal(suggested[0], path.join(arabicRoot, DRIVE_APP_FOLDER), 'المجلد المعتمد داخل «ملفاتي» يأتي أولاً');
+  assert.ok(suggested.includes(arabicRoot), '«ملفاتي» (الماك بالعربية) يُكتشف');
+  assert.ok(suggested.includes(englishRoot), '«My Drive» يُكتشف');
+  assert.ok(!suggested.some((p) => p.includes('Dropbox')), 'مجلدات غير Google Drive لا تُقترح');
+  fs.rmSync(fakeHome, { recursive: true, force: true });
+  passedChecks.push('اختبار اقتراح مجلد Google Drive على الماك («My Drive» و«ملفاتي» بالعربية، والمجلد المعتمد أولاً، وتجاهل غير Google Drive) بنجاح.');
 
   // 6. الخادم: الإعداد، الاستيراد عند فتح الخزنة، ووضع القراءة
   const serverDrive = path.join(base, 'Server-Drive');

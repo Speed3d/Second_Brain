@@ -22,24 +22,31 @@ const PROJECT_LOCATE_PATH = /^\/api\/projects\/([a-z0-9_-]{1,80})\/locate$/;
 export const DRIVE_APP_FOLDER = 'Second Brain';
 
 /**
+ * أسماء مجلد My Drive حسب لغة Google Drive for desktop:
+ * الإنجليزية «My Drive»، والعربية على الماك «ملفاتي» (جُرّب على MacBook في 2026-11-15)، و«ملفاتي في Drive» في واجهات أخرى.
+ */
+export const DRIVE_ROOT_NAMES = ['My Drive', 'ملفاتي', 'ملفاتي في Drive'] as const;
+
+/**
  * Hint بالعربي: دالة اقتراح مجلدات Google Drive الموجودة على هذا الجهاز (لتسهيل الإعداد).
  *               المجلد المعتمد «My Drive/Second Brain» يأتي أولاً إن وُجد، ثم My Drive نفسه.
  */
-export function detectDriveFolders(): string[] {
+export function detectDriveFolders(opts: { platform?: NodeJS.Platform; homeDir?: string } = {}): string[] {
+  const platform = opts.platform ?? process.platform;
   const roots: string[] = [];
-  if (process.platform === 'win32') {
+  if (platform === 'win32') {
     for (const letter of 'DEFGHIJKLMNOPQRSTUVWXYZ') {
-      for (const name of ['My Drive', 'ملفاتي في Drive']) {
+      for (const name of DRIVE_ROOT_NAMES) {
         const p = `${letter}:\\${name}`;
         if (fs.existsSync(p)) roots.push(p);
       }
     }
-  } else if (process.platform === 'darwin') {
-    const cloud = path.join(os.homedir(), 'Library', 'CloudStorage');
+  } else if (platform === 'darwin') {
+    const cloud = path.join(opts.homeDir ?? os.homedir(), 'Library', 'CloudStorage');
     try {
       for (const d of fs.readdirSync(cloud)) {
         if (!d.startsWith('GoogleDrive-')) continue;
-        for (const name of ['My Drive', 'ملفاتي في Drive']) {
+        for (const name of DRIVE_ROOT_NAMES) {
           const p = path.join(cloud, d, name);
           if (fs.existsSync(p)) roots.push(p);
         }
