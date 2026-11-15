@@ -17,7 +17,7 @@ import { logSystemInfo } from '../../core/logger.ts';
 import { listFilesRecursive, readJsonFileSafe, toSafeFileName, writeFileAtomic } from '../../shared/file-helpers.ts';
 import type { SealedData } from '../../shared/types.ts';
 import { readVaultFile, type UnlockedVault, type VaultKeyEnvelopes } from '../vault/vault-manager.ts';
-import { readLocalSyncState, readLeaseStatus, writeLocalSyncState, type DeviceInfo, type SyncContext } from './sync-context.ts';
+import { readLocalSyncState, readLeaseStatus, readSyncJson, writeLocalSyncState, type DeviceInfo, type SyncContext } from './sync-context.ts';
 
 const SNAPSHOT_PREFIX = 'Second-Brain-Snapshot-';
 const SNAPSHOT_SUFFIX = '.enc.json';
@@ -108,11 +108,25 @@ function manifestPath(ctx: SyncContext): string {
 }
 
 /**
- * Hint بالعربي: دالة قراءة manifest.json (null إن لم يُنشر شيء بعد).
+ * Hint بالعربي: دالة قراءة manifest.json: null فقط إن لم يُنشر شيء بعد (الملف غير موجود).
+ *               إن تعذّرت قراءته أو كانت صيغته غير معروفة ← خطأ، لا null (حتى لا يُظن أنه أول جهاز).
  */
 export function readManifest(ctx: SyncContext): SyncManifest | null {
-  const m = readJsonFileSafe<SyncManifest | null>(manifestPath(ctx), null);
-  return m && m.format === 'second-brain-sync-manifest' && Number.isInteger(m.latestVersion) ? m : null;
+  const m = readSyncJson<SyncManifest>(manifestPath(ctx));
+  if (!m) return null;
+  if (m.format !== 'second-brain-sync-manifest' || !Number.isInteger(m.latestVersion)) {
+    throw new Error('manifest.json على مجلد المزامنة بصيغة غير معروفة. لم يُغيَّر أي شيء.');
+  }
+  return m;
+}
+
+/**
+ * Hint بالعربي: هل يوجد أي نسخة منشورة في snapshots/؟ (حماية إضافية قبل اعتبار الجهاز «أول جهاز»)
+ */
+export function hasAnySnapshots(ctx: SyncContext): boolean {
+  const dir = path.join(ctx.syncRoot, 'snapshots');
+  if (!fs.existsSync(dir)) return false;
+  return fs.readdirSync(dir).some((n) => n.startsWith(SNAPSHOT_PREFIX) && n.endsWith(SNAPSHOT_SUFFIX));
 }
 
 function sealEntries(entries: SharedEntries, vault: UnlockedVault): SealedData {
@@ -222,7 +236,12 @@ export function importLatestSnapshot(
   const state = readLocalSyncState(ctx);
   if (!manifest || manifest.latestVersion <= state.baseVersion) return { imported: false };
   const file = path.join(ctx.syncRoot, 'snapshots', path.basename(manifest.file));
-  const snap = readJsonFileSafe<SnapshotFile | null>(file, null);
+  let snap: SnapshotFile | null;
+  try {
+    snap = readSyncJson<SnapshotFile>(file);
+  } catch (err) {
+    throw new Error(`تعذّرت قراءة النسخة ${manifest.latestVersion}: ${err instanceof Error ? err.message : String(err)}`);
+  }
   if (!snap || snap.format !== 'second-brain-sync-snapshot' || snap.snapshotVersion !== manifest.latestVersion) {
     throw new Error('النسخة المشار إليها في manifest.json غير موجودة بعد على هذا الجهاز (ربما ما زال Google Drive يُنزّلها). أعد المحاولة بعد قليل.');
   }

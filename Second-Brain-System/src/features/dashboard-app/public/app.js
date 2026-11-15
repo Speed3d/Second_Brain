@@ -237,7 +237,11 @@
     const problem = $('#syncProblem');
     problem.hidden = !s.problemAr && !s.newerAvailable;
     problem.textContent = s.problemAr || (s.newerAvailable ? '⬇️ يوجد إصدار أحدث من جهاز آخر؛ يُستورد عند فتح الخزنة أو عند نقل الكتابة إلى هنا.' : '');
-    $('[data-action="sync-take"]').hidden = !s.ready || s.canWrite;
+    // حامل الكتابة المتأخر عن إصدار أحدث (مثلاً أخذ القفل دون استيراد) يحتاج زر الاستيراد، وإلا يعلق:
+    // النشر والترك كلاهما يُرفضان فوق إصدار أحدث
+    const takeBtn = $('[data-action="sync-take"]');
+    takeBtn.hidden = !s.ready || (s.canWrite && !s.newerAvailable);
+    takeBtn.textContent = s.canWrite ? '⬇️ استورد الإصدار الأحدث (' + s.latestVersion + ')' : '✍️ انقل الكتابة إلى هذا الجهاز';
     $('[data-action="sync-publish"]').hidden = !s.ready || !s.canWrite;
     $('[data-action="sync-release"]').hidden = !s.ready || !s.canWrite;
     const form = $('[data-form="sync-settings"]');

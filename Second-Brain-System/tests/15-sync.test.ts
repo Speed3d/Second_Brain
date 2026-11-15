@@ -17,7 +17,7 @@ import { loadSystemConfig, readDevicePathOverrides, readRawSettings, registerWat
 import { startSecondBrainDesktopServer } from '../src/features/dashboard-app/desktop-server.ts';
 import { resetSessionStateForTests } from '../src/features/dashboard-app/session-manager.ts';
 import { detectDriveFolders, DRIVE_APP_FOLDER } from '../src/features/dashboard-app/routes/sync-routes.ts';
-import { acquireLease, checkWriteAccess, heartbeatLease, LEASE_EXPIRY_MS, readLeaseStatus, readLocalSyncState, releaseLease, type SyncContext } from '../src/features/sync/sync-context.ts';
+import { acquireLease, checkWriteAccess, describeSyncIoError, heartbeatLease, LEASE_EXPIRY_MS, readLeaseStatus, readLocalSyncState, releaseLease, type SyncContext } from '../src/features/sync/sync-context.ts';
 import { checkSync, importLatestSnapshot, publishSnapshot, readManifest } from '../src/features/sync/snapshot-sync.ts';
 import { createVault, unlockVault } from '../src/features/vault/vault-manager.ts';
 import { postJson, rawRequest } from './06-security.test.ts';
@@ -241,6 +241,65 @@ export async function runSyncTests(): Promise<string[]> {
     assert.match(robust.body, /event: done/, 'السجل الناقص يُتجاهل ولا يُسقط المساعد');
     fs.writeFileSync(memFile, memBefore);
     passedChecks.push('اختبار تجاهل سجل ذاكرة ناقص الحقول بدل إسقاط المساعد بنجاح.');
+
+    // ملف غير مقروء على مجلد المزامنة (مثل EDEADLK من Google Drive على الماك) يوقف العملية ولا يُعامل كأنه غير موجود
+    const otherRoot = path.join(serverDrive, 'Second-Brain-Sync');
+    acquireLease(Other, { force: true });
+    importLatestSnapshot(Other, vaultOther);
+    publishSnapshot(Other, vaultOther, { force: true });
+    const manifestFile = path.join(otherRoot, 'manifest.json');
+    const manifestText = read(manifestFile);
+    const snapshotsBefore = fs.readdirSync(path.join(otherRoot, 'snapshots')).sort();
+    fs.rmSync(manifestFile);
+    fs.mkdirSync(manifestFile); // قراءته تفشل بخطأ غير ENOENT
+    assert.throws(() => readManifest(Other), /manifest\.json/, 'manifest غير المقروء خطأ، لا «لا يوجد»');
+    const blockedTake = await postJson(port, '/api/sync/take-lease', { force: true }, cookie);
+    assert.notEqual(blockedTake.status, 200, 'لا يُنقل القفل إن تعذّرت قراءة manifest');
+    assert.match(JSON.parse(blockedTake.body).error, /manifest\.json/);
+    assert.equal(readLeaseStatus(Other).kind, 'mine', 'القفل بقي عند حامله');
+    assert.deepEqual(fs.readdirSync(path.join(otherRoot, 'snapshots')).sort(), snapshotsBefore, 'لم يُنشر «إصدار أول» فوق النسخ الموجودة');
+    fs.rmSync(manifestFile, { recursive: true });
+    const noManifest = await postJson(port, '/api/sync/take-lease', { force: true }, cookie);
+    assert.notEqual(noManifest.status, 200, 'نسخ موجودة بلا manifest: لا يُعتبر أول جهاز');
+    assert.match(JSON.parse(noManifest.body).error, /manifest\.json غير موجود/);
+    fs.writeFileSync(manifestFile, manifestText);
+
+    const leaseFile = path.join(otherRoot, 'write-lease.json');
+    const leaseText = read(leaseFile);
+    fs.rmSync(leaseFile);
+    fs.mkdirSync(leaseFile);
+    const guard = checkWriteAccess(Other);
+    assert.equal(guard.allowed, false, 'قفل غير مقروء ← الكتابة مرفوضة (الأمان أولاً)');
+    assert.match(guard.reasonAr ?? '', /تعذّر التحقق من صلاحية الكتابة/);
+    const st = await rawRequest(port, { path: '/api/sync/status' });
+    assert.equal(st.status, 200, 'الحالة لا تسقط');
+    assert.match(JSON.parse(st.body).problemAr, /write-lease\.json/);
+    fs.rmSync(leaseFile, { recursive: true });
+    fs.writeFileSync(leaseFile, leaseText);
+
+    // حامل القفل المتأخر (أخذ القفل دون استيراد، كما حدث على الماك): «نقل الكتابة» يستورد ويُبقي القفل
+    publishSnapshot(Other, vaultOther, { force: true });
+    const newest = readManifest(Other)!.latestVersion;
+    const stamp = new Date().toISOString();
+    fs.writeFileSync(leaseFile, JSON.stringify({ deviceId: 'id-this-laptop', deviceName: 'This-Laptop', acquiredAt: stamp, heartbeatAt: stamp }));
+    const behind = JSON.parse((await rawRequest(port, { path: '/api/sync/status' })).body);
+    assert.equal(behind.canWrite, true);
+    assert.equal(behind.newerAvailable, true, 'الحامل متأخر عن إصدار أحدث');
+    assert.notEqual((await postJson(port, '/api/sync/release', {}, cookie)).status, 200, 'الترك يُرفض فوق إصدار أحدث (لهذا يلزم زر الاستيراد)');
+    const catchUp = await postJson(port, '/api/sync/take-lease', {}, cookie);
+    assert.equal(catchUp.status, 200, catchUp.body);
+    assert.match(JSON.parse(catchUp.body).messageAr, new RegExp(`استُورد قبلها الإصدار ${newest}`));
+    const caught = JSON.parse(catchUp.body).status;
+    assert.equal(caught.canWrite, true, 'القفل بقي لهذا الجهاز');
+    assert.equal(caught.newerAvailable, false);
+    assert.equal(caught.baseVersion, newest);
+    const appJs = read(path.join(import.meta.dirname, '..', 'src', 'features', 'dashboard-app', 'public', 'app.js'));
+    assert.match(appJs, /takeBtn\.hidden = !s\.ready \|\| \(s\.canWrite && !s\.newerAvailable\)/, 'زر الاستيراد يظهر للحامل المتأخر');
+
+    const deadlock = Object.assign(new Error('Unknown system error -11'), { errno: -11 });
+    assert.match(describeSyncIoError(deadlock), /install-macos\.sh.*1\.9\.3/, 'رسالة عربية واضحة لخطأ Google Drive على الماك');
+    assert.match(describeSyncIoError(Object.assign(new Error('x'), { code: 'EDEADLK' })), /Google Drive/);
+    passedChecks.push('اختبار ملفات المزامنة غير المقروءة (manifest أو قفل غير مقروء يوقف نقل الكتابة دون أخذ القفل أو نشر «إصدار أول»، الحارس يرفض الكتابة، الحالة لا تسقط، ورسالة EDEADLK بالعربية) بنجاح.');
   } finally {
     resetSessionStateForTests();
     await new Promise<void>((resolve) => server.close(() => resolve()));

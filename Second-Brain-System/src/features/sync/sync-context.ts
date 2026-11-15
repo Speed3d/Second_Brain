@@ -144,6 +144,44 @@ export function writeLocalSyncState(ctx: SyncContext, patch: Partial<LocalSyncSt
   return next;
 }
 
+/**
+ * Hint بالعربي: دالة ترجمة أخطاء القراءة والكتابة في مجلد المزامنة إلى رسالة عربية واضحة.
+ *               أهمها EDEADLK (رمز -11 على الماك): Google Drive لم يُنزّل ملفاً موجوداً في السحابة فقط،
+ *               لأن الخادم يعمل في الخلفية (LaunchAgent) بلا إذن تنزيل. يُحل بـ MaterializeDatalessFiles في المثبّت.
+ */
+export function describeSyncIoError(err: unknown): string {
+  const e = err as NodeJS.ErrnoException | undefined;
+  const message = err instanceof Error ? err.message : String(err);
+  if (e?.code === 'EDEADLK' || e?.errno === -11 || /system error -11\b/.test(message)) {
+    return 'لم يسمح Google Drive للخادم بتنزيل ملف من مجلد المزامنة (الملف في السحابة فقط، والخادم يعمل في الخلفية). على الماك: أعد تشغيل المثبّت install/macos/install-macos.sh (الإصدار 1.9.3 أو أحدث) ثم أعد المحاولة. لم يُغيَّر أي شيء.';
+  }
+  if (e?.code === 'EBUSY' || e?.code === 'EAGAIN' || e?.code === 'ETIMEDOUT') {
+    return 'Google Drive مشغول بملف في مجلد المزامنة الآن. أعد المحاولة بعد قليل. لم يُغيَّر أي شيء.';
+  }
+  return message;
+}
+
+/**
+ * Hint بالعربي: دالة قراءة ملف JSON من مجلد المزامنة بأمان:
+ *               - غير موجود ← null (هذا وحده يعني «لا يوجد»).
+ *               - تعذّرت قراءته أو تحليله (Drive لم يُنزّله، أو نُزّل نصفه) ← خطأ يوقف العملية،
+ *                 حتى لا يُعامل ملف غير مقروء كأنه غير موجود (فيُؤخذ قفل محجوز أو يُنشر فوق إصدار أحدث).
+ */
+export function readSyncJson<T>(file: string): T | null {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw new Error(`${path.basename(file)}: ${describeSyncIoError(err)}`);
+  }
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    throw new Error(`${path.basename(file)} على مجلد المزامنة غير مكتمل أو تالف (ربما ما زال Google Drive يُنزّله). أعد المحاولة بعد قليل. لم يُغيَّر أي شيء.`);
+  }
+}
+
 function leasePath(ctx: SyncContext): string {
   return path.join(ctx.syncRoot, 'write-lease.json');
 }
@@ -152,8 +190,9 @@ function leasePath(ctx: SyncContext): string {
  * Hint بالعربي: دالة قراءة حالة قفل الكتابة بالنسبة لهذا الجهاز.
  */
 export function readLeaseStatus(ctx: SyncContext, now: number = Date.now()): LeaseStatus {
-  const lease = readJsonFileSafe<WriteLease | null>(leasePath(ctx), null);
-  if (!lease || typeof lease.deviceId !== 'string') return { kind: 'none' };
+  const lease = readSyncJson<WriteLease>(leasePath(ctx));
+  if (!lease) return { kind: 'none' };
+  if (typeof lease.deviceId !== 'string') throw new Error('write-lease.json على مجلد المزامنة بصيغة غير معروفة. لم يُغيَّر أي شيء.');
   if (lease.deviceId === ctx.device.deviceId) return { kind: 'mine', lease };
   const beat = Date.parse(lease.heartbeatAt);
   if (!Number.isFinite(beat) || now - beat > LEASE_EXPIRY_MS) return { kind: 'other-expired', lease };
@@ -208,7 +247,13 @@ export function releaseLease(ctx: SyncContext): boolean {
  */
 export function checkWriteAccess(ctx: SyncContext | null = buildSyncContext()): { allowed: boolean; reasonAr?: string; holder?: string } {
   if (!ctx) return { allowed: true };
-  const status = readLeaseStatus(ctx);
+  let status: LeaseStatus;
+  try {
+    status = readLeaseStatus(ctx);
+  } catch (err) {
+    // تعذّرت قراءة القفل ← نرفض الكتابة (الأمان أولاً) بدل افتراض أن لا أحد يكتب
+    return { allowed: false, reasonAr: `تعذّر التحقق من صلاحية الكتابة: ${err instanceof Error ? err.message : String(err)}` };
+  }
   if (status.kind === 'mine') return { allowed: true };
   if (status.kind === 'none') return { allowed: false, reasonAr: 'لا يحمل أي جهاز صلاحية الكتابة. اضغط «انقل الكتابة إلى هذا الجهاز» في قسم المزامنة.' };
   return {

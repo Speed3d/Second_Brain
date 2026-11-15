@@ -15,19 +15,8 @@ import * as path from 'node:path';
 import { loadSystemConfig, readAppVersion } from '../../core/config-manager.ts';
 import { logSystemInfo } from '../../core/logger.ts';
 import type { UnlockedVault } from '../vault/vault-manager.ts';
-import {
-  acquireLease,
-  buildSyncContext,
-  heartbeatLease,
-  readDeviceInfo,
-  readLeaseStatus,
-  readLocalSyncState,
-  readSyncSettings,
-  releaseLease,
-  writeLocalSyncState,
-  type SyncContext,
-} from './sync-context.ts';
-import { checkSync, importLatestSnapshot, publishSnapshot, writeDeviceStatus } from './snapshot-sync.ts';
+import { acquireLease, buildSyncContext, heartbeatLease, readDeviceInfo, readLeaseStatus, readLocalSyncState, readSyncSettings, describeSyncIoError, releaseLease, writeLocalSyncState, type SyncContext } from './sync-context.ts';
+import { checkSync, hasAnySnapshots, importLatestSnapshot, publishSnapshot, readManifest, writeDeviceStatus } from './snapshot-sync.ts';
 
 /**
  * Hint بالعربي: حالة المزامنة كما تعرضها الواجهة.
@@ -69,9 +58,15 @@ export function getSyncStatus(): SyncStatusView {
   if (!device) return { ...view, problemAr: 'هذا الجهاز بلا هوية. شغّل المثبّت (install-windows.ps1 أو install-macos.sh) مرة واحدة.' };
   if (!view.folderExists) return { ...view, problemAr: 'مجلد المزامنة غير موجود. تأكد أن Google Drive for desktop يعمل وأن المسار صحيح.' };
   const ctx = buildSyncContext()!;
-  const lease = readLeaseStatus(ctx);
-  const check = checkSync(ctx);
+  let lease: ReturnType<typeof readLeaseStatus>;
+  let check: ReturnType<typeof checkSync>;
   const state = readLocalSyncState(ctx);
+  try {
+    lease = readLeaseStatus(ctx);
+    check = checkSync(ctx);
+  } catch (err) {
+    return { ...view, problemAr: describeSyncIoError(err), lastError: state.lastError };
+  }
   return {
     ...view,
     ready: true,
@@ -105,7 +100,7 @@ export function syncOnUnlock(vault: UnlockedVault): { imported: boolean; message
         (r.hadLocalChanges ? ' كانت على هذا الجهاز تغييرات غير منشورة، وحُفظت في نسخة احتياطية محلية.' : ''),
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = describeSyncIoError(err);
     writeLocalSyncState(ctx, { lastError: message });
     logSystemInfo('Sync', `تعذر الاستيراد عند فتح الخزنة: ${message}`);
     return { imported: false, messageAr: `⚠️ المزامنة: ${message}` };
@@ -125,7 +120,7 @@ export function syncTick(activeVault: UnlockedVault | null): void {
       publishSnapshot(ctx, activeVault);
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = describeSyncIoError(err);
     writeLocalSyncState(ctx, { lastError: message });
     logSystemInfo('Sync', `المزامنة الدورية: ${message}`);
   }
@@ -142,10 +137,19 @@ function requireCtx(): SyncContext {
  *               ثم ينشر فوراً إن كان أول جهاز (لا يوجد أي إصدار بعد).
  */
 export function takeWriteLease(vault: UnlockedVault, force: boolean): { messageAr: string } {
+  return withSyncErrors(() => takeWriteLeaseUnsafe(vault, force));
+}
+
+function takeWriteLeaseUnsafe(vault: UnlockedVault, force: boolean): { messageAr: string } {
   const ctx = requireCtx();
+  // الاستيراد أولاً: إن تعذّرت قراءة manifest أو النسخة يتوقف هنا، قبل أخذ القفل
   const imported = importLatestSnapshot(ctx, vault);
+  const manifestBefore = readManifest(ctx);
+  if (!manifestBefore && hasAnySnapshots(ctx)) {
+    throw new Error('في مجلد المزامنة نسخ منشورة لكن manifest.json غير موجود (ربما ما زال Google Drive يُنزّله). أعد المحاولة بعد قليل. لم يُغيَّر أي شيء.');
+  }
   acquireLease(ctx, { force });
-  const first = !checkSync(ctx).manifest;
+  const first = !manifestBefore;
   if (first) publishSnapshot(ctx, vault, { force: true });
   return {
     messageAr:
@@ -159,6 +163,10 @@ export function takeWriteLease(vault: UnlockedVault, force: boolean): { messageA
  * Hint بالعربي: دالة النشر الفوري (زر «انشر الآن»).
  */
 export function publishNow(vault: UnlockedVault): { messageAr: string } {
+  return withSyncErrors(() => publishNowUnsafe(vault));
+}
+
+function publishNowUnsafe(vault: UnlockedVault): { messageAr: string } {
   const ctx = requireCtx();
   const r = publishSnapshot(ctx, vault);
   return { messageAr: r.published ? `⬆️ نُشر الإصدار ${r.version}.` : `لا حاجة للنشر: ${r.reason}.` };
@@ -168,6 +176,21 @@ export function publishNow(vault: UnlockedVault): { messageAr: string } {
  * Hint بالعربي: دالة ترك الكتابة (قبل الانتقال إلى جهاز آخر): ينشر آخر التغييرات ثم يترك القفل.
  */
 export function releaseWriteLease(vault: UnlockedVault): { messageAr: string } {
+  return withSyncErrors(() => releaseWriteLeaseUnsafe(vault));
+}
+
+/**
+ * Hint بالعربي: يترجم أخطاء مجلد المزامنة (مثل EDEADLK من Google Drive) إلى رسالة عربية قبل وصولها للواجهة.
+ */
+function withSyncErrors<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (err) {
+    throw new Error(describeSyncIoError(err));
+  }
+}
+
+function releaseWriteLeaseUnsafe(vault: UnlockedVault): { messageAr: string } {
   const ctx = requireCtx();
   const r = publishSnapshot(ctx, vault);
   releaseLease(ctx);

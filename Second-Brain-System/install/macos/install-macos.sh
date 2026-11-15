@@ -74,13 +74,21 @@ cat > "$PLIST" <<PLIST
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
   <key>ThrottleInterval</key><integer>10</integer>
+  <!-- يسمح للخادم (في الخلفية) بتنزيل ملفات Google Drive الموجودة في السحابة فقط؛ بدونه: خطأ -11 (EDEADLK) في المزامنة -->
+  <key>MaterializeDatalessFiles</key><true/>
   <key>StandardOutPath</key><string>$LOG_DIR/server.log</string>
   <key>StandardErrorPath</key><string>$LOG_DIR/server.log</string>
 </dict>
 </plist>
 PLIST
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$PLIST"
+# bootout لا ينتظر: ننتظر حتى تُزال الخدمة القديمة فعلاً، وإلا يفشل bootstrap بـ «5: Input/output error»
+for _ in $(seq 1 20); do launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || break; sleep 0.5; done
+for attempt in 1 2 3; do
+  launchctl bootstrap "gui/$(id -u)" "$PLIST" && break
+  [ "$attempt" = 3 ] && { echo "❌ تعذّر تشغيل خدمة الخلفية (launchctl bootstrap)."; exit 1; }
+  sleep 2
+done
 echo "✔ التشغيل التلقائي عند تسجيل الدخول"
 
 cat > "$DESKTOP_CMD" <<CMD

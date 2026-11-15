@@ -66,6 +66,7 @@ export async function runInstallerTests(): Promise<string[]> {
       assert.equal(spawnSync('bash', ['-n', path.join(INSTALL_DIR, f)]).status, 0, `لا أخطاء صياغة في ${f}`);
     }
   }
+  assert.match(fs.readFileSync(path.join(INSTALL_DIR, 'macos', 'install-macos.sh'), 'utf8'), /<key>MaterializeDatalessFiles<\/key><true\/>/, 'خادم الماك مسموح له بتنزيل ملفات Google Drive الموجودة في السحابة فقط');
   passedChecks.push('اختبار صياغة سكربتات PowerShell (مع ترميز UTF-8 BOM) وسكربتات bash للماك بنجاح.');
 
   // 2ب. هوية الجهاز: إنشاء، إبقاء لنفس النظام، واستبدال المنقول من نظام آخر أو التالف مع نسخة احتياطية
