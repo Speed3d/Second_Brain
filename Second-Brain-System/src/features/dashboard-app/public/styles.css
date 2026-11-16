@@ -388,6 +388,9 @@ details.advanced-ai > .form-grid { margin-top: .6rem; }
 
 /* المزامنة: شريط وضع القراءة وجدول الحالة */
 .readonly-banner { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; padding: 0.6rem 0.9rem; border: 1px solid var(--amber); border-radius: 10px; color: var(--amber); }
+/* 2.0: التعارضات في المزامنة */
+.conflict-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.75rem; }
+.conflict-pane pre { max-height: 14rem; overflow: auto; white-space: pre-wrap; word-break: break-word; padding: 0.5rem; border: 1px solid var(--line, rgba(255,255,255,.12)); border-radius: 8px; }
 .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.35rem 1rem; margin: 0.5rem 0; }
 .kv dt { color: var(--muted, inherit); opacity: 0.8; }
 .kv dd { margin: 0; overflow-wrap: anywhere; }

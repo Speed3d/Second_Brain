@@ -15,7 +15,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { loadSystemConfig, readRawSettings, resolveDefaultConfigPath, resolveSettingsPath } from '../../core/config-manager.ts';
-import { writeFileAtomic } from '../../shared/file-helpers.ts';
+import { removePathSync, writeFileAtomic } from '../../shared/file-helpers.ts';
 
 /** عبارات التأكيد التي يجب كتابتها حرفياً (تُقارن بعد توحيد الهمزات والمسافات) */
 export const RESET_CONFIRM_PHRASE = 'تصفير';
@@ -122,7 +122,7 @@ export function moveEntry(from: string, to: string): void {
     fs.renameSync(from, to);
   } catch {
     fs.cpSync(from, to, { recursive: true, force: false, errorOnExist: true });
-    fs.rmSync(from, { recursive: true, force: true });
+    removePathSync(from, { recursive: true, force: true });
   }
 }
 
@@ -197,7 +197,7 @@ export function restoreLastBatch(configPath: string = resolveDefaultConfigPath()
   const outer = [...current].filter((p) => ![...current].some((q) => q !== p && p.startsWith(q + path.sep)));
   if (outer.length) moveToNewBatch(outer, 'before-restore');
   for (const item of last.items) moveEntry(path.join(batchDir, item.stored), item.original);
-  fs.rmSync(batchDir, { recursive: true, force: true });
+  removePathSync(batchDir, { recursive: true, force: true });
   return last;
 }
 
@@ -206,6 +206,6 @@ export function restoreLastBatch(configPath: string = resolveDefaultConfigPath()
  */
 export function emptyTrash(): number {
   const count = listTrashBatches().length;
-  fs.rmSync(resolveTrashDir(), { recursive: true, force: true });
+  removePathSync(resolveTrashDir(), { recursive: true, force: true });
   return count;
 }

@@ -17,7 +17,6 @@ export function getMemoryRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/memory/harvest',
-      sharedWrite: true,
       commanderOnly: true,
       handler: ({ res, body }) => {
         const harvested = harvestLocalAITranscripts({ force: body.force === true });

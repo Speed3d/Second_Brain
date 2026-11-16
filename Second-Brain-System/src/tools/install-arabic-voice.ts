@@ -14,6 +14,7 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { removePathSync } from '../shared/file-helpers.ts';
 
 const PIPER_RELEASE = 'https://github.com/rhasspy/piper/releases/download/2023.11.14-2';
 const VOICE_BASE = 'https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/ar/ar_JO/kareem/medium';
@@ -66,7 +67,7 @@ export async function installArabicVoice(vendorDir: string, platform: NodeJS.Pla
   const extract = spawnSync(tarCommand, ['-xf', archive, '-C', vendorDir], { stdio: 'inherit' });
   if (extract.status !== 0) throw new Error('تعذر فك ضغط Piper.');
   for (const v of VOICE_FILES) await download(`${VOICE_BASE}/${v.file}`, path.join(vendorDir, 'voices', v.file), v.bytes);
-  fs.rmSync(downloads, { recursive: true, force: true });
+  removePathSync(downloads, { recursive: true, force: true });
   return { messageAr: '🎉 اكتمل تثبيت الصوت العربي المدمج. أعد تحميل صفحة Second Brain.' };
 }
 

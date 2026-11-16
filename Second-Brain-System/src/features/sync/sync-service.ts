@@ -1,12 +1,12 @@
 /**
  * ============================================================================
  * الملف: src/features/sync/sync-service.ts
- * القسم: Features -> Sync (تنسيق المزامنة للخادم)
+ * القسم: Features -> Sync (تنسيق المزامنة للخادم — الإصدار 2.0: الكتابة من كل الأجهزة)
  * Hint بالعربي: نقطة الدخول التي يستدعيها الخادم:
- *               - عند فتح الخزنة: استيراد أي إصدار أحدث قبل إنشاء الجلسة.
- *               - كل دقيقتين: إشارة حياة لقفل الكتابة، وملف حالة الجهاز، ونشر التغييرات إن وُجدت.
- *               - نقل الكتابة إلى هذا الجهاز (استيراد ثم أخذ القفل)، وتركها (نشر ثم ترك القفل).
- *               - حالة المزامنة لعرضها في الواجهة.
+ *               - عند فتح الخزنة: دورة مزامنة (ترحيل من 1.9 مرة واحدة، ثم نشر ودمج) قبل إنشاء الجلسة.
+ *               - كل دقيقتين، وعند قفل الخزنة، وبزر «زامن الآن»: دورة مزامنة، وملف حالة الجهاز.
+ *               - التعارضات (عرضها وحسمها) والسلة (عرضها والاسترجاع منها).
+ *               لا قفل كتابة بعد الآن: كل جهاز يكتب متى شاء (القرار في docs/11، الموضوع 1).
  * ============================================================================
  */
 
@@ -14,9 +14,24 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { loadSystemConfig, readAppVersion } from '../../core/config-manager.ts';
 import { logSystemInfo } from '../../core/logger.ts';
+import { readJsonFileSafe, toSafeFileName, writeFileAtomic } from '../../shared/file-helpers.ts';
+import type { VaultSecretItem } from '../../shared/types.ts';
 import type { UnlockedVault } from '../vault/vault-manager.ts';
-import { acquireLease, buildSyncContext, heartbeatLease, readDeviceInfo, readLeaseStatus, readLocalSyncState, readSyncSettings, describeSyncIoError, releaseLease, writeLocalSyncState, type SyncContext } from './sync-context.ts';
-import { checkSync, hasAnySnapshots, importLatestSnapshot, publishSnapshot, readManifest, writeDeviceStatus } from './snapshot-sync.ts';
+import { LEGACY_LOCK_DEVICE_ID, lockLegacyClients, resolveConflict, restoreFromTrash, runSyncCycle, type SyncCycleResult } from './multi-writer-sync.ts';
+import { recordKind } from './records.ts';
+import { buildSyncContext, describeSyncIoError, readDeviceInfo, readSyncSettings, type SyncContext } from './sync-context.ts';
+import { countConflicts, countTrash, listConflicts, listTrash, readSyncIndex, removeTrashEntry, syncDataDir, type ConflictEntry } from './sync-store.ts';
+
+/** جهاز كما يظهر في صفحة المزامنة */
+export interface SyncDeviceView {
+  deviceId: string;
+  deviceName: string;
+  platform: string;
+  appVersion?: string;
+  lastSeenAt?: string;
+  syncFormat?: number;
+  isThisDevice: boolean;
+}
 
 /**
  * Hint بالعربي: حالة المزامنة كما تعرضها الواجهة.
@@ -27,17 +42,41 @@ export interface SyncStatusView {
   folderExists: boolean;
   device: { deviceId: string; deviceName: string; platform: string } | null;
   ready: boolean;
+  multiWriter: boolean;
   problemAr?: string;
-  lease?: { kind: string; holder?: string; heartbeatAt?: string };
-  canWrite?: boolean;
-  baseVersion?: number;
-  latestVersion?: number;
-  latestFrom?: string;
-  newerAvailable?: boolean;
-  hasLocalChanges?: boolean;
-  lastImportAt?: string;
+  migrated?: boolean;
+  lastMergeAt?: string;
   lastPublishAt?: string;
+  lastCompactionAt?: string;
   lastError?: string;
+  lastWarning?: string;
+  conflicts?: number;
+  trash?: number;
+  devices?: SyncDeviceView[];
+}
+
+/**
+ * Hint بالعربي: دالة قراءة ملفات حالة الأجهزة على مجلد المزامنة.
+ */
+function readDevices(ctx: SyncContext): SyncDeviceView[] {
+  const dir = path.join(ctx.syncRoot, 'devices');
+  if (!fs.existsSync(dir)) return [];
+  const out: SyncDeviceView[] = [];
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.endsWith('.json')) continue;
+    const d = readJsonFileSafe<Partial<SyncDeviceView> | null>(path.join(dir, name), null);
+    if (!d || typeof d.deviceId !== 'string') continue;
+    out.push({
+      deviceId: d.deviceId,
+      deviceName: String(d.deviceName ?? d.deviceId),
+      platform: String(d.platform ?? ''),
+      appVersion: d.appVersion,
+      lastSeenAt: d.lastSeenAt,
+      syncFormat: d.syncFormat,
+      isThisDevice: d.deviceId === ctx.device.deviceId,
+    });
+  }
+  return out.sort((a, b) => String(b.lastSeenAt).localeCompare(String(a.lastSeenAt)));
 }
 
 /**
@@ -53,76 +92,105 @@ export function getSyncStatus(): SyncStatusView {
     folderExists: Boolean(settings.folder) && fs.existsSync(settings.folder),
     device,
     ready: false,
+    multiWriter: true,
   };
   if (!settings.enabled) return { ...view, problemAr: 'المزامنة مطفأة على هذا الجهاز.' };
   if (!device) return { ...view, problemAr: 'هذا الجهاز بلا هوية. شغّل المثبّت (install-windows.ps1 أو install-macos.sh) مرة واحدة.' };
   if (!view.folderExists) return { ...view, problemAr: 'مجلد المزامنة غير موجود. تأكد أن Google Drive for desktop يعمل وأن المسار صحيح.' };
   const ctx = buildSyncContext()!;
-  let lease: ReturnType<typeof readLeaseStatus>;
-  let check: ReturnType<typeof checkSync>;
-  const state = readLocalSyncState(ctx);
   try {
-    lease = readLeaseStatus(ctx);
-    check = checkSync(ctx);
+    const index = readSyncIndex(ctx);
+    return {
+      ...view,
+      ready: true,
+      migrated: Boolean(index),
+      lastMergeAt: index?.lastMergeAt,
+      lastPublishAt: index?.lastPublishAt,
+      lastCompactionAt: index?.lastCompactionAt,
+      lastError: index?.lastError,
+      lastWarning: index?.lastWarning,
+      conflicts: countConflicts(ctx),
+      trash: countTrash(ctx),
+      devices: readDevices(ctx),
+      problemAr: index ? undefined : 'لم يُرحَّل هذا الجهاز إلى المزامنة الجديدة بعد: افتح الخزنة بكلمة المرور الرئيسية فيتم ذلك تلقائياً.',
+    };
   } catch (err) {
-    return { ...view, problemAr: describeSyncIoError(err), lastError: state.lastError };
+    return { ...view, problemAr: describeSyncIoError(err) };
   }
-  return {
-    ...view,
-    ready: true,
-    lease: lease.kind === 'none' ? { kind: 'none' } : { kind: lease.kind, holder: lease.lease.deviceName, heartbeatAt: lease.lease.heartbeatAt },
-    canWrite: lease.kind === 'mine',
-    baseVersion: check.baseVersion,
-    latestVersion: check.manifest?.latestVersion ?? 0,
-    latestFrom: check.manifest?.device.deviceName,
-    newerAvailable: check.newerAvailable,
-    hasLocalChanges: check.hasLocalChanges,
-    lastImportAt: state.lastImportAt,
-    lastPublishAt: state.lastPublishAt,
-    lastError: state.lastError,
-  };
 }
 
 /**
- * Hint بالعربي: دالة تُستدعى عند فتح الخزنة قبل إنشاء الجلسة: تستورد أي إصدار أحدث.
+ * Hint بالعربي: دالة كتابة ملف حالة هذا الجهاز في devices/ (لصفحة الأجهزة على كل جهاز).
+ */
+export function writeDeviceStatusFile(ctx: SyncContext): void {
+  const index = readSyncIndex(ctx);
+  const markers = readJsonFileSafe<Record<string, string>>(path.join(syncDataDir(ctx), 'code-markers.json'), {});
+  writeFileAtomic(
+    path.join(ctx.syncRoot, 'devices', `${toSafeFileName(ctx.device.deviceId, 'device')}.json`),
+    JSON.stringify(
+      {
+        ...ctx.device,
+        appVersion: readAppVersion(),
+        syncFormat: index ? 2 : 1,
+        lastSeenAt: new Date().toISOString(),
+        lastMergeAt: index?.lastMergeAt,
+        lastPublishAt: index?.lastPublishAt,
+        openConflicts: countConflicts(ctx),
+        projectCodeChanges: markers,
+      },
+      null,
+      2
+    )
+  );
+}
+
+function describeCycle(r: SyncCycleResult): string {
+  const parts: string[] = [];
+  if (r.migrated) parts.push('🎉 رُحّل هذا الجهاز إلى المزامنة الجديدة (الكتابة من كل الأجهزة).');
+  if (r.published) parts.push(`⬆️ نُشر ${r.published} تغييراً.`);
+  if (r.applied) parts.push(`⬇️ دُمج ${r.applied} تغييراً من الأجهزة الأخرى.`);
+  if (r.conflicts) parts.push(`⚠️ ${r.conflicts} تعارضاً جديداً ينتظر قرارك في قسم المزامنة.`);
+  parts.push(...r.warnings);
+  return parts.join(' ');
+}
+
+/**
+ * Hint بالعربي: دالة تُستدعى عند فتح الخزنة قبل إنشاء الجلسة: دورة مزامنة كاملة.
  *               لا ترمي أبداً (فشل المزامنة لا يمنع فتح الخزنة)، وتُرجع رسالة لعرضها.
+ *               الأسرار تُحدَّث داخل الخزنة المفتوحة نفسها، فلا حاجة لفتحها من جديد.
  */
 export function syncOnUnlock(vault: UnlockedVault): { imported: boolean; messageAr?: string } {
   const ctx = buildSyncContext();
   if (!ctx) return { imported: false };
   try {
-    const r = importLatestSnapshot(ctx, vault);
-    if (!r.imported) return { imported: false };
-    return {
-      imported: true,
-      messageAr:
-        `🔄 استُورد الإصدار ${r.version} من «${r.from}».` +
-        (r.hadLocalChanges ? ' كانت على هذا الجهاز تغييرات غير منشورة، وحُفظت في نسخة احتياطية محلية.' : ''),
-    };
+    const r = runSyncCycle(ctx, vault);
+    writeDeviceStatusFile(ctx);
+    const message = describeCycle(r);
+    return { imported: false, messageAr: message ? `🔄 ${message}` : undefined };
   } catch (err) {
     const message = describeSyncIoError(err);
-    writeLocalSyncState(ctx, { lastError: message });
-    logSystemInfo('Sync', `تعذر الاستيراد عند فتح الخزنة: ${message}`);
+    logSystemInfo('Sync', `تعذرت المزامنة عند فتح الخزنة: ${message}`);
     return { imported: false, messageAr: `⚠️ المزامنة: ${message}` };
   }
 }
 
 /**
- * Hint بالعربي: دالة دورية (كل دقيقتين): إشارة حياة، وحالة الجهاز، ونشر التغييرات إن كانت الخزنة مفتوحة.
+ * Hint بالعربي: دالة دورية (كل دقيقتين، وعند قفل الخزنة): حالة الجهاز، ودورة مزامنة إن كانت الخزنة مفتوحة.
+ *               والخزنة مقفلة: لا يمكن فك أي شيء، فتُكتب حالة الجهاز فقط، ويبقى قفل الأجهزة القديمة قائماً.
  */
 export function syncTick(activeVault: UnlockedVault | null): void {
   const ctx = buildSyncContext();
   if (!ctx) return;
   try {
-    heartbeatLease(ctx);
-    writeDeviceStatus(ctx, readAppVersion());
-    if (activeVault && activeVault.unlockedBy === 'commander' && readLeaseStatus(ctx).kind === 'mine') {
-      publishSnapshot(ctx, activeVault);
+    if (activeVault) {
+      const r = runSyncCycle(ctx, activeVault);
+      if (r.published || r.applied || r.conflicts) logSystemInfo('Sync', describeCycle(r));
+    } else if (readSyncIndex(ctx)) {
+      lockLegacyClients(ctx);
     }
+    writeDeviceStatusFile(ctx);
   } catch (err) {
-    const message = describeSyncIoError(err);
-    writeLocalSyncState(ctx, { lastError: message });
-    logSystemInfo('Sync', `المزامنة الدورية: ${message}`);
+    logSystemInfo('Sync', `المزامنة الدورية: ${describeSyncIoError(err)}`);
   }
 }
 
@@ -132,56 +200,6 @@ function requireCtx(): SyncContext {
   return ctx;
 }
 
-/**
- * Hint بالعربي: دالة نقل الكتابة إلى هذا الجهاز: يستورد آخر إصدار أولاً ثم يأخذ القفل،
- *               ثم ينشر فوراً إن كان أول جهاز (لا يوجد أي إصدار بعد).
- */
-export function takeWriteLease(vault: UnlockedVault, force: boolean): { messageAr: string } {
-  return withSyncErrors(() => takeWriteLeaseUnsafe(vault, force));
-}
-
-function takeWriteLeaseUnsafe(vault: UnlockedVault, force: boolean): { messageAr: string } {
-  const ctx = requireCtx();
-  // الاستيراد أولاً: إن تعذّرت قراءة manifest أو النسخة يتوقف هنا، قبل أخذ القفل
-  const imported = importLatestSnapshot(ctx, vault);
-  const manifestBefore = readManifest(ctx);
-  if (!manifestBefore && hasAnySnapshots(ctx)) {
-    throw new Error('في مجلد المزامنة نسخ منشورة لكن manifest.json غير موجود (ربما ما زال Google Drive يُنزّله). أعد المحاولة بعد قليل. لم يُغيَّر أي شيء.');
-  }
-  acquireLease(ctx, { force });
-  const first = !manifestBefore;
-  if (first) publishSnapshot(ctx, vault, { force: true });
-  return {
-    messageAr:
-      `✍️ صار «${ctx.device.deviceName}» حامل صلاحية الكتابة.` +
-      (imported.imported ? ` استُورد قبلها الإصدار ${imported.version}.` : '') +
-      (first ? ' ونُشر أول إصدار.' : ''),
-  };
-}
-
-/**
- * Hint بالعربي: دالة النشر الفوري (زر «انشر الآن»).
- */
-export function publishNow(vault: UnlockedVault): { messageAr: string } {
-  return withSyncErrors(() => publishNowUnsafe(vault));
-}
-
-function publishNowUnsafe(vault: UnlockedVault): { messageAr: string } {
-  const ctx = requireCtx();
-  const r = publishSnapshot(ctx, vault);
-  return { messageAr: r.published ? `⬆️ نُشر الإصدار ${r.version}.` : `لا حاجة للنشر: ${r.reason}.` };
-}
-
-/**
- * Hint بالعربي: دالة ترك الكتابة (قبل الانتقال إلى جهاز آخر): ينشر آخر التغييرات ثم يترك القفل.
- */
-export function releaseWriteLease(vault: UnlockedVault): { messageAr: string } {
-  return withSyncErrors(() => releaseWriteLeaseUnsafe(vault));
-}
-
-/**
- * Hint بالعربي: يترجم أخطاء مجلد المزامنة (مثل EDEADLK من Google Drive) إلى رسالة عربية قبل وصولها للواجهة.
- */
 function withSyncErrors<T>(fn: () => T): T {
   try {
     return fn();
@@ -190,9 +208,137 @@ function withSyncErrors<T>(fn: () => T): T {
   }
 }
 
-function releaseWriteLeaseUnsafe(vault: UnlockedVault): { messageAr: string } {
-  const ctx = requireCtx();
-  const r = publishSnapshot(ctx, vault);
-  releaseLease(ctx);
-  return { messageAr: `🔓 تُركت صلاحية الكتابة${r.published ? ` بعد نشر الإصدار ${r.version}` : ''}. يمكن الآن نقلها إلى جهاز آخر.` };
+/**
+ * Hint بالعربي: دالة «زامن الآن»: دورة فورية بدل انتظار الدقيقتين.
+ */
+export function syncNow(vault: UnlockedVault): { messageAr: string } {
+  return withSyncErrors(() => {
+    const ctx = requireCtx();
+    const r = runSyncCycle(ctx, vault);
+    writeDeviceStatusFile(ctx);
+    return { messageAr: describeCycle(r) || '✅ كل شيء مُزامَن: لا تغييرات جديدة هنا أو على الأجهزة الأخرى.' };
+  });
 }
+
+/** معاينة نسخة في تعارض (الأسرار تُعرض بلا قيمتها) */
+interface ConflictPreview {
+  text: string;
+  sizeBytes: number;
+}
+
+function previewContent(key: string, base64: string | null): ConflictPreview | null {
+  if (base64 === null) return null;
+  const buf = Buffer.from(base64, 'base64');
+  const kind = recordKind(key);
+  if (kind === 'secret') {
+    try {
+      const s = JSON.parse(buf.toString('utf8')) as VaultSecretItem;
+      return {
+        text: `العنوان: ${s.title}\nالمستخدم: ${s.usernameOrEmail ?? '—'}\nالرابط: ${s.url ?? '—'}\nالقيمة: (مخفية، ${s.secretValue.length} حرفاً)\nآخر تعديل: ${s.updatedAt}`,
+        sizeBytes: buf.length,
+      };
+    } catch {
+      return { text: '(سرّ غير مقروء)', sizeBytes: buf.length };
+    }
+  }
+  if (kind === 'conv') return { text: '(محادثة مشفّرة)', sizeBytes: buf.length };
+  const text = buf.toString('utf8');
+  const printable = !/[\u0000-\u0008\u000e-\u001f]/.test(text.slice(0, 2000));
+  return { text: printable ? text.slice(0, 4000) : '(ملف ثنائي)', sizeBytes: buf.length };
+}
+
+/** تعارض كما يظهر في الواجهة */
+export interface ConflictView {
+  id: string;
+  key: string;
+  kind: ConflictEntry['kind'];
+  createdAt: string;
+  otherDevice: string;
+  keptSide: ConflictEntry['keptSide'];
+  sideFile?: string;
+  current: ConflictPreview | null;
+  other: ConflictPreview | null;
+}
+
+/**
+ * Hint بالعربي: دالة سرد التعارضات المفتوحة مع معاينة النسختين.
+ */
+export function listSyncConflicts(vault: UnlockedVault): ConflictView[] {
+  const ctx = requireCtx();
+  const secrets = new Map(vault.secrets.map((s) => [`secret:${s.id}`, s]));
+  return listConflicts(ctx, vault.dataKey).map((c) => {
+    let current: ConflictPreview | null = null;
+    const kind = recordKind(c.key);
+    if (kind === 'secret') {
+      const s = secrets.get(c.key);
+      current = s ? previewContent(c.key, Buffer.from(JSON.stringify(s)).toString('base64')) : null;
+    } else if (kind === 'obs') {
+      const file = path.join(ctx.obsidianDir, c.key.slice('obs:'.length));
+      current = fs.existsSync(file) ? previewContent(c.key, fs.readFileSync(file).toString('base64')) : null;
+    } else {
+      current = { text: '(النسخة الحالية على هذا الجهاز)', sizeBytes: 0 };
+    }
+    return {
+      id: c.id,
+      key: c.key,
+      kind: c.kind,
+      createdAt: c.createdAt,
+      otherDevice: c.otherDevice,
+      keptSide: c.keptSide,
+      sideFile: c.sideFile,
+      current,
+      other: previewContent(c.key, c.otherContent),
+    };
+  });
+}
+
+/**
+ * Hint بالعربي: دالة حسم تعارض: keep = تبقى النسخة الحالية، other = تُعتمد الأخرى. ثم دورة مزامنة لنشر القرار.
+ */
+export function resolveSyncConflict(vault: UnlockedVault, id: string, choice: 'keep' | 'other'): { messageAr: string } {
+  return withSyncErrors(() => {
+    const ctx = requireCtx();
+    resolveConflict(ctx, vault, id, choice);
+    runSyncCycle(ctx, vault);
+    return { messageAr: choice === 'keep' ? '✅ بقيت النسخة الحالية، ونُقلت الأخرى إلى السلة 30 يوماً.' : '✅ اعتُمدت النسخة الأخرى، ونُقلت الحالية إلى السلة 30 يوماً.' };
+  });
+}
+
+/**
+ * Hint بالعربي: دالة سرد السلة (بلا محتوى الأسرار).
+ */
+export function listSyncTrash(vault: UnlockedVault): Array<{ id: string; key: string; deletedAt: string; deletedBy: string; label: string }> {
+  const ctx = requireCtx();
+  return listTrash(ctx, vault.dataKey).map((t) => {
+    let label = t.key;
+    if (recordKind(t.key) === 'secret') {
+      try {
+        label = `سرّ: ${(JSON.parse(Buffer.from(t.content, 'base64').toString('utf8')) as VaultSecretItem).title}`;
+      } catch {
+        label = 'سرّ';
+      }
+    } else if (recordKind(t.key) === 'obs') label = `Obsidian: ${t.key.slice(4)}`;
+    else if (recordKind(t.key) === 'conv') label = 'محادثة';
+    else if (recordKind(t.key) === 'project') label = `مشروع: ${t.key.slice(8)}`;
+    else if (recordKind(t.key) === 'memory') label = `ذاكرة: ${t.key.slice(7)}`;
+    return { id: t.id, key: t.key, deletedAt: t.deletedAt, deletedBy: t.deletedBy, label };
+  });
+}
+
+/**
+ * Hint بالعربي: دالة استرجاع عنصر من السلة ثم نشره (فيعود على كل الأجهزة).
+ */
+export function restoreSyncTrash(vault: UnlockedVault, id: string): { messageAr: string } {
+  return withSyncErrors(() => {
+    const ctx = requireCtx();
+    const entry = listTrash(ctx, vault.dataKey).find((t) => t.id === id);
+    if (!entry) throw new Error('العنصر غير موجود في السلة.');
+    restoreFromTrash(ctx, vault, entry);
+    removeTrashEntry(ctx, id);
+    runSyncCycle(ctx, vault);
+    return { messageAr: '♻️ استُرجع العنصر، ونُشر فيعود على الأجهزة الأخرى أيضاً.' };
+  });
+}
+
+/** معرّف قفل الأجهزة القديمة (للواجهة: لا يُعرض كجهاز) */
+export { LEGACY_LOCK_DEVICE_ID };

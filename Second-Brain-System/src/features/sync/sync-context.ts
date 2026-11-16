@@ -4,8 +4,8 @@
  * القسم: Features -> Sync (سياق المزامنة: هوية الجهاز، الحالة المحلية، قفل الكتابة)
  * Hint بالعربي: كل جهاز يعمل محلياً بالكامل، والمزامنة تتم عبر مجلد مُزامَن (Google Drive عادةً):
  *               <المجلد>/Second-Brain-Sync/ { manifest.json, write-lease.json, snapshots/, devices/ }.
- *               قفل الكتابة يسمح لجهاز واحد فقط بتعديل البيانات المشتركة، والباقي في وضع القراءة.
- *               القفل ينتهي إن لم يرسل حامله إشارة حياة لمدة 30 دقيقة.
+ *               منذ 2.0 لا قفل للكتابة: كل جهاز يكتب، وقفل 1.9 يبقى فقط لإبقاء الأجهزة القديمة في وضع القراءة
+ *               (multi-writer-sync.ts). دوال القفل هنا تبقى للترحيل ولقراءة حالة الأجهزة القديمة.
  *               كل الدوال تأخذ "سياقاً" صريحاً (المسارات + الجهاز) حتى تُختبر بمحاكاة عدة أجهزة.
  * ============================================================================
  */
@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { loadSystemConfig, readRawSettings, resolveDefaultConfigPath, resolveSettingsPath } from '../../core/config-manager.ts';
-import { readJsonFileSafe, writeFileAtomic } from '../../shared/file-helpers.ts';
+import { readJsonFileSafe, removePathSync, writeFileAtomic } from '../../shared/file-helpers.ts';
 
 /** مدة انتهاء قفل الكتابة بلا إشارة حياة */
 export const LEASE_EXPIRY_MS = 30 * 60 * 1000;
@@ -236,29 +236,15 @@ export function heartbeatLease(ctx: SyncContext, now: number = Date.now()): bool
  */
 export function releaseLease(ctx: SyncContext): boolean {
   if (readLeaseStatus(ctx).kind !== 'mine') return false;
-  fs.rmSync(leasePath(ctx), { force: true });
+  removePathSync(leasePath(ctx), { force: true });
   return true;
 }
 
 /**
  * Hint بالعربي: دالة الحارس: هل يحق لهذا الجهاز تعديل البيانات المشتركة الآن؟
- *               المزامنة مطفأة ← نعم دائماً. مفعّلة ← فقط إن كان القفل لهذا الجهاز.
- *               تُستخدم في الخادم، والمراقب الدوري، والأرشفة، وخادم MCP.
+ *               منذ 2.0 (المزامنة متعددة الكتابة) الجواب نعم دائماً: كل جهاز يكتب، والدمج يحل التعارضات.
+ *               تبقى الدالة لأن المراقب والأرشفة وخادم MCP يستدعونها، ولتوضيح القرار في مكان واحد.
  */
-export function checkWriteAccess(ctx: SyncContext | null = buildSyncContext()): { allowed: boolean; reasonAr?: string; holder?: string } {
-  if (!ctx) return { allowed: true };
-  let status: LeaseStatus;
-  try {
-    status = readLeaseStatus(ctx);
-  } catch (err) {
-    // تعذّرت قراءة القفل ← نرفض الكتابة (الأمان أولاً) بدل افتراض أن لا أحد يكتب
-    return { allowed: false, reasonAr: `تعذّر التحقق من صلاحية الكتابة: ${err instanceof Error ? err.message : String(err)}` };
-  }
-  if (status.kind === 'mine') return { allowed: true };
-  if (status.kind === 'none') return { allowed: false, reasonAr: 'لا يحمل أي جهاز صلاحية الكتابة. اضغط «انقل الكتابة إلى هذا الجهاز» في قسم المزامنة.' };
-  return {
-    allowed: false,
-    holder: status.lease.deviceName,
-    reasonAr: `هذا الجهاز في وضع القراءة: الكتابة الآن على «${status.lease.deviceName}». انقلها إلى هنا من قسم المزامنة.`,
-  };
+export function checkWriteAccess(_ctx?: SyncContext | null): { allowed: boolean; reasonAr?: string; holder?: string } {
+  return { allowed: true };
 }

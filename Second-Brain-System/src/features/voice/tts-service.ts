@@ -19,6 +19,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { loadSystemConfig } from '../../core/config-manager.ts';
 import { normalizeXttsSpeaker, resolveXttsLaunch, XTTS_MAX_CHARS, XTTS_SPEAKERS, xttsWorker } from './xtts-engine.ts';
+import { removePathSync } from '../../shared/file-helpers.ts';
 
 /** أقصى طول للنص في طلب واحد (الواجهة تقسّم الرد إلى جمل) */
 export const MAX_TTS_CHARS = 1500;
@@ -256,7 +257,7 @@ export function synthesizeSpeech(text: string, speakerInput?: unknown): Promise<
       }
       return { wav: fs.readFileSync(out), engine: status.engine };
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      removePathSync(dir, { recursive: true, force: true });
     }
   });
   queue = job.catch(() => undefined);

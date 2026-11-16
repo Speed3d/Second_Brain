@@ -27,6 +27,7 @@ import { runClaudeSubscriptionTests } from './12-claude-subscription.test.ts';
 import { runConversationsAndVoiceTests } from './13-conversations-and-voice.test.ts';
 import { runInstallerTests } from './14-installer.test.ts';
 import { runSyncTests } from './15-sync.test.ts';
+import { runMultiWriterSyncTests } from './16-multi-writer-sync.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -109,9 +110,14 @@ export async function executeAllSystemTests(): Promise<void> {
       runner: runInstallerTests,
     },
     {
-      name: '15. اختبارات المزامنة بين الأجهزة (3 أجهزة وهمية: قفل الكتابة، النشر والاستيراد، منع التعارض، وضع القراءة)',
+      name: '15. اختبارات صيغة المزامنة القديمة والترحيل إلى 2.0 (قفل الأجهزة القديمة، الترحيل عند فتح الخزنة، الكتابة بلا قفل)',
       file: 'tests/15-sync.test.ts',
       runner: runSyncTests,
+    },
+    {
+      name: '16. اختبارات المزامنة متعددة الكتابة (3 أجهزة: تعارضات، أسرار، حذف مقابل تعديل، ساعة متقدمة، فشل الدمج، Drive متأخر، السلة، كلمة المرور، جهاز جديد، تمرين الاستعادة)',
+      file: 'tests/16-multi-writer-sync.test.ts',
+      runner: runMultiWriterSyncTests,
     },
   ];
 

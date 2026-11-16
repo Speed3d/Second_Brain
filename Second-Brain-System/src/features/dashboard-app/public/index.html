@@ -57,8 +57,8 @@
     </nav>
 
     <main id="main" class="views" tabindex="-1">
-      <div class="readonly-banner" id="readonlyBanner" role="status" hidden>
-        <span id="readonlyText"></span>
+      <div class="readonly-banner" id="syncAlertBanner" role="status" hidden>
+        <span id="syncAlertText"></span>
         <button type="button" class="btn btn-ghost btn-sm" data-action="view" data-view="sync">🔄 المزامنة</button>
       </div>
 
@@ -132,26 +132,41 @@
           <h1 id="h-sync">المزامنة بين الأجهزة</h1>
           <div class="toolbar"><button type="button" class="btn btn-ghost" data-action="sync-refresh">🔄 تحديث الحالة</button></div>
         </div>
-        <p class="small muted">كل جهاز يعمل وحده بالكامل، وتنتقل البيانات بينها بنسخ <strong>مشفّرة بمفتاح الخزنة</strong> عبر مجلد Google Drive، فلا يرى Google أي محتوى. جهاز واحد فقط يكتب في كل مرة، والباقي في وضع القراءة، حتى لا تتعارض التعديلات.</p>
+        <p class="small muted">كل جهاز يعمل وحده بالكامل، و<strong>تكتب وتعدّل من أي جهاز</strong> متى شئت. التغييرات تنتقل بين الأجهزة <strong>مشفّرة بمفتاح الخزنة</strong> عبر مجلد Google Drive، فلا يرى Google أي محتوى. إن عدّلتَ الشيء نفسه على جهازين قبل المزامنة تُحفظ النسختان ويظهر لك تعارض لتختار، فلا يضيع شيء.</p>
 
         <article class="card">
           <div class="card-head"><h2 id="syncDeviceTitle">هذا الجهاز</h2><span class="badge" id="syncModeBadge"></span></div>
           <dl class="kv" id="syncFacts"></dl>
           <p class="small" id="syncProblem" hidden></p>
           <div class="card-actions" data-commander-only>
-            <button type="button" class="btn btn-primary btn-sm" data-action="sync-take" hidden>✍️ انقل الكتابة إلى هذا الجهاز</button>
-            <button type="button" class="btn btn-ghost btn-sm" data-action="sync-publish" hidden>⬆️ انشر الآن</button>
-            <button type="button" class="btn btn-ghost btn-sm" data-action="sync-release" hidden>🔓 اترك الكتابة (للانتقال إلى جهاز آخر)</button>
+            <button type="button" class="btn btn-primary btn-sm" data-action="sync-now" hidden>🔄 زامن الآن</button>
           </div>
-          <p class="small muted">التغييرات تُنشر تلقائياً كل دقيقتين وعند قفل الخزنة. وعند فتح الخزنة يُستورد أي إصدار أحدث من الأجهزة الأخرى، بعد حفظ نسخة احتياطية من حالة هذا الجهاز.</p>
+          <p class="small muted">المزامنة تلقائية كل دقيقتين، وعند فتح الخزنة وقفلها. قبل كل دمج تُحفظ نسخة احتياطية من حالة هذا الجهاز، وإن فشل الدمج تعود الحالة السابقة تلقائياً.</p>
         </article>
+
+        <article class="card" data-commander-only id="syncDevicesCard" hidden>
+          <div class="card-head"><h2>💻 الأجهزة</h2></div>
+          <ul class="list" id="syncDevicesList"></ul>
+        </article>
+
+        <article class="card" data-commander-only id="syncConflictsCard" hidden>
+          <div class="card-head"><h2>⚠️ تعارضات تنتظر قرارك</h2><span class="badge warn" id="syncConflictsCount"></span></div>
+          <p class="small muted">عُدّل الشيء نفسه على جهازين قبل أن يرى أحدهما تعديل الآخر. النسختان محفوظتان: اختر أيهما تبقى، والأخرى تذهب إلى السلة 30 يوماً. الأسرار لا تُحسم تلقائياً أبداً.</p>
+          <div id="syncConflictsList"></div>
+        </article>
+
+        <details class="card" data-commander-only id="syncTrashCard">
+          <summary>🗑️ سلة المحذوفات (30 يوماً) <span class="badge" id="syncTrashCount"></span></summary>
+          <p class="small muted">ما يُحذف على أي جهاز يبقى هنا 30 يوماً. الاسترجاع يعيده على كل الأجهزة.</p>
+          <ul class="list" id="syncTrashList"></ul>
+        </details>
 
         <details class="card" data-commander-only>
           <summary>⚙️ إعداد المزامنة على هذا الجهاز (يتطلب كلمة المرور الرئيسية)</summary>
           <ol class="steps small">
             <li>ثبّت <strong>Google Drive for desktop</strong> من <span class="mono">google.com/drive/download</span> وسجّل الدخول بحسابك (على كل جهاز).</li>
             <li>اختر مجلد «My Drive» أدناه (أو أي مجلد مُزامَن)، وفعّل المزامنة.</li>
-            <li>على الجهاز الأول: «انقل الكتابة إلى هذا الجهاز» فيُنشر أول إصدار. على الأجهزة الأخرى: افتح الخزنة فيُستورد تلقائياً.</li>
+            <li>افتح الخزنة بكلمة المرور الرئيسية: تبدأ المزامنة تلقائياً (وعلى الأجهزة المحدَّثة من 1.9 يتم الترحيل مرة واحدة).</li>
           </ol>
           <form data-form="sync-settings" class="form-grid">
             <label class="check span-2"><input type="checkbox" name="enabled" /> تفعيل المزامنة على هذا الجهاز</label>
@@ -396,6 +411,15 @@
             <p class="small muted">تُفتح النسخة بكلمة المرور أو بمفتاح الطوارئ، حتى على جهاز جديد.</p>
             <button type="button" class="btn btn-primary" data-action="backup">💾 نسخة احتياطية الآن</button>
             <div class="list compact" id="backupsList"></div>
+            <details data-commander-only>
+              <summary class="small">🧪 تمرين الاستعادة (تحقق أن النسخة تُستعاد فعلاً)</summary>
+              <p class="small muted">يستعيد أحدث نسخة في مجلد مؤقت معزول، ويتحقق من: فتح الخزنة، والمحادثات، والذاكرة، والمشاريع، وملفات Obsidian، وعدم فقدان أي ملف، ثم يحذف المجلد. الأفضل تشغيله على جهاز غير الذي أنشأ النسخة.</p>
+              <form data-form="restore-drill" class="form-grid">
+                <label class="span-2">كلمة المرور الرئيسية<input type="password" name="key" autocomplete="current-password" required /></label>
+                <div class="span-2 form-actions"><button type="submit" class="btn btn-ghost">🧪 ابدأ التمرين</button></div>
+              </form>
+              <div class="report" id="drillReport" hidden></div>
+            </details>
           </div>
           <div class="card" data-commander-only>
             <h2>🔑 تغيير كلمة المرور</h2>

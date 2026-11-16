@@ -58,7 +58,6 @@ export function getConversationRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: CONVERSATION_DELETE_PATH,
-      sharedWrite: true,
       requiresSession: true,
       handler: ({ res, params, session }) => {
         if (!deleteConversation(session!.vault, params[0])) throw new HttpError(404, 'المحادثة غير موجودة.');
@@ -68,7 +67,6 @@ export function getConversationRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/conversations/delete-all',
-      sharedWrite: true,
       requiresSession: true,
       handler: ({ res, body, session }) => {
         const count = deleteAllConversations(session!.vault, readMode(body.mode, true)!);

@@ -14,6 +14,7 @@ import { isValidEmergencyKey } from '../../../core/crypto-engine.ts';
 import { createEncryptedSystemBackup, listEncryptedBackups, restoreEncryptedBackup } from '../../family-emergency/backup-service.ts';
 import { generatePrintableEmergencyKit } from '../../family-emergency/emergency-kit-service.ts';
 import { verifyEmergencyKey } from '../../vault/vault-manager.ts';
+import { runRestoreDrill } from '../../../tools/restore-drill.ts';
 import { HttpError, readString, sendHtml, sendJson, type RouteDefinition } from '../http-utils.ts';
 import { getUnlockRetryAfterMs, recordUnlockFailure, recordUnlockSuccess } from '../session-manager.ts';
 import { assertUnlockAllowed } from './vault-routes.ts';
@@ -118,6 +119,32 @@ export function getEmergencyRoutes(): RouteDefinition[] {
         }
         recordUnlockSuccess();
         sendJson(res, 200, { ok: true, ...result, filesCount: result.files.length, files: result.files.slice(0, 200) });
+      },
+    },
+    {
+      // تمرين الاستعادة: يستعيد أحدث نسخة (أو المحددة) في مجلد مؤقت معزول ويتحقق منها، ثم يحذفه
+      method: 'POST',
+      path: '/api/emergency/restore-drill',
+      handler: ({ res, body }) => {
+        assertUnlockAllowed();
+        const key = readString(body, 'key', 512);
+        if (!key) throw new HttpError(400, 'أدخل كلمة المرور الرئيسية لفتح النسخة في التمرين.');
+        const config = loadSystemConfig();
+        const candidates = [...listEncryptedBackups(), ...(config.security?.extraBackupDir ? listEncryptedBackups(config.security.extraBackupDir) : [])];
+        const requested = readString(body, 'backupFile', 1000).trim();
+        const chosen = requested ? candidates.find((b) => b.filePath === path.resolve(requested) || b.fileName === requested) : candidates.sort((a, b) => b.fileName.localeCompare(a.fileName))[0];
+        if (!chosen) throw new HttpError(404, requested ? 'النسخة المحددة غير موجودة في مجلدات النسخ.' : 'لا توجد نسخة احتياطية بعد. أنشئ نسخة أولاً.');
+        const report = runRestoreDrill(chosen.filePath, key, {
+          liveRootDir: config.paths.rootDir,
+          reportsDir: path.join(config.paths.rootDir, 'Second-Brain-System', 'data', 'restore-drills'),
+        });
+        const openFailed = report.checks.some((c) => !c.ok && /غير صحيح/.test(c.detailAr));
+        if (openFailed) {
+          recordUnlockFailure();
+          throw new HttpError(401, 'كلمة المرور أو مفتاح الطوارئ غير صحيح لهذه النسخة.', { retryAfterSeconds: Math.ceil(getUnlockRetryAfterMs() / 1000) });
+        }
+        recordUnlockSuccess();
+        sendJson(res, 200, { ok: true, report, messageAr: report.ok ? `✅ تمرين الاستعادة نجح: ${report.backupFile} تُستعاد كاملة.` : `⚠️ تمرين الاستعادة وجد مشكلات في ${report.backupFile}. راجع التفاصيل.` });
       },
     },
   ];

@@ -160,7 +160,6 @@ export function getAssistantRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/assistant/keys',
-      sharedWrite: true,
       requiresSession: true,
       commanderOnly: true,
       handler: ({ res, body, session }) => {

@@ -189,7 +189,7 @@
     if (view === 'sync') loadSync();
   }
 
-  // ===================== المزامنة (المرحلة ج) =====================
+  // ===================== المزامنة (2.0: الكتابة من كل الأجهزة) =====================
   async function loadSync() {
     let s;
     try {
@@ -198,7 +198,7 @@
       return;
     }
     state.sync = s;
-    renderReadonlyBanner();
+    renderSyncAlertBanner();
     if (!$('#syncFacts')) return;
     const badge = $('#syncModeBadge');
     if (!s.enabled) {
@@ -207,43 +207,52 @@
     } else if (!s.ready) {
       badge.className = 'badge warn';
       badge.textContent = '⚠️ غير جاهزة';
-    } else if (s.canWrite) {
-      badge.className = 'badge ok';
-      badge.textContent = '✍️ حامل صلاحية الكتابة';
-    } else {
+    } else if (!s.migrated) {
       badge.className = 'badge warn';
-      badge.textContent = '📖 وضع القراءة';
+      badge.textContent = '⏳ بانتظار الترحيل (افتح الخزنة)';
+    } else {
+      badge.className = 'badge ok';
+      badge.textContent = '✍️ الكتابة من كل الأجهزة';
     }
     $('#syncDeviceTitle').textContent = s.device ? 'هذا الجهاز: ' + s.device.deviceName : 'هذا الجهاز';
     const fmt = (iso) => (iso ? formatDateAr(iso) : '—');
-    const leaseText = !s.lease
-      ? '—'
-      : s.lease.kind === 'none'
-        ? 'لا أحد'
-        : s.lease.kind === 'mine'
-          ? 'هذا الجهاز'
-          : s.lease.holder + (s.lease.kind === 'other-expired' ? ' (منتهي: لم يرسل إشارة حياة منذ أكثر من 30 دقيقة)' : '');
     const facts = [
       ['مجلد المزامنة', s.folder || '—'],
-      ['صلاحية الكتابة', leaseText],
-      ['إصدار هذا الجهاز', s.ready ? String(s.baseVersion) : '—'],
-      ['آخر إصدار منشور', s.ready ? String(s.latestVersion) + (s.latestFrom ? ' — من ' + s.latestFrom : '') : '—'],
-      ['تغييرات غير منشورة', s.ready ? (s.hasLocalChanges ? 'نعم' : 'لا') : '—'],
-      ['آخر استيراد', fmt(s.lastImportAt)],
-      ['آخر نشر', fmt(s.lastPublishAt)],
+      ['آخر نشر من هذا الجهاز', fmt(s.lastPublishAt)],
+      ['آخر دمج من الأجهزة الأخرى', fmt(s.lastMergeAt)],
+      ['تعارضات مفتوحة', s.ready ? String(s.conflicts || 0) : '—'],
+      ['في السلة', s.ready ? String(s.trash || 0) : '—'],
     ];
+    if (s.lastWarning) facts.push(['تنبيه', s.lastWarning]);
     if (s.lastError) facts.push(['آخر خطأ', s.lastError]);
     $('#syncFacts').replaceChildren(...facts.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: v })]));
     const problem = $('#syncProblem');
-    problem.hidden = !s.problemAr && !s.newerAvailable;
-    problem.textContent = s.problemAr || (s.newerAvailable ? '⬇️ يوجد إصدار أحدث من جهاز آخر؛ يُستورد عند فتح الخزنة أو عند نقل الكتابة إلى هنا.' : '');
-    // حامل الكتابة المتأخر عن إصدار أحدث (مثلاً أخذ القفل دون استيراد) يحتاج زر الاستيراد، وإلا يعلق:
-    // النشر والترك كلاهما يُرفضان فوق إصدار أحدث
-    const takeBtn = $('[data-action="sync-take"]');
-    takeBtn.hidden = !s.ready || (s.canWrite && !s.newerAvailable);
-    takeBtn.textContent = s.canWrite ? '⬇️ استورد الإصدار الأحدث (' + s.latestVersion + ')' : '✍️ انقل الكتابة إلى هذا الجهاز';
-    $('[data-action="sync-publish"]').hidden = !s.ready || !s.canWrite;
-    $('[data-action="sync-release"]').hidden = !s.ready || !s.canWrite;
+    problem.hidden = !s.problemAr;
+    problem.textContent = s.problemAr || '';
+    $('[data-action="sync-now"]').hidden = !s.ready;
+
+    const devices = (s.devices || []).filter((d) => d.deviceId !== 'second-brain-2-multi-writer');
+    $('#syncDevicesCard').hidden = !devices.length;
+    $('#syncDevicesList').replaceChildren(
+      ...devices.map((d) =>
+        el('li', {
+          children: [
+            el('strong', { text: (d.isThisDevice ? '📍 ' : '') + d.deviceName }),
+            el('span', { className: 'muted small', text: ' — آخر ظهور ' + fmt(d.lastSeenAt) + (d.appVersion ? ' · الإصدار ' + d.appVersion : '') + (d.syncFormat === 2 ? '' : ' · ⚠️ إصدار قديم: حدّثه إلى 2.0') }),
+          ],
+        })
+      )
+    );
+    $('#syncTrashCount').textContent = s.ready ? String(s.trash || 0) : '';
+    const trashCard = $('#syncTrashCard');
+    if (trashCard && !trashCard.dataset.bound) {
+      trashCard.addEventListener('toggle', () => {
+        if (trashCard.open) loadSyncTrash();
+      });
+      trashCard.dataset.bound = '1';
+    }
+    await loadSyncConflicts(s);
+
     const form = $('[data-form="sync-settings"]');
     if (form && !form.dataset.filled) {
       form.elements.enabled.checked = Boolean(s.enabled);
@@ -253,18 +262,87 @@
     $('#syncFolderSuggestions').replaceChildren(...(s.suggestedFolders || []).map((f) => el('option', { attrs: { value: f } })));
   }
 
-  function renderReadonlyBanner() {
-    const s = state.sync;
-    const banner = $('#readonlyBanner');
-    if (!banner) return;
-    const readOnly = s && s.ready && !s.canWrite;
-    banner.hidden = !readOnly;
-    if (readOnly) {
-      $('#readonlyText').textContent =
-        s.lease && s.lease.holder
-          ? '📖 وضع القراءة: الكتابة الآن على «' + s.lease.holder + '». المحادثات لا تُحفظ، والتعديلات معطّلة حتى تنقل الكتابة إلى هنا.'
-          : '📖 وضع القراءة: لا يحمل أي جهاز صلاحية الكتابة بعد.';
+  async function loadSyncConflicts(s) {
+    const card = $('#syncConflictsCard');
+    if (!card) return;
+    const count = s && s.ready ? s.conflicts || 0 : 0;
+    card.hidden = !count;
+    if (!count) return;
+    let r;
+    try {
+      r = await api('/api/sync/conflicts');
+    } catch (err) {
+      return;
     }
+    $('#syncConflictsCount').textContent = String(r.conflicts.length);
+    const kindAr = { edit: 'تعديلان مختلفان', secret: 'سرّ عُدّل على جهازين', 'delete-vs-edit': 'حُذف على جهاز وعُدّل على آخر' };
+    $('#syncConflictsList').replaceChildren(
+      ...r.conflicts.map((c) => {
+        const pane = (title, p) => el('div', { className: 'conflict-pane', children: [el('h3', { className: 'small', text: title }), el('pre', { className: 'mono small', text: p ? p.text : '(محذوف)', attrs: { dir: 'auto' } })] });
+        const keptTitle = 'المعتمدة الآن' + (c.keptSide === 'incoming' ? ' (من ' + c.otherDevice + ')' : ' (هذا الجهاز)');
+        const otherTitle = 'الأخرى' + (c.keptSide === 'incoming' ? ' (هذا الجهاز)' : ' (من ' + c.otherDevice + ')');
+        return el('article', {
+          className: 'card conflict',
+          children: [
+            el('p', { className: 'small', children: [el('strong', { text: syncRecordLabel(c.key) }), el('bdi', { className: 'mono', text: syncRecordPath(c.key), attrs: { dir: 'ltr' } }), el('span', { className: 'muted', text: ' — ' + (kindAr[c.kind] || c.kind) + ' · ' + formatDateAr(c.createdAt) })] }),
+            c.sideFile ? el('p', { className: 'small muted', children: [el('span', { text: 'كُتبت النسخة الأخرى بجانب الملف باسم: ' }), el('bdi', { className: 'mono', text: c.sideFile.slice(4), attrs: { dir: 'ltr' } })] }) : null,
+            el('div', { className: 'conflict-grid', children: [pane(keptTitle, c.current), pane(otherTitle, c.other)] }),
+            el('div', {
+              className: 'card-actions',
+              children: [
+                el('button', { className: 'btn btn-primary btn-sm', text: '✅ أبقِ المعتمدة الآن', attrs: { type: 'button', 'data-action': 'sync-resolve', 'data-id': c.id, 'data-choice': 'keep' } }),
+                el('button', { className: 'btn btn-ghost btn-sm', text: '↔️ اعتمد الأخرى', attrs: { type: 'button', 'data-action': 'sync-resolve', 'data-id': c.id, 'data-choice': 'other' } }),
+              ],
+            }),
+          ],
+        });
+      })
+    );
+  }
+
+  /** اسم مفهوم لنوع السجل في المزامنة */
+  function syncRecordLabel(key) {
+    const kind = key.split(':')[0];
+    return ({ obs: '📄 ملف Obsidian: ', secret: '🔑 سرّ في الخزنة ', memory: '🧠 سجل ذاكرة ', project: '📁 مشروع ', conv: '💬 محادثة ', branding: '🪪 الهوية', vaultkeys: '🔐 مفاتيح الخزنة' })[kind] || key;
+  }
+
+  function syncRecordPath(key) {
+    const kind = key.split(':')[0];
+    return kind === 'obs' || kind === 'project' || kind === 'memory' ? key.slice(kind.length + 1) : '';
+  }
+
+  async function loadSyncTrash() {
+    let r;
+    try {
+      r = await api('/api/sync/trash');
+    } catch (err) {
+      return;
+    }
+    const list = $('#syncTrashList');
+    if (!r.items.length) {
+      list.replaceChildren(el('li', { className: 'muted small', text: 'السلة فارغة.' }));
+      return;
+    }
+    list.replaceChildren(
+      ...r.items.map((t) =>
+        el('li', {
+          children: [
+            el('span', { text: t.label }),
+            el('span', { className: 'muted small', text: ' — حُذف ' + formatDateAr(t.deletedAt) + ' (' + t.deletedBy + ') ' }),
+            el('button', { className: 'btn btn-ghost btn-sm', text: '♻️ استرجع', attrs: { type: 'button', 'data-action': 'sync-restore', 'data-id': t.id } }),
+          ],
+        })
+      )
+    );
+  }
+
+  function renderSyncAlertBanner() {
+    const s = state.sync;
+    const banner = $('#syncAlertBanner');
+    if (!banner) return;
+    const n = s && s.ready ? s.conflicts || 0 : 0;
+    banner.hidden = !n;
+    if (n) $('#syncAlertText').textContent = '⚠️ ' + n + ' تعارض في المزامنة ينتظر قرارك (عُدّل الشيء نفسه على جهازين).';
   }
 
   async function syncAction(btn, pathName, body) {
@@ -1599,6 +1677,22 @@
         }
       });
     },
+    async 'restore-drill'(form, btn) {
+      const r = await busy(btn, () => api('/api/emergency/restore-drill', { key: form.elements.key.value }));
+      form.elements.key.value = '';
+      if (!r) return;
+      toast(r.messageAr, r.report.ok ? 'ok' : 'error', 8000);
+      const box = $('#drillReport');
+      box.hidden = false;
+      const rep = r.report;
+      const lines = rep.checks.map((c) => el('li', { text: (c.ok ? '✅ ' : '❌ ') + c.nameAr + ': ' + c.detailAr }));
+      const cmp = rep.comparedWithLive;
+      box.replaceChildren(
+        el('p', { className: 'small', text: 'النسخة: ' + rep.backupFile + ' (' + formatDateAr(rep.backupCreatedAt) + ') · ' + rep.filesCount + ' ملفاً · ' + Math.round(rep.durationMs / 100) / 10 + ' ثانية' }),
+        el('ul', { className: 'list compact', children: lines }),
+        cmp ? el('p', { className: 'small muted', text: 'مقارنة مع هذا الجهاز الآن (معلومة لا خطأ، فالنسخة قد تكون أقدم): ' + cmp.obsidianFilesOnlyLive + ' ملف Obsidian، و' + cmp.conversationsOnlyLive + ' محادثة، و' + cmp.memoryOnlyLive + ' سجل ذاكرة موجودة هنا وليست في النسخة.' }) : null
+      );
+    },
     async 'change-password'(form, btn) {
       await busy(btn, async () => {
         const data = await api('/api/vault/change-password', formData(form));
@@ -1667,19 +1761,15 @@
     'clear-chat': (b) => clearChat(b.dataset.mode),
     'open-conversations': (b) => openConversations(b.dataset.mode),
     'sync-refresh': () => loadSync(),
-    'sync-publish': (b) => syncAction(b, '/api/sync/publish'),
-    'sync-release': (b) => {
-      if (!window.confirm('ستُنشر آخر التغييرات ثم تُترك صلاحية الكتابة، ويصبح هذا الجهاز في وضع القراءة. متابعة؟')) return;
-      syncAction(b, '/api/sync/release');
+    'sync-now': (b) => syncAction(b, '/api/sync/now'),
+    'sync-resolve': (b) => {
+      const other = b.dataset.choice === 'other';
+      if (other && !window.confirm('ستُعتمد النسخة الأخرى، وتُنقل الحالية إلى السلة 30 يوماً. متابعة؟')) return;
+      syncAction(b, '/api/sync/conflicts/resolve', { id: b.dataset.id, choice: b.dataset.choice });
     },
-    'sync-take': (b) => {
-      const s = state.sync || {};
-      let force = false;
-      if (s.lease && s.lease.kind === 'other') {
-        if (!window.confirm('الكتابة نشطة الآن على «' + s.lease.holder + '». نقلها قسراً قد يُضيع تغييراته غير المنشورة. هل الجهاز الآخر مطفأ أو معطّل فعلاً؟')) return;
-        force = true;
-      }
-      syncAction(b, '/api/sync/take-lease', { force: force });
+    'sync-restore': async (b) => {
+      await syncAction(b, '/api/sync/trash/restore', { id: b.dataset.id });
+      await loadSyncTrash();
     },
     'project-locate': async (b) => {
       const d = state.projectDetails;

@@ -11,6 +11,33 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
+ * Hint بالعربي: دالة حذف ملف أو مجلد بأمان (بديل fs.rmSync).
+ *               ISS-024: على Windows مع Node 24.11، fs.rmSync لا يحذف ملفاً أو مجلداً في اسمه حروف عربية
+ *               ولا يرمي أي خطأ (جُرّب على DESKTOP-PBQB96B في 2026-11-17). fs.unlinkSync و fs.rmdirSync يعملان،
+ *               لذلك الحذف هنا بهما (والمجلدات تُحذف بالتدريج من الداخل). force = تجاهل غير الموجود.
+ *               المخرجات: true إن كان المسار موجوداً وحُذف.
+ */
+export function removePathSync(target: string, options: { recursive?: boolean; force?: boolean } = {}): boolean {
+  let stat: fs.Stats;
+  try {
+    stat = fs.lstatSync(target);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT' && options.force !== false) return false;
+    throw err;
+  }
+  if (stat.isDirectory()) {
+    if (options.recursive) {
+      for (const name of fs.readdirSync(target)) removePathSync(path.join(target, name), { recursive: true, force: true });
+    }
+    fs.rmdirSync(target);
+  } else {
+    fs.unlinkSync(target);
+  }
+  if (fs.existsSync(target)) throw new Error(`تعذّر حذف: ${target}`);
+  return true;
+}
+
+/**
  * Hint بالعربي: دالة للتأكد من وجود المجلد على القرص، وإذا لم يكن موجوداً تقوم بإنشائه تلقائياً
  * مع كافة المجلدات الأبوية اللازمة.
  */

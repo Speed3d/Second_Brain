@@ -48,7 +48,7 @@ export interface EncryptedBackupFileV2 {
 
 /**
  * Hint بالعربي: دالة إنشاء نسخة احتياطية مشفرة كاملة من الخزنة المفتوحة.
- *               تشمل: Obsidian-Vault، ملف الخزنة، الإعدادات، والذاكرة المشتركة.
+ *               تشمل: Obsidian-Vault، ملف الخزنة، الإعدادات، والذاكرة المشتركة، والمحادثات المشفّرة.
  *               تحفظ في مجلد النسخ (وفي المجلد الإضافي إن وُجد) وتحذف الأقدم من حد الاحتفاظ.
  */
 export function createEncryptedSystemBackup(
@@ -73,6 +73,13 @@ export function createEncryptedSystemBackup(
   // الإعدادات (المشاريع، الدخل والفواتير، الذكاء...) — ضرورية للاستعادة الكاملة على جهاز جديد
   addFile(resolveSettingsPath(), SETTINGS_ENTRY);
   addFile(path.join(config.paths.rootDir, 'Second-Brain-System', 'data', 'ai-memory-store.json'));
+  // ISS-020: المحادثات المشفّرة (بمفتاح الخزنة نفسه) جزء من النسخة، فتُستعاد على جهاز جديد أيضاً
+  const conversationsDir = path.join(config.paths.rootDir, 'Second-Brain-System', 'data', 'conversations');
+  if (fs.existsSync(conversationsDir)) {
+    for (const name of fs.readdirSync(conversationsDir)) {
+      if (/^[a-z0-9-]{8,64}\.enc\.json$/.test(name)) addFile(path.join(conversationsDir, name));
+    }
+  }
 
   const createdAt = formatTimestampIso();
   const snapshot: FullSystemSnapshot = { createdAt, appName: config.appName, filesCount: Object.keys(filesMap).length, filesMap };

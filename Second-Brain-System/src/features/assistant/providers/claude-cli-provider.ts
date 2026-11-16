@@ -16,6 +16,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { AIProvider, ChatTurn, ProviderChatRequest, ProviderChatResult } from './provider-types.ts';
 import { ProviderError, withTimeout } from './provider-types.ts';
+import { removePathSync } from '../../../shared/file-helpers.ts';
 
 /** متغيرات بيئة تُزال قبل التشغيل: تمنع التحول إلى فوترة API أو إلى مزوّد آخر، وتمنع اكتشاف "جلسة متداخلة" */
 const STRIPPED_ENV_VARS = [
@@ -386,6 +387,6 @@ async function runClaudeCli(
       child.stdin.end(formatConversationForCli(request.messages), 'utf8');
     });
   } finally {
-    fs.rmSync(workDir, { recursive: true, force: true });
+    removePathSync(workDir, { recursive: true, force: true });
   }
 }

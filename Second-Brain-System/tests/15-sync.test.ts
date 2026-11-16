@@ -2,10 +2,11 @@
  * ============================================================================
  * الملف: tests/15-sync.test.ts
  * القسم: Tests (الاختبارات الدائمة الموثقة — القانون الثامن)
- * Hint بالعربي: اختبارات المرحلة ج (المزامنة بين الأجهزة) بمحاكاة 3 أجهزة في مجلدات مؤقتة ومجلد Drive وهمي:
- *               قفل الكتابة ونقله وانتهاؤه، النشر والاستيراد والمطابقة التامة، رفض النشر فوق إصدار أحدث،
- *               النسخة الاحتياطية قبل الاستيراد، رفض خزنة مختلفة أو نسخة معدّلة، مسارات المشاريع لكل جهاز،
- *               ووضع القراءة في الخادم (رفض الكتابة 423، عدم حفظ المحادثات) والاستيراد التلقائي عند فتح الخزنة.
+ * Hint بالعربي: اختبارات صيغة المزامنة القديمة (1.9) التي يعتمد عليها الترحيل إلى 2.0، بمحاكاة 3 أجهزة:
+ *               قفل 1.9 (يبقى فقط لإبقاء الأجهزة القديمة في وضع القراءة)، نشر النسخ القديمة واستيرادها،
+ *               رفض خزنة مختلفة أو نسخة معدّلة، مسارات المشاريع لكل جهاز، اقتراح مجلد Drive،
+ *               ثم الخادم في 2.0: الترحيل التلقائي عند فتح الخزنة، والكتابة بلا قفل، وقفل الأجهزة القديمة.
+ *               اختبارات المزامنة متعددة الكتابة نفسها في tests/16-multi-writer-sync.test.ts.
  * ============================================================================
  */
 
@@ -72,8 +73,8 @@ export async function runSyncTests(): Promise<string[]> {
   assert.equal(readLeaseStatus(A).kind, 'mine');
   assert.equal(readLeaseStatus(B).kind, 'other');
   assert.throws(() => acquireLease(B), /الكتابة الآن على جهاز «Asus-Windows»/);
-  assert.equal(checkWriteAccess(B).allowed, false);
-  assert.match(checkWriteAccess(B).reasonAr ?? '', /وضع القراءة/);
+  // منذ 2.0 لا قفل للكتابة: الحارس يسمح دائماً، وقفل 1.9 يبقى فقط للأجهزة القديمة
+  assert.equal(checkWriteAccess(B).allowed, true, '2.0: كل جهاز يكتب');
   assert.equal(checkWriteAccess(A).allowed, true);
   assert.equal(heartbeatLease(B), false, 'غير الحامل لا يرسل إشارة حياة');
   const later = Date.now() + LEASE_EXPIRY_MS + 60000;
@@ -82,7 +83,7 @@ export async function runSyncTests(): Promise<string[]> {
   assert.equal(readLeaseStatus(A).kind, 'other');
   acquireLease(A, { force: true });
   assert.equal(readLeaseStatus(A).kind, 'mine', 'النقل القسري بتأكيد صريح');
-  passedChecks.push('اختبار قفل الكتابة (الأخذ، الرفض لجهاز آخر، وضع القراءة، الانتهاء بعد 30 دقيقة، النقل القسري) بنجاح.');
+  passedChecks.push('اختبار قفل 1.9 (للأجهزة القديمة: الأخذ، الرفض، الانتهاء بعد 30 دقيقة، النقل القسري) والحارس في 2.0 يسمح دائماً بنجاح.');
 
   // 2. النشر والاستيراد والمطابقة التامة
   writeFixtureFile(path.join(A.obsidianDir, '02-Projects', 'App', 'Overview.md'), '# نظرة عامة من الويندوز');
@@ -204,7 +205,7 @@ export async function runSyncTests(): Promise<string[]> {
   fs.rmSync(fakeHome, { recursive: true, force: true });
   passedChecks.push('اختبار اقتراح مجلد Google Drive على الماك («My Drive» و«ملفاتي» بالعربية، والمجلد المعتمد أولاً، وتجاهل غير Google Drive) بنجاح.');
 
-  // 6. الخادم: الإعداد، الاستيراد عند فتح الخزنة، ووضع القراءة
+  // 6. الخادم في 2.0: الترحيل التلقائي عند فتح الخزنة، والكتابة بلا قفل، وقفل الأجهزة القديمة
   const serverDrive = path.join(base, 'Server-Drive');
   fs.mkdirSync(serverDrive, { recursive: true });
   const dataDir = path.join(config.paths.rootDir, 'Second-Brain-System', 'data');
@@ -212,8 +213,9 @@ export async function runSyncTests(): Promise<string[]> {
   writeFixtureFile(deviceFile, JSON.stringify({ deviceId: 'id-this-laptop', deviceName: 'This-Laptop', platform: 'test' }));
   const originalSettings = readRawSettings();
   updateSystemSettings({ sync: { enabled: true, folder: serverDrive } });
-  // جهاز آخر ينشر إصداراً بنفس الخزنة
-  const Other = makeDevice(base, 'Other-Mac', path.join(serverDrive, 'Second-Brain-Sync'), config.paths.encryptedVaultFile);
+  // جهاز آخر بإصدار 1.9 ينشر نسخة قديمة بنفس الخزنة ويحمل قفل 1.9
+  const otherRoot = path.join(serverDrive, 'Second-Brain-Sync');
+  const Other = makeDevice(base, 'Other-Mac', otherRoot, config.paths.encryptedVaultFile);
   const vaultOther = unlockVault(TEST_MASTER_PASSWORD, Other.vaultFile);
   writeFixtureFile(
     path.join(Other.dataDir, 'ai-memory-store.json'),
@@ -226,35 +228,64 @@ export async function runSyncTests(): Promise<string[]> {
   const server = await startSecondBrainDesktopServer(0);
   const port = (server.address() as AddressInfo).port;
   try {
-    const status = JSON.parse((await rawRequest(port, { path: '/api/sync/status' })).body);
-    assert.equal(status.ready, true);
-    assert.equal(status.canWrite, false);
-    assert.equal(status.lease.holder, 'Other-Mac');
-    assert.equal(status.newerAvailable, true);
+    const before = JSON.parse((await rawRequest(port, { path: '/api/sync/status' })).body);
+    assert.equal(before.ready, true);
+    assert.equal(before.multiWriter, true);
+    assert.equal(before.migrated, false, 'قبل فتح الخزنة لم يُرحَّل الجهاز');
+    assert.match(before.problemAr ?? '', /افتح الخزنة/);
+
+    // ملف manifest غير مقروء: الترحيل يتوقف دون بناء الفهرس (لا يُعامل كأنه غير موجود — ISS-013)
+    const manifestFile = path.join(otherRoot, 'manifest.json');
+    const manifestText = read(manifestFile);
+    fs.rmSync(manifestFile);
+    fs.mkdirSync(manifestFile);
+    assert.throws(() => readManifest(Other), /manifest\.json/, 'manifest غير المقروء خطأ، لا «لا يوجد»');
+    const failedUnlock = await postJson(port, '/api/vault/unlock', { key: TEST_MASTER_PASSWORD });
+    assert.equal(failedUnlock.status, 200, 'فشل المزامنة لا يمنع فتح الخزنة');
+    assert.match(JSON.parse(failedUnlock.body).syncMessageAr ?? '', /manifest\.json/);
+    assert.equal(fs.existsSync(path.join(dataDir, 'sync', 'index.json')), false, 'لم يُبنَ الفهرس على أساس غير معروف');
+    fs.rmSync(manifestFile, { recursive: true });
+    fs.writeFileSync(manifestFile, manifestText);
+    // إغلاق الجلسة دون دورة مزامنة (القفل العادي يُشغّل دورة، فيرحّل الجهاز قبل الفتح التالي)
+    resetSessionStateForTests();
 
     const unlock = await postJson(port, '/api/vault/unlock', { key: TEST_MASTER_PASSWORD });
     assert.equal(unlock.status, 200);
-    assert.match(JSON.parse(unlock.body).syncMessageAr ?? '', /استُورد الإصدار 1 من «Other-Mac»/, 'الاستيراد التلقائي عند فتح الخزنة');
-    assert.match(read(path.join(dataDir, 'ai-memory-store.json')), /from-mac/);
+    assert.match(JSON.parse(unlock.body).syncMessageAr ?? '', /رُحّل هذا الجهاز إلى المزامنة الجديدة/, 'الترحيل التلقائي عند فتح الخزنة');
+    assert.match(read(path.join(dataDir, 'ai-memory-store.json')), /from-mac/, 'الترحيل استورد آخر نسخة قديمة أولاً');
     const cookie = String(unlock.headers['set-cookie'] ?? '').split(';')[0];
+    const index = JSON.parse(read(path.join(dataDir, 'sync', 'index.json')));
+    assert.equal(index.origin.kind, 'legacy-migration');
+    assert.equal(index.origin.legacyVersion, 1);
 
-    const blocked = await postJson(port, '/api/projects/add', { name: 'X', path: base }, cookie);
-    assert.equal(blocked.status, 423, 'وضع القراءة يرفض الكتابة على البيانات المشتركة');
-    assert.match(JSON.parse(blocked.body).error, /الكتابة الآن على «Other-Mac»/);
-    const chat = await postJson(port, '/api/assistant/stream', { question: 'سؤال في وضع القراءة', mode: 'commander' }, cookie);
-    const done = JSON.parse(/event: done\ndata: (.*)/.exec(chat.body)![1]);
-    assert.equal(done.saved, false);
-    assert.match(done.saveBlockedAr, /وضع القراءة/, 'المحادثة لا تُحفظ في وضع القراءة، مع السبب');
+    // قفل الأجهزة القديمة: جهاز 1.9 يرى الكتابة عند «Second Brain 2.0» ولا تنتهي، فيبقى في وضع القراءة
+    const legacyView = readLeaseStatus(Other);
+    assert.equal(legacyView.kind, 'other', 'الجهاز القديم في وضع القراءة');
+    assert.match(legacyView.kind === 'other' ? legacyView.lease.deviceName : '', /حدّث هذا الجهاز إلى الإصدار 2\.0/);
+    assert.equal(readLeaseStatus(Other, Date.now() + 365 * 24 * 3600 * 1000).kind, 'other', 'قفل الأجهزة القديمة لا ينتهي');
+    assert.throws(() => publishSnapshot(Other, vaultOther), /لا يملك هذا الجهاز صلاحية الكتابة/);
+    assert.equal(JSON.parse(read(manifestFile)).minAppVersion, '2.0.0');
 
-    const take = await postJson(port, '/api/sync/take-lease', { force: true }, cookie);
-    assert.equal(take.status, 200, take.body);
-    assert.equal(JSON.parse(take.body).status.canWrite, true);
-    const allowed = await postJson(port, '/api/assistant/stream', { question: 'سؤال بعد نقل الكتابة', mode: 'commander' }, cookie);
-    assert.equal(JSON.parse(/event: done\ndata: (.*)/.exec(allowed.body)![1]).saved, true);
-    const pub = await postJson(port, '/api/sync/publish', {}, cookie);
-    assert.match(JSON.parse(pub.body).messageAr, /نُشر الإصدار 2/);
-    assert.equal(readManifest(Other)!.device.deviceName, 'This-Laptop');
-    passedChecks.push('اختبار المزامنة عبر الخادم (الحالة، الاستيراد عند فتح الخزنة، رفض الكتابة 423 وعدم حفظ المحادثات في وضع القراءة، نقل الكتابة والنشر) بنجاح.');
+    // الكتابة بلا قفل: إضافة مشروع وحفظ المحادثة يعملان دائماً
+    const added = await postJson(port, '/api/projects/add', { name: 'X', path: base }, cookie);
+    assert.equal(added.status, 200, added.body);
+    const chat = await postJson(port, '/api/assistant/stream', { question: 'سؤال في 2.0', mode: 'commander' }, cookie);
+    assert.equal(JSON.parse(/event: done\ndata: (.*)/.exec(chat.body)![1]).saved, true, 'المحادثة تُحفظ على كل جهاز');
+    const now1 = await postJson(port, '/api/sync/now', {}, cookie);
+    assert.equal(now1.status, 200, now1.body);
+    assert.match(JSON.parse(now1.body).messageAr, /نُشر \d+ تغييراً/, 'زامن الآن ينشر التغييرات');
+    const changesDir = path.join(otherRoot, 'changes', 'id-this-laptop');
+    assert.ok(fs.readdirSync(changesDir).length >= 1, 'دفعة تغييرات في مجلد هذا الجهاز فقط');
+    assert.ok(!fs.readdirSync(changesDir).some((n) => read(path.join(changesDir, n)).includes('سؤال في 2.0')), 'الدفعات مشفّرة على Drive');
+    const after = JSON.parse((await rawRequest(port, { path: '/api/sync/status' })).body);
+    assert.equal(after.migrated, true);
+    assert.ok(after.devices.some((d: { deviceName: string; syncFormat: number }) => d.deviceName === 'This-Laptop' && d.syncFormat === 2));
+    for (const gone of ['/api/sync/take-lease', '/api/sync/publish', '/api/sync/release']) {
+      assert.equal((await postJson(port, gone, {}, cookie)).status, 404, `${gone} أُزيل في 2.0`);
+    }
+    const appJs = read(path.join(import.meta.dirname, '..', 'src', 'features', 'dashboard-app', 'public', 'app.js'));
+    assert.ok(!appJs.includes('sync-take') && !appJs.includes('readonlyBanner'), 'الواجهة بلا أزرار القفل ولا شريط وضع القراءة');
+    passedChecks.push('اختبار الخادم في 2.0 (manifest غير مقروء يوقف الترحيل، الترحيل التلقائي عند فتح الخزنة، قفل الأجهزة القديمة على وضع القراءة، الكتابة وحفظ المحادثات بلا قفل، زامن الآن، دفعات مشفّرة، إزالة مسارات القفل) بنجاح.');
 
     // سجل ذاكرة ناقص (ملف تالف أو مستورد) لا يُسقط المحادثة
     const memFile = path.join(dataDir, 'ai-memory-store.json');
@@ -265,69 +296,16 @@ export async function runSyncTests(): Promise<string[]> {
     fs.writeFileSync(memFile, memBefore);
     passedChecks.push('اختبار تجاهل سجل ذاكرة ناقص الحقول بدل إسقاط المساعد بنجاح.');
 
-    // ملف غير مقروء على مجلد المزامنة (مثل EDEADLK من Google Drive على الماك) يوقف العملية ولا يُعامل كأنه غير موجود
-    const otherRoot = path.join(serverDrive, 'Second-Brain-Sync');
-    acquireLease(Other, { force: true });
-    importLatestSnapshot(Other, vaultOther);
-    publishSnapshot(Other, vaultOther, { force: true });
-    const manifestFile = path.join(otherRoot, 'manifest.json');
-    const manifestText = read(manifestFile);
-    const snapshotsBefore = fs.readdirSync(path.join(otherRoot, 'snapshots')).sort();
-    fs.rmSync(manifestFile);
-    fs.mkdirSync(manifestFile); // قراءته تفشل بخطأ غير ENOENT
-    assert.throws(() => readManifest(Other), /manifest\.json/, 'manifest غير المقروء خطأ، لا «لا يوجد»');
-    const blockedTake = await postJson(port, '/api/sync/take-lease', { force: true }, cookie);
-    assert.notEqual(blockedTake.status, 200, 'لا يُنقل القفل إن تعذّرت قراءة manifest');
-    assert.match(JSON.parse(blockedTake.body).error, /manifest\.json/);
-    assert.equal(readLeaseStatus(Other).kind, 'mine', 'القفل بقي عند حامله');
-    assert.deepEqual(fs.readdirSync(path.join(otherRoot, 'snapshots')).sort(), snapshotsBefore, 'لم يُنشر «إصدار أول» فوق النسخ الموجودة');
-    fs.rmSync(manifestFile, { recursive: true });
-    const noManifest = await postJson(port, '/api/sync/take-lease', { force: true }, cookie);
-    assert.notEqual(noManifest.status, 200, 'نسخ موجودة بلا manifest: لا يُعتبر أول جهاز');
-    assert.match(JSON.parse(noManifest.body).error, /manifest\.json غير موجود/);
-    fs.writeFileSync(manifestFile, manifestText);
-
-    const leaseFile = path.join(otherRoot, 'write-lease.json');
-    const leaseText = read(leaseFile);
-    fs.rmSync(leaseFile);
-    fs.mkdirSync(leaseFile);
-    const guard = checkWriteAccess(Other);
-    assert.equal(guard.allowed, false, 'قفل غير مقروء ← الكتابة مرفوضة (الأمان أولاً)');
-    assert.match(guard.reasonAr ?? '', /تعذّر التحقق من صلاحية الكتابة/);
-    const st = await rawRequest(port, { path: '/api/sync/status' });
-    assert.equal(st.status, 200, 'الحالة لا تسقط');
-    assert.match(JSON.parse(st.body).problemAr, /write-lease\.json/);
-    fs.rmSync(leaseFile, { recursive: true });
-    fs.writeFileSync(leaseFile, leaseText);
-
-    // حامل القفل المتأخر (أخذ القفل دون استيراد، كما حدث على الماك): «نقل الكتابة» يستورد ويُبقي القفل
-    publishSnapshot(Other, vaultOther, { force: true });
-    const newest = readManifest(Other)!.latestVersion;
-    const stamp = new Date().toISOString();
-    fs.writeFileSync(leaseFile, JSON.stringify({ deviceId: 'id-this-laptop', deviceName: 'This-Laptop', acquiredAt: stamp, heartbeatAt: stamp }));
-    const behind = JSON.parse((await rawRequest(port, { path: '/api/sync/status' })).body);
-    assert.equal(behind.canWrite, true);
-    assert.equal(behind.newerAvailable, true, 'الحامل متأخر عن إصدار أحدث');
-    assert.notEqual((await postJson(port, '/api/sync/release', {}, cookie)).status, 200, 'الترك يُرفض فوق إصدار أحدث (لهذا يلزم زر الاستيراد)');
-    const catchUp = await postJson(port, '/api/sync/take-lease', {}, cookie);
-    assert.equal(catchUp.status, 200, catchUp.body);
-    assert.match(JSON.parse(catchUp.body).messageAr, new RegExp(`استُورد قبلها الإصدار ${newest}`));
-    const caught = JSON.parse(catchUp.body).status;
-    assert.equal(caught.canWrite, true, 'القفل بقي لهذا الجهاز');
-    assert.equal(caught.newerAvailable, false);
-    assert.equal(caught.baseVersion, newest);
-    const appJs = read(path.join(import.meta.dirname, '..', 'src', 'features', 'dashboard-app', 'public', 'app.js'));
-    assert.match(appJs, /takeBtn\.hidden = !s\.ready \|\| \(s\.canWrite && !s\.newerAvailable\)/, 'زر الاستيراد يظهر للحامل المتأخر');
-
     const deadlock = Object.assign(new Error('Unknown system error -11'), { errno: -11 });
     assert.match(describeSyncIoError(deadlock), /install-macos\.sh.*1\.9\.3/, 'رسالة عربية واضحة لخطأ Google Drive على الماك');
     assert.match(describeSyncIoError(Object.assign(new Error('x'), { code: 'EDEADLK' })), /Google Drive/);
-    passedChecks.push('اختبار ملفات المزامنة غير المقروءة (manifest أو قفل غير مقروء يوقف نقل الكتابة دون أخذ القفل أو نشر «إصدار أول»، الحارس يرفض الكتابة، الحالة لا تسقط، ورسالة EDEADLK بالعربية) بنجاح.');
+    passedChecks.push('اختبار رسالة EDEADLK (Google Drive على الماك) بالعربية بنجاح.');
   } finally {
     resetSessionStateForTests();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     updateSystemSettings({ sync: originalSettings.sync ?? { enabled: false, folder: '' } });
     fs.rmSync(deviceFile, { force: true });
+    fs.rmSync(path.join(dataDir, 'sync'), { recursive: true, force: true });
   }
   return passedChecks;
 }

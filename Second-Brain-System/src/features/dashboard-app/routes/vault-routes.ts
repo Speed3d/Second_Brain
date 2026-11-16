@@ -87,7 +87,6 @@ export function getVaultRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/vault/setup',
-      sharedWrite: true,
       handler: ({ res, body }) => {
         const masterPassword = readString(body, 'masterPassword', 512);
         const confirmPassword = readString(body, 'confirmPassword', 512);
@@ -163,7 +162,6 @@ export function getVaultRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/vault/secrets',
-      sharedWrite: true,
       requiresSession: true,
       commanderOnly: true,
       handler: ({ res, body, session }) => {
@@ -193,7 +191,6 @@ export function getVaultRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/vault/secrets/delete',
-      sharedWrite: true,
       requiresSession: true,
       commanderOnly: true,
       handler: ({ res, body, session }) => {
@@ -205,7 +202,6 @@ export function getVaultRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/vault/change-password',
-      sharedWrite: true,
       requiresSession: true,
       commanderOnly: true,
       handler: ({ res, body, session }) => {
@@ -216,7 +212,6 @@ export function getVaultRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/vault/rotate-emergency-key',
-      sharedWrite: true,
       requiresSession: true,
       commanderOnly: true,
       handler: ({ res, body, session }) => {

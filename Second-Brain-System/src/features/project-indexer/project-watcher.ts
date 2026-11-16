@@ -15,6 +15,8 @@ import type { UnlockedVault } from '../vault/vault-manager.ts';
 import { countSecuredFiles, syncProjectWithChanges } from './obsidian-sync.ts';
 import { scanAndAnalyzeProject } from './project-scanner.ts';
 import { checkWriteAccess } from '../sync/sync-context.ts';
+import { computeCodeChangeMarker, isGeneratedDocsOwner, saveCodeChangeMarker } from '../sync/code-ownership.ts';
+import * as path from 'node:path';
 
 /**
  * Hint بالعربي: ملخص فحص مشروع واحد.
@@ -26,6 +28,8 @@ export interface ProjectRescanSummary {
   secured: number;
   trackedByGit: string[];
   changes: string[];
+  /** جهاز آخر فيه تغيير أحدث في كود المشروع، فهو من يكتب وثائقه المولّدة (2.0) */
+  docsOwnedElsewhere?: boolean;
   error?: string;
 }
 
@@ -38,6 +42,12 @@ export function rescanAllProjects(vault?: UnlockedVault | null): ProjectRescanSu
   return config.watchedProjects.map((project) => {
     try {
       const report = scanAndAnalyzeProject(project, vault ?? undefined);
+      // 2.0: الوثائق المولّدة يكتبها فقط الجهاز صاحب آخر تغيير في كود المشروع (قرار docs/11)
+      const marker = computeCodeChangeMarker(project, report);
+      saveCodeChangeMarker(path.join(config.paths.rootDir, 'Second-Brain-System', 'data'), project.id, marker);
+      if (!isGeneratedDocsOwner(project.id, marker)) {
+        return { id: project.id, name: project.name, critical: report.criticalFilesFound.length, secured: countSecuredFiles(report), trackedByGit: report.criticalFilesTrackedByGit ?? [], changes: [], docsOwnedElsewhere: true };
+      }
       const { changes } = syncProjectWithChanges(project, report);
       return {
         id: project.id,

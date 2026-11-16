@@ -14,7 +14,6 @@ import type { AddressInfo } from 'node:net';
 import { loadSystemConfig, loadSystemConfigWithWarnings } from '../../core/config-manager.ts';
 import { startProjectWatcher } from '../project-indexer/project-watcher.ts';
 import { warmUpVoice } from '../voice/tts-service.ts';
-import { checkWriteAccess } from '../sync/sync-context.ts';
 import { syncTick } from '../sync/sync-service.ts';
 import { logSystemError, logSystemInfo } from '../../core/logger.ts';
 import {
@@ -130,10 +129,6 @@ export function createSecondBrainDesktopServer(): http.Server {
       if (route.commanderOnly && session && session.vault.unlockedBy !== 'commander') {
         throw new HttpError(403, 'هذه العملية متاحة للقائد فقط (بكلمة المرور الرئيسية).');
       }
-      if (route.sharedWrite) {
-        const access = checkWriteAccess();
-        if (!access.allowed) throw new HttpError(423, access.reasonAr ?? 'هذا الجهاز في وضع القراءة.', { readOnly: true, holder: access.holder ?? null });
-      }
 
       const body = method === 'GET' ? {} : await readRequestBodyJson(req);
       await route.handler({ req, res, method, pathname: url.pathname, query: url.searchParams, body, session, params });
@@ -174,7 +169,7 @@ if (process.argv[1] && process.argv[1].endsWith('desktop-server.ts')) {
       if (watcher.intervalMinutes) console.log(`👁️  المراقب الدوري يعمل كل ${watcher.intervalMinutes} دقيقة.`);
       // تحميل الصوت العربي عالي الجودة (XTTS) في الخلفية، فيكون جاهزاً لأول رد
       warmUpVoice();
-      // المزامنة (المرحلة ج): إشارة حياة ونشر التغييرات كل دقيقتين
+      // المزامنة متعددة الكتابة (2.0): نشر ودمج التغييرات كل دقيقتين
       syncTick(peekActiveVault());
       setInterval(() => syncTick(peekActiveVault()), 2 * 60 * 1000).unref();
       console.log('');

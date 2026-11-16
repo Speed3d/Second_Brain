@@ -70,8 +70,6 @@ export interface RouteDefinition {
   path: string | RegExp;
   requiresSession?: boolean;
   commanderOnly?: boolean;
-  /** يعدّل بيانات مشتركة بين الأجهزة: يُرفض في وضع القراءة (المرحلة ج) */
-  sharedWrite?: boolean;
   handler: (ctx: RouteContext) => Promise<void> | void;
 }
 

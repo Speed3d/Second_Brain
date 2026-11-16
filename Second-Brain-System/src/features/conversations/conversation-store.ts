@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { loadSystemConfig } from '../../core/config-manager.ts';
 import { openWithKey, sealWithKey } from '../../core/crypto-engine.ts';
-import { ensureDirectoryExists, writeFileAtomic } from '../../shared/file-helpers.ts';
+import { ensureDirectoryExists, removePathSync, writeFileAtomic } from '../../shared/file-helpers.ts';
 import type { AIProviderId, SealedData } from '../../shared/types.ts';
 import type { UnlockedVault } from '../vault/vault-manager.ts';
 
@@ -212,7 +212,7 @@ export function getConversation(vault: UnlockedVault, id: string): Conversation 
 export function deleteConversation(vault: UnlockedVault, id: string): boolean {
   const file = readFile(id);
   if (!file || !allowedModesFor(vault).includes(file.mode)) return false;
-  fs.rmSync(fileFor(id), { force: true });
+  removePathSync(fileFor(id), { force: true });
   return true;
 }
 
@@ -229,7 +229,7 @@ export function deleteAllConversations(vault: UnlockedVault, mode: ConversationM
     if (!match) continue;
     try {
       if (readFile(match[1])?.mode !== mode) continue;
-      fs.rmSync(path.join(dir, name), { force: true });
+      removePathSync(path.join(dir, name), { force: true });
       count += 1;
     } catch {
       // ملف تالف: يُترك

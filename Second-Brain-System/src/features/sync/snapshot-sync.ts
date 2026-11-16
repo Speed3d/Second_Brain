@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { openWithKey, sealWithKey } from '../../core/crypto-engine.ts';
 import { logSystemInfo } from '../../core/logger.ts';
-import { listFilesRecursive, readJsonFileSafe, toSafeFileName, writeFileAtomic } from '../../shared/file-helpers.ts';
+import { listFilesRecursive, readJsonFileSafe, removePathSync, toSafeFileName, writeFileAtomic } from '../../shared/file-helpers.ts';
 import type { SealedData } from '../../shared/types.ts';
 import { readVaultFile, type UnlockedVault, type VaultKeyEnvelopes } from '../vault/vault-manager.ts';
 import { readLocalSyncState, readLeaseStatus, readSyncJson, writeLocalSyncState, type DeviceInfo, type SyncContext } from './sync-context.ts';
@@ -137,13 +137,13 @@ function sealEntries(entries: SharedEntries, vault: UnlockedVault): SealedData {
  * Hint بالعربي: دالة حفظ نسخة احتياطية مشفرة من الحالة المحلية قبل الاستيراد (data/sync-backups/)،
  *               مع الإبقاء على آخر 5 فقط.
  */
-function saveLocalBackup(ctx: SyncContext, vault: UnlockedVault, entries: SharedEntries): string {
+export function saveLocalBackup(ctx: SyncContext, vault: UnlockedVault, entries: SharedEntries): string {
   const dir = path.join(ctx.dataDir, 'sync-backups');
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const file = path.join(dir, `pre-import-${stamp}.enc.json`);
   writeFileAtomic(file, JSON.stringify({ format: 'second-brain-sync-local-backup', createdAt: new Date().toISOString(), payload: sealEntries(entries, vault) }));
   const all = fs.readdirSync(dir).filter((n) => n.startsWith('pre-import-')).sort().reverse();
-  for (const old of all.slice(KEEP_LOCAL_BACKUPS)) fs.rmSync(path.join(dir, old), { force: true });
+  for (const old of all.slice(KEEP_LOCAL_BACKUPS)) removePathSync(path.join(dir, old), { force: true });
   return file;
 }
 
@@ -172,7 +172,7 @@ function applySharedState(ctx: SyncContext, entries: SharedEntries): void {
   const incomingConv = new Set(Object.keys(entries).filter((k) => k.startsWith('conversations/')).map((k) => k.slice('conversations/'.length)));
   if (fs.existsSync(convDir)) {
     for (const name of fs.readdirSync(convDir)) {
-      if (/\.enc\.json$/.test(name) && !incomingConv.has(name)) fs.rmSync(path.join(convDir, name), { force: true });
+      if (/\.enc\.json$/.test(name) && !incomingConv.has(name)) removePathSync(path.join(convDir, name), { force: true });
     }
   }
   for (const name of incomingConv) {
@@ -193,7 +193,7 @@ function applySharedState(ctx: SyncContext, entries: SharedEntries): void {
   for (const file of listFilesRecursive(obsidianRoot)) {
     const rel = toPosix(path.relative(obsidianRoot, file));
     if (OBSIDIAN_LOCAL_ONLY.some((re) => re.test(rel))) continue;
-    if (!incomingObs.has(rel)) fs.rmSync(file, { force: true });
+    if (!incomingObs.has(rel)) removePathSync(file, { force: true });
   }
   for (const [rel, content] of incomingObs) writeFileAtomic(path.join(obsidianRoot, rel), content);
 }
@@ -328,7 +328,7 @@ export function publishSnapshot(
   writeFileAtomic(manifestPath(ctx), JSON.stringify(next, null, 2));
   writeLocalSyncState(ctx, { baseVersion: version, baseHash: contentHash, lastPublishAt: createdAt, lastError: undefined });
   const all = fs.readdirSync(snapshotsDir).filter((n) => n.startsWith(SNAPSHOT_PREFIX) && n.endsWith(SNAPSHOT_SUFFIX)).sort().reverse();
-  for (const old of all.slice(KEEP_SNAPSHOTS)) fs.rmSync(path.join(snapshotsDir, old), { force: true });
+  for (const old of all.slice(KEEP_SNAPSHOTS)) removePathSync(path.join(snapshotsDir, old), { force: true });
   logSystemInfo('Sync', `نُشر الإصدار ${version} من «${ctx.device.deviceName}».`);
   return { published: true, version };
 }

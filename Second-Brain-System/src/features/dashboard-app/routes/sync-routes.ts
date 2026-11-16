@@ -2,8 +2,8 @@
  * ============================================================================
  * الملف: src/features/dashboard-app/routes/sync-routes.ts
  * القسم: Features -> Dashboard App -> Routes (مسارات المزامنة بين الأجهزة — المرحلة ج)
- * Hint بالعربي: حالة المزامنة، وتفعيلها وتحديد مجلدها (بصلاحية الإعدادات)، والنشر الفوري،
- *               ونقل صلاحية الكتابة إلى هذا الجهاز أو تركها، وتحديد مكان مشروع على هذا الجهاز.
+ * Hint بالعربي: حالة المزامنة، وتفعيلها وتحديد مجلدها (بصلاحية الإعدادات)، و«زامن الآن»،
+ *               والتعارضات وحسمها، والسلة والاسترجاع منها (2.0: الكتابة من كل الأجهزة)، وتحديد مكان مشروع على هذا الجهاز.
  * ============================================================================
  */
 
@@ -11,7 +11,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { readRawSettings, setDeviceProjectPath, updateSystemSettings } from '../../../core/config-manager.ts';
-import { getSyncStatus, publishNow, releaseWriteLease, takeWriteLease } from '../../sync/sync-service.ts';
+import { getSyncStatus, listSyncConflicts, listSyncTrash, resolveSyncConflict, restoreSyncTrash, syncNow } from '../../sync/sync-service.ts';
 import { HttpError, readString, sendJson, type RouteDefinition } from '../http-utils.ts';
 import { requireProject } from './project-routes.ts';
 import { assertSettingsAuth } from './state-routes.ts';
@@ -98,36 +98,55 @@ export function getSyncRoutes(): RouteDefinition[] {
     },
     {
       method: 'POST',
-      path: '/api/sync/take-lease',
+      path: '/api/sync/now',
+      requiresSession: true,
+      commanderOnly: true,
+      handler: ({ res, session }) => {
+        const result = failAs400(() => syncNow(session!.vault));
+        sendJson(res, 200, { ok: true, ...result, status: getSyncStatus() });
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/sync/conflicts',
+      requiresSession: true,
+      commanderOnly: true,
+      handler: ({ res, session }) => sendJson(res, 200, { conflicts: listSyncConflicts(session!.vault) }),
+    },
+    {
+      method: 'POST',
+      path: '/api/sync/conflicts/resolve',
       requiresSession: true,
       commanderOnly: true,
       handler: ({ res, body, session }) => {
-        const result = failAs400(() => takeWriteLease(session!.vault, body.force === true));
+        const id = readString(body, 'id', 80);
+        const choice = body.choice === 'other' ? 'other' : body.choice === 'keep' ? 'keep' : null;
+        if (!id || !choice) throw new HttpError(400, 'حدد التعارض والقرار (keep أو other).');
+        const result = failAs400(() => resolveSyncConflict(session!.vault, id, choice));
         sendJson(res, 200, { ok: true, ...result, status: getSyncStatus() });
       },
+    },
+    {
+      method: 'GET',
+      path: '/api/sync/trash',
+      requiresSession: true,
+      commanderOnly: true,
+      handler: ({ res, session }) => sendJson(res, 200, { items: listSyncTrash(session!.vault) }),
     },
     {
       method: 'POST',
-      path: '/api/sync/publish',
+      path: '/api/sync/trash/restore',
       requiresSession: true,
       commanderOnly: true,
-      handler: ({ res, session }) => {
-        const result = failAs400(() => publishNow(session!.vault));
+      handler: ({ res, body, session }) => {
+        const id = readString(body, 'id', 80);
+        if (!id) throw new HttpError(400, 'حدد العنصر.');
+        const result = failAs400(() => restoreSyncTrash(session!.vault, id));
         sendJson(res, 200, { ok: true, ...result, status: getSyncStatus() });
       },
     },
     {
-      method: 'POST',
-      path: '/api/sync/release',
-      requiresSession: true,
-      commanderOnly: true,
-      handler: ({ res, session }) => {
-        const result = failAs400(() => releaseWriteLease(session!.vault));
-        sendJson(res, 200, { ok: true, ...result, status: getSyncStatus() });
-      },
-    },
-    {
-      // مكان المشروع على هذا الجهاز فقط (ملف محلي غير مُزامَن)، فيُسمح به في وضع القراءة
+      // مكان المشروع على هذا الجهاز فقط (ملف محلي غير مُزامَن)
       method: 'POST',
       path: PROJECT_LOCATE_PATH,
       requiresSession: true,
