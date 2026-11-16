@@ -135,7 +135,8 @@ node tests/run-all-tests.ts
 
 | الوثيقة | المحتوى |
 | :--- | :--- |
-| [`CONSTITUTION-AND-RULES.md`](./CONSTITUTION-AND-RULES.md) | القوانين الثمانية وقواعد الأمان الملزمة |
+| **[`docs/00-INDEX-AND-FULL-DETAILS.md`](./docs/00-INDEX-AND-FULL-DETAILS.md)** | **الفهرس والتفاصيل الدقيقة: الشرح الكامل لكل شيء في البرنامج (ابدأ من هنا)** |
+| [`CONSTITUTION-AND-RULES.md`](./CONSTITUTION-AND-RULES.md) | القوانين التسعة وقواعد الأمان الملزمة |
 | [`00-Master-Implementation-Plan.md`](./00-Master-Implementation-Plan.md) | الرؤية والخطة الشاملة |
 | [`docs/01-ARCHITECTURE-TREE.md`](./docs/01-ARCHITECTURE-TREE.md) | هيكل المشروع وأين تُحفظ البيانات |
 | [`docs/02-EXECUTION-ROADMAP.md`](./docs/02-EXECUTION-ROADMAP.md) | خارطة الطريق |

@@ -1,7 +1,7 @@
 # 🌳 الهيكلية الشجرية المتفرعة للمشروع (Strict Modular Architecture Tree)
 
 > **تطبيقاً للقانونين (2) و (3):** هذه الوثيقة تحدد الشجرة الفعلية للمشروع في `D:\Second Brain` وتمنع خلط الملفات أو الأقسام.
-> **آخر مراجعة:** `2026-11-12` (بعد المرحلة 4) — مطابقة للملفات المتتبعة في Git.
+> **آخر مراجعة:** `2026-11-16` (الإصدار 1.9.5) — مطابقة للملفات المتتبعة في Git. الشرح التفصيلي لكل جزء في [`00-INDEX-AND-FULL-DETAILS.md`](00-INDEX-AND-FULL-DETAILS.md).
 > 🔒 = ملف/مجلد شخصي **لا يُرفع إلى GitHub** (انظر `.gitignore`).
 
 ---
@@ -20,6 +20,7 @@
 ├── 📄 .gitattributes                           # نهايات الأسطر: LF لسكربتات الماك، CRLF لسكربتات Windows
 │
 ├── 📁 docs\                                    # التوثيق الهندسي الحي
+│   ├── 📄 00-INDEX-AND-FULL-DETAILS.md         # الفهرس والتفاصيل الدقيقة: الشرح الكامل للبرنامج
 │   ├── 📄 01-ARCHITECTURE-TREE.md              # هذه الوثيقة
 │   ├── 📄 02-EXECUTION-ROADMAP.md              # خارطة الطريق وحالة كل مرحلة (القانون 4)
 │   ├── 📄 03-PROGRESS-AND-ISSUES-LOG.md        # ما أُنجز، المشاكل، الحلول، والمتبقي (القانون 5)
@@ -29,6 +30,7 @@
 │   ├── 📄 07-EXPANSION-PLAN.md                 # خطة التوسعة (الأجهزة، التثبيت، المزامنة) وحالة كل مرحلة
 │   ├── 📄 08-AI-CONNECTION-GUIDE.md            # دليل ربط الذكاء (الاشتراكات، Ollama) والصوت العربي
 │   ├── 📄 09-MAC-SETUP-HANDOFF.md              # تسليم جلسة الماك: النقل، المتطلبات، الخطوات، سجل التنفيذ
+│   ├── 📄 10-WINDOWS-RETURN-HANDOFF.md         # العودة إلى Windows بعد الماك: ما تغيّر، الخطوات، الدروس
 │   └── 📁 archive\                             # وثائق ونماذج تاريخية لم تعد مستخدمة
 │
 ├── 📁 Obsidian-Vault\                          # العقل المعرفي (يُفتح ببرنامج Obsidian)
@@ -51,6 +53,7 @@
     │
     ├── 📁 install\                         # المرحلة ب: التشغيل التلقائي والنافذة المستقلة
     │   ├── 📄 second-brain.ico              # أيقونة الاختصارات
+    │   ├── 📄 device-identity.ts            # هوية الجهاز (مشتركة بين المثبّتَين): إنشاء، إبقاء، أو استبدال المنقولة
     │   ├── 📁 windows\                      # install/uninstall-windows.ps1، run-server.ps1 (إعادة تشغيل عند التعطل)، open-app (نافذة --app)
     │   └── 📁 macos\                        # install/uninstall-macos.sh (LaunchAgent)، open-app.sh
     ├── 📁 src\
@@ -97,7 +100,7 @@
     │   │       ├── 📄 desktop-server.ts        # الموجّه على 127.0.0.1 + طبقات الحماية + تشغيل المراقب
     │   │       ├── 📄 http-utils.ts            # الرد، حد الطلب، الكوكيز، Host/CSRF، رؤوس الأمان
     │   │       ├── 📄 session-manager.ts       # جلسة الخزنة، القفل التلقائي، تأخير المحاولات
-    │   │       ├── 📁 routes\                  # state، vault، project، memory، assistant، emergency، maintenance
+    │   │       ├── 📁 routes\                  # state، vault، project، memory، assistant، emergency، maintenance، conversation، voice، sync
     │   │       └── 📁 public\                  # index.html، styles.css، app.js، hologram.js (CSP صارمة)
     │   │
     │   ├── 📁 shared\                          # [SHARED] لا يعتمد على أي طبقة أخرى
@@ -108,7 +111,9 @@
     │   │
     │   └── 📁 tools\                           # [TOOLS] أدوات مستقلة
     │       ├── 📄 mcp-memory-server.ts         # خادم MCP (6 أدوات) لـ Claude Code و Antigravity
-    │       └── 📄 code-registry-scanner.ts     # مولّد فهرس الدوال
+    │       ├── 📄 code-registry-scanner.ts     # مولّد فهرس الدوال
+    │       ├── 📄 install-arabic-voice.ts      # تنزيل Piper والصوت Kareem (Windows) أو التحقق من Majed (الماك)
+    │       └── 📄 install-xtts-voice.ts        # تثبيت XTTS-v2 في vendor (بعد قبول الرخصة)
     │
     └── 📁 tests\                               # [TESTS] دائمة ومعزولة عن البيانات الحقيقية
         ├── 📄 run-all-tests.ts                 # المشغّل + توليد docs/04 و docs/05
@@ -125,7 +130,9 @@
         ├── 📄 10-maintenance.test.ts           # التصفير والاسترجاع والاعتماد النهائي
         ├── 📄 11-connection-guide.test.ts      # اختبار الاتصال بالمزوّدين
         ├── 📄 12-claude-subscription.test.ts   # Claude عبر الاشتراك بمحاكي Claude Code وهمي
-        └── 📄 13-conversations-and-voice.test.ts # المحادثات المشفّرة والنطق العربي المحلي
+        ├── 📄 13-conversations-and-voice.test.ts # المحادثات المشفّرة والنطق العربي المحلي
+        ├── 📄 14-installer.test.ts             # المثبّت، هوية الجهاز، الأيقونة، نظام الإصدارات
+        └── 📄 15-sync.test.ts                  # المزامنة بمحاكاة 3 أجهزة
 ```
 
 ---
