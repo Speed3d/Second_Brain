@@ -297,19 +297,39 @@ export async function runMultiWriterSyncTests(): Promise<string[]> {
   const nfcName = 'نظام ادارة الوثائق'; // «ئ» مركّبة
   const nfdName = nfcName.normalize('NFD'); // «ي» + همزة فوقها، كما يعيدها الماك
   assert.notEqual(nfcName, nfdName);
-  writeFixtureFile(obs(A, `02-Projects/${nfcName}/02-Run-And-Update.md`), 'الأصل باسم مركّب');
-  writeFixtureFile(obs(A, `02-Projects/${nfdName}/02-Run-And-Update.md`), 'مكرر باسم مفكّك');
-  writeFixtureFile(obs(A, `02-Projects/${nfdName}/05-Auto-Changelog.md`), 'سجل وصل باسم مفكّك فقط');
-  const keysA = [...readLocalRecords(A, vA).keys()].filter((k) => k.includes('ادارة'));
-  assert.ok(keysA.every((k) => k === k.normalize('NFC')), 'كل المفاتيح بصيغة مركّبة');
-  assert.equal(keysA.filter((k) => k.endsWith('02-Run-And-Update.md')).length, 1, 'الملف نفسه مفتاح واحد');
-  assert.equal(readLocalRecords(A, vA).get(`obs:02-Projects/${nfcName}/02-Run-And-Update.md`)!.toString(), 'الأصل باسم مركّب', 'الاسم المركّب يتقدّم');
-  assert.equal(normalizeObsidianFileNames(A, vA.dataKey, 'Asus', 'darwin'), 0, 'على الماك لا تغيير (النظام يعامل الصيغتين كاسم واحد)');
-  assert.equal(normalizeObsidianFileNames(A, vA.dataKey, 'Asus', 'win32'), 2);
-  assert.equal(exists(obs(A, `02-Projects/${nfdName}`)), false, 'المجلد المكرر اختفى');
-  assert.equal(read(obs(A, `02-Projects/${nfcName}/05-Auto-Changelog.md`)), 'سجل وصل باسم مفكّك فقط', 'الملف الذي لا أصل له نُقل إلى الاسم المركّب');
+  // ISS-027: نظام ملفات الماك (APFS) يعامل الصيغتين كاسم واحد، فلا يمكن صنع «مجلد مكرر» عليه أصلاً
+  // (الكتابة بالمسار المفكّك تكتب فوق الأصل). نفحص سلوك نظام الملفات الفعلي بدل افتراض سلوك Windows.
+  const probe = path.join(base, 'probe-unicode');
+  writeFixtureFile(path.join(probe, nfcName), 'x');
+  const fsFoldsUnicode = exists(path.join(probe, nfdName));
+  removePathSync(probe, { recursive: true });
+  if (!fsFoldsUnicode) {
+    // Windows / Linux: الصيغتان ملفان مختلفان، فيظهر المجلد المكرر ويجب توحيده
+    writeFixtureFile(obs(A, `02-Projects/${nfcName}/02-Run-And-Update.md`), 'الأصل باسم مركّب');
+    writeFixtureFile(obs(A, `02-Projects/${nfdName}/02-Run-And-Update.md`), 'مكرر باسم مفكّك');
+    writeFixtureFile(obs(A, `02-Projects/${nfdName}/05-Auto-Changelog.md`), 'سجل وصل باسم مفكّك فقط');
+    const keysA = [...readLocalRecords(A, vA).keys()].filter((k) => k.includes('ادارة'));
+    assert.ok(keysA.every((k) => k === k.normalize('NFC')), 'كل المفاتيح بصيغة مركّبة');
+    assert.equal(keysA.filter((k) => k.endsWith('02-Run-And-Update.md')).length, 1, 'الملف نفسه مفتاح واحد');
+    assert.equal(readLocalRecords(A, vA).get(`obs:02-Projects/${nfcName}/02-Run-And-Update.md`)!.toString(), 'الأصل باسم مركّب', 'الاسم المركّب يتقدّم');
+    assert.equal(normalizeObsidianFileNames(A, vA.dataKey, 'Asus', 'darwin'), 0, 'على الماك لا تغيير (النظام يعامل الصيغتين كاسم واحد)');
+    assert.equal(normalizeObsidianFileNames(A, vA.dataKey, 'Asus', 'win32'), 2);
+    assert.equal(exists(obs(A, `02-Projects/${nfdName}`)), false, 'المجلد المكرر اختفى');
+    assert.equal(read(obs(A, `02-Projects/${nfcName}/05-Auto-Changelog.md`)), 'سجل وصل باسم مفكّك فقط', 'الملف الذي لا أصل له نُقل إلى الاسم المركّب');
+    assert.ok(listTrash(A, vA.dataKey).some((t) => t.key === `obs:02-Projects/${nfcName}/02-Run-And-Update.md` && Buffer.from(t.content, 'base64').toString() === 'مكرر باسم مفكّك'), 'المكرر في السلة لا يضيع');
+  } else {
+    // الماك: الملفات تصل بأسماء مفكّكة (كما يعيدها Google Drive)، والمفاتيح يجب أن تخرج مركّبة
+    writeFixtureFile(obs(A, `02-Projects/${nfdName}/02-Run-And-Update.md`), 'الأصل باسم مركّب');
+    writeFixtureFile(obs(A, `02-Projects/${nfdName}/05-Auto-Changelog.md`), 'سجل وصل باسم مفكّك فقط');
+    const recordsA = readLocalRecords(A, vA);
+    const keysA = [...recordsA.keys()].filter((k) => k.includes('ادارة'));
+    assert.ok(keysA.every((k) => k === k.normalize('NFC')), 'كل المفاتيح بصيغة مركّبة (الماك)');
+    assert.equal(keysA.filter((k) => k.endsWith('02-Run-And-Update.md')).length, 1, 'الملف نفسه مفتاح واحد (الماك)');
+    assert.equal(recordsA.get(`obs:02-Projects/${nfcName}/02-Run-And-Update.md`)!.toString(), 'الأصل باسم مركّب', 'المفتاح المركّب يقرأ الملف المفكّك (الماك)');
+    assert.equal(normalizeObsidianFileNames(A, vA.dataKey, 'Asus', 'darwin'), 0, 'على الماك لا تغيير (النظام يعامل الصيغتين كاسم واحد)');
+    assert.equal(listTrash(A, vA.dataKey).filter((t) => t.key.includes('ادارة')).length, 0, 'لا شيء في السلة على الماك');
+  }
   assert.equal(read(obs(A, `02-Projects/${nfcName}/02-Run-And-Update.md`)), 'الأصل باسم مركّب');
-  assert.ok(listTrash(A, vA.dataKey).some((t) => t.key === `obs:02-Projects/${nfcName}/02-Run-And-Update.md` && Buffer.from(t.content, 'base64').toString() === 'مكرر باسم مفكّك'), 'المكرر في السلة لا يضيع');
   applyRecordWrites(A, vA, [{ key: `obs:02-Projects/${nfdName}/02-Run-And-Update.md`, content: null }]);
   assert.equal(read(obs(A, `02-Projects/${nfcName}/02-Run-And-Update.md`)), 'الأصل باسم مركّب', 'حذف قادم بمفتاح مفكّك لا يمسّ الملف الحقيقي (على الماك كان سيحذفه)');
   all((ctx, v) => cycle(ctx, v));
