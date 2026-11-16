@@ -19,8 +19,51 @@ import { openWithKey } from '../core/crypto-engine.ts';
 import { logSystemInfo } from '../core/logger.ts';
 import { listFilesRecursive, removePathSync, writeFileAtomic } from '../shared/file-helpers.ts';
 import type { SealedData } from '../shared/types.ts';
-import { openEncryptedBackup, restoreEncryptedBackup } from '../features/family-emergency/backup-service.ts';
+import { listEncryptedBackups, openEncryptedBackup, restoreEncryptedBackup } from '../features/family-emergency/backup-service.ts';
 import { unlockVault } from '../features/vault/vault-manager.ts';
+
+/** نسخة احتياطية وُجدت في أحد مجلدات النسخ */
+export interface BackupCandidate {
+  fileName: string;
+  filePath: string;
+  sizeBytes: number;
+  location: 'local' | 'extra' | 'drive';
+}
+
+/** عمر النسخة الذي يُنبَّه بعده */
+export const BACKUP_AGE_WARNING_DAYS = 7;
+
+/**
+ * Hint بالعربي: دالة جمع النسخ الاحتياطية من كل الأماكن (ISS-030): مجلد النسخ المحلي، والمجلد الإضافي من الإعدادات،
+ *               ومجلد Backups على Drive بجانب مجلد المزامنة (`<مجلد المزامنة>/Backups`) حتى بلا أي إعداد،
+ *               لأن الجهاز الآخر (الماك، أو جهاز جديد بعد كارثة) قد لا يملك نسخة محلية حديثة.
+ *               النسخة نفسها في مكانين تظهر مرة واحدة. الترتيب: الأحدث أولاً (الاسم يحمل التاريخ).
+ */
+export function findBackupCandidates(dirs: { localDir?: string; extraDir?: string; syncFolder?: string }): BackupCandidate[] {
+  const seen = new Map<string, BackupCandidate>();
+  const add = (dir: string | undefined, location: BackupCandidate['location']): void => {
+    if (!dir) return;
+    for (const b of listEncryptedBackups(dir)) {
+      if (!seen.has(b.fileName)) seen.set(b.fileName, { fileName: b.fileName, filePath: b.filePath, sizeBytes: b.sizeBytes, location });
+    }
+  };
+  add(dirs.localDir, 'local');
+  add(dirs.extraDir, 'extra');
+  add(dirs.syncFolder ? path.join(dirs.syncFolder, 'Backups') : undefined, 'drive');
+  return [...seen.values()].sort((a, b) => b.fileName.localeCompare(a.fileName));
+}
+
+/**
+ * Hint بالعربي: دالة عمر النسخة بالأيام (من تاريخ إنشائها داخل النسخة)، ورسالة تنبيه إن تجاوزت 7 أيام.
+ */
+export function describeBackupAge(createdAt: string, now: number = Date.now()): { ageDays: number; warningAr?: string } {
+  const ms = Date.parse(createdAt);
+  if (!Number.isFinite(ms)) return { ageDays: -1, warningAr: 'تاريخ إنشاء النسخة غير معروف.' };
+  const ageDays = Math.floor((now - ms) / (24 * 3600 * 1000));
+  return ageDays > BACKUP_AGE_WARNING_DAYS
+    ? { ageDays, warningAr: `⚠️ هذه النسخة عمرها ${ageDays} يوماً، فهي لا تحتوي آخر بياناتك. أنشئ نسخة جديدة من «💾 نسخة احتياطية الآن» ثم أعد التمرين.` }
+    : { ageDays };
+}
 
 /** نتيجة فحص واحد في التمرين */
 export interface DrillCheck {
@@ -36,6 +79,11 @@ export interface RestoreDrillReport {
   ranAt: string;
   device: string;
   filesCount: number;
+  /** عمر النسخة بالأيام، وتنبيه إن كانت أقدم من 7 أيام (ISS-030) */
+  backupAgeDays: number;
+  ageWarningAr?: string;
+  /** مكان النسخة: محلي، أو المجلد الإضافي، أو Drive */
+  location?: BackupCandidate['location'];
   durationMs: number;
   ok: boolean;
   checks: DrillCheck[];
@@ -52,7 +100,7 @@ const sha = (b: Buffer): string => crypto.createHash('sha256').update(b).digest(
 export function runRestoreDrill(
   backupFilePath: string,
   passwordOrKey: string,
-  options: { liveRootDir?: string; reportsDir?: string; deviceName?: string } = {}
+  options: { liveRootDir?: string; reportsDir?: string; deviceName?: string; location?: BackupCandidate['location']; now?: number } = {}
 ): RestoreDrillReport {
   const started = Date.now();
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-drill-'));
@@ -169,9 +217,13 @@ export function runRestoreDrill(
     removePathSync(tempRoot, { recursive: true, force: true });
   }
 
+  const age = backupCreatedAt ? describeBackupAge(backupCreatedAt, options.now) : { ageDays: -1 };
   const report: RestoreDrillReport = {
     backupFile: path.basename(backupFilePath),
     backupCreatedAt,
+    backupAgeDays: age.ageDays,
+    ageWarningAr: age.warningAr,
+    location: options.location,
     ranAt: new Date().toISOString(),
     device: options.deviceName ?? os.hostname(),
     filesCount,

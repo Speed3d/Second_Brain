@@ -14,7 +14,8 @@ import { isValidEmergencyKey } from '../../../core/crypto-engine.ts';
 import { createEncryptedSystemBackup, listEncryptedBackups, restoreEncryptedBackup } from '../../family-emergency/backup-service.ts';
 import { generatePrintableEmergencyKit } from '../../family-emergency/emergency-kit-service.ts';
 import { verifyEmergencyKey } from '../../vault/vault-manager.ts';
-import { runRestoreDrill } from '../../../tools/restore-drill.ts';
+import { findBackupCandidates, runRestoreDrill } from '../../../tools/restore-drill.ts';
+import { readSyncSettings } from '../../sync/sync-context.ts';
 import { HttpError, readString, sendHtml, sendJson, type RouteDefinition } from '../http-utils.ts';
 import { getUnlockRetryAfterMs, recordUnlockFailure, recordUnlockSuccess } from '../session-manager.ts';
 import { assertUnlockAllowed } from './vault-routes.ts';
@@ -130,11 +131,14 @@ export function getEmergencyRoutes(): RouteDefinition[] {
         const key = readString(body, 'key', 512);
         if (!key) throw new HttpError(400, 'أدخل كلمة المرور الرئيسية لفتح النسخة في التمرين.');
         const config = loadSystemConfig();
-        const candidates = [...listEncryptedBackups(), ...(config.security?.extraBackupDir ? listEncryptedBackups(config.security.extraBackupDir) : [])];
+        // ISS-030: كل الأماكن، ومنها مجلد Backups على Drive بجانب مجلد المزامنة، بلا إعداد يدوي
+        const sync = readSyncSettings();
+        const candidates = findBackupCandidates({ localDir: config.paths.encryptedBackupsDir, extraDir: config.security?.extraBackupDir, syncFolder: sync.folder || undefined });
         const requested = readString(body, 'backupFile', 1000).trim();
-        const chosen = requested ? candidates.find((b) => b.filePath === path.resolve(requested) || b.fileName === requested) : candidates.sort((a, b) => b.fileName.localeCompare(a.fileName))[0];
+        const chosen = requested ? candidates.find((b) => b.filePath === path.resolve(requested) || b.fileName === requested) : candidates[0];
         if (!chosen) throw new HttpError(404, requested ? 'النسخة المحددة غير موجودة في مجلدات النسخ.' : 'لا توجد نسخة احتياطية بعد. أنشئ نسخة أولاً.');
         const report = runRestoreDrill(chosen.filePath, key, {
+          location: chosen.location,
           liveRootDir: config.paths.rootDir,
           reportsDir: path.join(config.paths.rootDir, 'Second-Brain-System', 'data', 'restore-drills'),
         });
@@ -144,7 +148,7 @@ export function getEmergencyRoutes(): RouteDefinition[] {
           throw new HttpError(401, 'كلمة المرور أو مفتاح الطوارئ غير صحيح لهذه النسخة.', { retryAfterSeconds: Math.ceil(getUnlockRetryAfterMs() / 1000) });
         }
         recordUnlockSuccess();
-        sendJson(res, 200, { ok: true, report, messageAr: report.ok ? `✅ تمرين الاستعادة نجح: ${report.backupFile} تُستعاد كاملة.` : `⚠️ تمرين الاستعادة وجد مشكلات في ${report.backupFile}. راجع التفاصيل.` });
+        sendJson(res, 200, { ok: true, report, candidates: candidates.length, messageAr: report.ok ? `✅ تمرين الاستعادة نجح: ${report.backupFile} تُستعاد كاملة.` : `⚠️ تمرين الاستعادة وجد مشكلات في ${report.backupFile}. راجع التفاصيل.` });
       },
     },
   ];

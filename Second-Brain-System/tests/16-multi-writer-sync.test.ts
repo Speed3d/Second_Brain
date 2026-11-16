@@ -26,7 +26,7 @@ import { publishSnapshot } from '../src/features/sync/snapshot-sync.ts';
 import { compareVv, listConflicts, listTrash, purgeTrash, readSyncIndex, removeTrashEntry } from '../src/features/sync/sync-store.ts';
 import { changeMasterPassword, unlockVault, upsertVaultSecret, type UnlockedVault } from '../src/features/vault/vault-manager.ts';
 import { removePathSync } from '../src/shared/file-helpers.ts';
-import { runRestoreDrill } from '../src/tools/restore-drill.ts';
+import { describeBackupAge, findBackupCandidates, runRestoreDrill } from '../src/tools/restore-drill.ts';
 import { ensureTestVault, TEST_MASTER_PASSWORD, writeFixtureFile } from './test-environment.ts';
 
 const read = (file: string): string => fs.readFileSync(file, 'utf8');
@@ -421,6 +421,28 @@ export async function runMultiWriterSyncTests(): Promise<string[]> {
   const badDrill = runRestoreDrill(backup.backupFilePath, 'wrong-password-123');
   assert.equal(badDrill.ok, false, 'كلمة مرور خاطئة ← التمرين يفشل بوضوح');
   passed.push('اختبار تمرين الاستعادة (الفحوص الست، المحادثات داخل النسخة، تقرير بلا أسرار، فشل واضح بكلمة مرور خاطئة) بنجاح.');
+
+  // 15.5 ISS-030: التمرين يجد النسخ في كل الأماكن، ومنها مجلد Backups على Drive بلا إعداد، ويُنبّه للنسخة القديمة
+  const localBackups = path.join(base, 'bk-local');
+  const syncFolder = path.join(base, 'bk-drive', 'Second Brain');
+  fs.mkdirSync(localBackups, { recursive: true });
+  fs.mkdirSync(path.join(syncFolder, 'Backups'), { recursive: true });
+  const oldName = 'Second-Brain-Backup-2026-11-12T22-44-19.enc.json';
+  const newName = 'Second-Brain-Backup-2026-11-16T20-22-45.enc.json';
+  fs.copyFileSync(backup.backupFilePath, path.join(localBackups, oldName));
+  fs.copyFileSync(backup.backupFilePath, path.join(syncFolder, 'Backups', oldName));
+  fs.copyFileSync(backup.backupFilePath, path.join(syncFolder, 'Backups', newName));
+  const found = findBackupCandidates({ localDir: localBackups, syncFolder });
+  assert.equal(found.length, 2, 'النسخة نفسها في مكانين تظهر مرة واحدة');
+  assert.equal(found[0].fileName, newName, 'الأحدث أولاً');
+  assert.equal(found[0].location, 'drive', 'وجدها في Backups على Drive بلا أي إعداد');
+  assert.equal(found[1].location, 'local');
+  assert.equal(findBackupCandidates({ localDir: localBackups }).length, 1, 'بلا مجلد مزامنة: المحلي فقط (السلوك القديم الذي سبّب ISS-030)');
+  const old = describeBackupAge('2026-11-12T22:44:19Z', Date.parse('2026-11-25T00:00:00Z'));
+  assert.equal(old.ageDays, 12);
+  assert.match(old.warningAr ?? '', /عمرها 12 يوماً/, 'تنبيه للنسخة الأقدم من 7 أيام');
+  assert.equal(describeBackupAge('2026-11-16T20:22:45Z', Date.parse('2026-11-17T00:00:00Z')).warningAr, undefined, 'لا تنبيه للحديثة');
+  passed.push('اختبار مكان النسخ في التمرين (ISS-030: مجلد Backups على Drive بلا إعداد، الأحدث أولاً، بلا تكرار، وتنبيه للنسخة الأقدم من 7 أيام) بنجاح.');
 
   fs.rmSync(base, { recursive: true, force: true });
   return passed;
