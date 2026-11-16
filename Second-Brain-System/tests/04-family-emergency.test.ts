@@ -22,6 +22,12 @@ export async function runFamilyEmergencyTests(): Promise<string[]> {
   const passedChecks: string[] = [];
   const config = loadSystemConfig();
 
+  // 0. ISS-021: البيئة المعزولة لا تحمل أي مجلد حقيقي للنسخ الإضافية ولا مزامنة حقيقية
+  assert.ok(!config.security?.extraBackupDir, 'لا يجوز أن يشير اختبار إلى مجلد النسخ الإضافي الحقيقي');
+  const isolatedSettings = JSON.parse(fs.readFileSync(process.env.SECOND_BRAIN_CONFIG_PATH!.replace(/branding\.json$/, 'settings.json'), 'utf-8'));
+  assert.ok(!isolatedSettings.sync?.enabled, 'لا يجوز أن تكون المزامنة الحقيقية مفعّلة في الاختبارات');
+  passedChecks.push('البيئة المعزولة لا تكتب نسخاً في مجلد النسخ الحقيقي ولا تزامن مع Drive الحقيقي (ISS-021).');
+
   // 1. المساعد الذكي في وضع القائد
   const cmdReply = await askSecondBrainAssistant('ما هي حالة المشاريع والملفات الحساسة؟', 'commander');
   assert.ok(cmdReply.answerAr.includes(config.watchedProjects[0].name), 'يجب أن يتضمن رد القائد تفاصيل المشروع');

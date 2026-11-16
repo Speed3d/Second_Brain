@@ -99,7 +99,12 @@ export function setupIsolatedTestEnvironment(): IsolatedTestEnvironment {
     aiConfig: { ...realConfig.aiConfig, providerOrder: ['local'] },
     watcher: { enabled: false, intervalMinutes: 15, harvestTranscripts: false },
     watchedProjects: [fixtureProject],
+    // ISS-021: لا تُنسخ مجلدات الجهاز الحقيقية إلى بيئة الاختبار أبداً. كان extraBackupDir الحقيقي
+    // (مجلد Backups على Google Drive) يُنسخ هنا، فتكتب الاختبارات نسخاً تجريبية في مجلد القائد الحقيقي.
+    security: { ...realConfig.security, extraBackupDir: undefined },
   };
+  // المزامنة معطّلة دائماً في البيئة المعزولة؛ اختبارات المزامنة تبني مجلد Drive وهمياً بنفسها
+  (testConfig as unknown as Record<string, unknown>).sync = { enabled: false, folder: '' };
   const configPath = path.join(rootDir, 'config', 'branding.json');
   writeFixtureFile(configPath, JSON.stringify(testConfig, null, 2));
 
