@@ -19,7 +19,7 @@
 | **هـ** | صفحة «أجهزتي»: الحالة، RustDesk، والتشغيل عن بُعد (Wake-on-LAN) | ⏳ متبقي |
 | **و** | المستقبل: تطبيق الجوال والمصادقة الثنائية للعائلة | ⏳ مؤجَّل |
 
-> **تحديث 2026-11-16:** المراحل د و هـ و دُمجت في قرارات النقاش الجديد [`11-IDEAS-DISCUSSION-DECISIONS.md`](11-IDEAS-DISCUSSION-DECISIONS.md): مركز الأجهزة، وتطبيق Android، و Passkeys. خطة التنفيذ القادمة تحلّ محلها.
+> **تحديث 2026-11-16:** المراحل د و هـ و دُمجت في قرارات النقاش الجديد [`11-IDEAS-DISCUSSION-DECISIONS.md`](11-IDEAS-DISCUSSION-DECISIONS.md): مركز الأجهزة، وتطبيق Android، و Passkeys. خطة التنفيذ المعتمدة في [`12-EXECUTION-PLAN.md`](12-EXECUTION-PLAN.md) تحلّ محلها.
 
 ---
 

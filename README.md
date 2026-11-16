@@ -148,6 +148,8 @@ node tests/run-all-tests.ts
 | [`docs/08-AI-CONNECTION-GUIDE.md`](./docs/08-AI-CONNECTION-GUIDE.md) | دليل ربط الذكاء والصوت العربي |
 | [`docs/09-MAC-SETUP-HANDOFF.md`](./docs/09-MAC-SETUP-HANDOFF.md) | نقل المشروع إلى الماك وخطوات إكمال المرحلة ب عليه (مكتملة) |
 | [`docs/10-WINDOWS-RETURN-HANDOFF.md`](./docs/10-WINDOWS-RETURN-HANDOFF.md) | العودة إلى Windows: ما تغيّر على الماك، وما يُجرَّب على Windows، وتمهيد المرحلة ج |
+| **[`docs/12-EXECUTION-PLAN.md`](./docs/12-EXECUTION-PLAN.md)** | **خطة التنفيذ التفصيلية المعتمدة (المراحل 0–7) وحالة كل مرحلة** |
+| [`docs/13-ISSUES-AND-SOLUTIONS-REFERENCE.md`](./docs/13-ISSUES-AND-SOLUTIONS-REFERENCE.md) | مرجع الأعطال والحلول: لكل عطل سببه وإصلاحه واختباره والدرس منه |
 | [`docs/11-IDEAS-DISCUSSION-DECISIONS.md`](./docs/11-IDEAS-DISCUSSION-DECISIONS.md) | قرارات نقاش الأفكار الجديدة (المزامنة متعددة الكتابة، والأمان، والمعرفة، والأتمتة، والأجهزة، و«سندس»، و Android)، وأساس خطة التنفيذ القادمة |
 | [`CHANGELOG.md`](./CHANGELOG.md) | سجل الإصدارات: ما الجديد في كل إصدار |
 

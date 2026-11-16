@@ -31,7 +31,9 @@
 │   ├── 📄 08-AI-CONNECTION-GUIDE.md            # دليل ربط الذكاء (الاشتراكات، Ollama) والصوت العربي
 │   ├── 📄 09-MAC-SETUP-HANDOFF.md              # تسليم جلسة الماك: النقل، المتطلبات، الخطوات، سجل التنفيذ
 │   ├── 📄 10-WINDOWS-RETURN-HANDOFF.md         # العودة إلى Windows بعد الماك: ما تغيّر، الخطوات، الدروس
-│   ├── 📄 11-IDEAS-DISCUSSION-DECISIONS.md     # قرارات نقاش الأفكار الجديدة، وأساس خطة التنفيذ القادمة
+│   ├── 📄 11-IDEAS-DISCUSSION-DECISIONS.md     # قرارات نقاش الأفكار الجديدة
+│   ├── 📄 12-EXECUTION-PLAN.md                 # خطة التنفيذ التفصيلية المعتمدة وحالة كل مرحلة
+│   ├── 📄 13-ISSUES-AND-SOLUTIONS-REFERENCE.md # مرجع الأعطال والحلول
 │   └── 📁 archive\                             # وثائق ونماذج تاريخية لم تعد مستخدمة
 │
 ├── 📁 Obsidian-Vault\                          # العقل المعرفي (يُفتح ببرنامج Obsidian)

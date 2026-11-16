@@ -6,5 +6,6 @@
     "second-brain-hud"
   ],
   "accentColor": "#00e5ff",
-  "showViewHeader": true
+  "showViewHeader": true,
+  "showRibbon": true
 }
