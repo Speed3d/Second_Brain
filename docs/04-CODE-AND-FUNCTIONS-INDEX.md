@@ -1,8 +1,8 @@
 # 📑 الفهرس الحي الشامل للدوال والأكواد والأدوات (Live Code & Function Registry)
 
 > **تطبيقاً للقانون السابع (7):** يتم توليد وتحديث هذا الفهرس تلقائياً بواسطة الأداة `src/tools/code-registry-scanner.ts`.  
-> **تاريخ آخر فحص آلي:** `2026-11-16T23:29:11.034Z`  
-> **إجمالي الدوال المفحوصة:** `306` | **المستخدمة حالياً (Active):** `304` | **الجاهزة للتوسع المستقبلي:** `2`
+> **تاريخ آخر فحص آلي:** `2026-11-16T23:38:48.591Z`  
+> **إجمالي الدوال المفحوصة:** `307` | **المستخدمة حالياً (Active):** `305` | **الجاهزة للتوسع المستقبلي:** `2`
 
 ---
 
@@ -315,4 +315,5 @@
 | `processMcpLine` | **Tools** | `src/tools/mcp-memory-server.ts#L301` | دالة معالجة سطر نصي واحد قادم عبر stdio. المخرجات: نص الرد أو null إذا لا يُرسل رد. | `src/tools/mcp-memory-server.ts (داخلي)`, `tests/07-integration.test.ts` | **مستخدم (Active)** |
 | `findBackupCandidates` | **Tools** | `src/tools/restore-drill.ts#L42` | دالة جمع النسخ الاحتياطية من كل الأماكن (ISS-030): مجلد النسخ المحلي، والمجلد الإضافي من الإعدادات، ومجلد Backups على Drive بجانب مجلد المزامنة (`<مجلد المزامنة>/Backups`) حتى بلا أي إعداد، لأن الجهاز الآخر (الماك، أو جهاز جديد بعد كارثة) قد لا يملك نسخة محلية حديثة. النسخة نفسها في مكانين تظهر مرة واحدة. الترتيب: الأحدث أولاً (الاسم يحمل التاريخ). | `src/features/dashboard-app/routes/emergency-routes.ts`, `tests/16-multi-writer-sync.test.ts` | **مستخدم (Active)** |
 | `describeBackupAge` | **Tools** | `src/tools/restore-drill.ts#L59` | دالة عمر النسخة بالأيام (من تاريخ إنشائها داخل النسخة)، ورسالة تنبيه إن تجاوزت 7 أيام. | `src/tools/restore-drill.ts (داخلي)`, `tests/16-multi-writer-sync.test.ts` | **مستخدم (Active)** |
-| `runRestoreDrill` | **Tools** | `src/tools/restore-drill.ts#L100` | دالة تشغيل تمرين الاستعادة. المدخلات: ملف النسخة، وكلمة المرور الرئيسية (أو مفتاح الطوارئ)، ومجلد الجهاز الحالي للمقارنة (اختياري)، ومجلد حفظ التقارير (اختياري). | `src/features/dashboard-app/routes/emergency-routes.ts`, `tests/16-multi-writer-sync.test.ts` | **مستخدم (Active)** |
+| `checkRestoredFiles` | **Tools** | `src/tools/restore-drill.ts#L102` | دالة مقارنة ما استُعيد على القرص بمحتوى النسخة، بأسماء موحّدة بصيغة NFC (ISS-031). على الماك (APFS) الاسمان بصيغتي يونيكود هما ملف واحد، فالنسخة التي فيها الاسمان (من قبل 2.0.2) تُستعاد ملفاً واحداً: يُعدّ سليماً إن طابق محتواه إحدى النسختين، ولا يُعدّ مفقوداً. على Windows يبقيان ملفين، ويُفحص كلٌّ بمحتواه. | `src/tools/restore-drill.ts (داخلي)`, `tests/16-multi-writer-sync.test.ts` | **مستخدم (Active)** |
+| `runRestoreDrill` | **Tools** | `src/tools/restore-drill.ts#L139` | دالة تشغيل تمرين الاستعادة. المدخلات: ملف النسخة، وكلمة المرور الرئيسية (أو مفتاح الطوارئ)، ومجلد الجهاز الحالي للمقارنة (اختياري)، ومجلد حفظ التقارير (اختياري). | `src/features/dashboard-app/routes/emergency-routes.ts`, `tests/16-multi-writer-sync.test.ts` | **مستخدم (Active)** |

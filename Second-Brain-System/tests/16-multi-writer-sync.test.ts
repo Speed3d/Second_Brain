@@ -26,7 +26,7 @@ import { publishSnapshot } from '../src/features/sync/snapshot-sync.ts';
 import { compareVv, listConflicts, listTrash, purgeTrash, readSyncIndex, removeTrashEntry } from '../src/features/sync/sync-store.ts';
 import { changeMasterPassword, unlockVault, upsertVaultSecret, type UnlockedVault } from '../src/features/vault/vault-manager.ts';
 import { removePathSync } from '../src/shared/file-helpers.ts';
-import { describeBackupAge, findBackupCandidates, runRestoreDrill } from '../src/tools/restore-drill.ts';
+import { checkRestoredFiles, describeBackupAge, findBackupCandidates, runRestoreDrill } from '../src/tools/restore-drill.ts';
 import { ensureTestVault, TEST_MASTER_PASSWORD, writeFixtureFile } from './test-environment.ts';
 
 const read = (file: string): string => fs.readFileSync(file, 'utf8');
@@ -443,6 +443,27 @@ export async function runMultiWriterSyncTests(): Promise<string[]> {
   assert.match(old.warningAr ?? '', /عمرها 12 يوماً/, 'تنبيه للنسخة الأقدم من 7 أيام');
   assert.equal(describeBackupAge('2026-11-16T20:22:45Z', Date.parse('2026-11-17T00:00:00Z')).warningAr, undefined, 'لا تنبيه للحديثة');
   passed.push('اختبار مكان النسخ في التمرين (ISS-030: مجلد Backups على Drive بلا إعداد، الأحدث أولاً، بلا تكرار، وتنبيه للنسخة الأقدم من 7 أيام) بنجاح.');
+
+  // 15.6 ISS-031: نسخة فيها الاسم نفسه بصيغتي يونيكود (من قبل 2.0.2) تُستعاد على الماك ملفاً واحداً، فلا تُعدّ فاقدة
+  const b64 = (t: string): string => Buffer.from(t).toString('base64');
+  const nfcRel = 'Obsidian-Vault/02-Projects/نظام ادارة الوثائق/02-Run-And-Update.md';
+  const nfdRel = nfcRel.normalize('NFD');
+  const filesMap = { [nfcRel]: b64('نسخة Windows'), [nfdRel]: b64('نسخة الماك'), 'Obsidian-Vault/عادي.md': b64('عادي') };
+  const apfsLike = path.join(base, 'drill-apfs');
+  writeFixtureFile(path.join(apfsLike, nfcRel), 'نسخة الماك'); // على APFS: الكتابة الثانية فوق الأولى، وملف واحد
+  writeFixtureFile(path.join(apfsLike, 'Obsidian-Vault/عادي.md'), 'عادي');
+  const okCheck = checkRestoredFiles(apfsLike, filesMap);
+  assert.deepEqual(okCheck.missing, [], 'لا يُعدّ مفقوداً ما اختلف بصيغة يونيكود فقط');
+  assert.deepEqual(okCheck.mismatched, [], 'الملف سليم لأنه يطابق إحدى النسختين');
+  assert.equal(okCheck.unicodeDuplicates.length, 1, 'ويُبلَّغ عن المكرر بصيغتين');
+  writeFixtureFile(path.join(apfsLike, nfcRel), 'محتوى تالف');
+  removePathSync(path.join(apfsLike, 'Obsidian-Vault/عادي.md'));
+  const badCheck = checkRestoredFiles(apfsLike, filesMap);
+  assert.equal(badCheck.mismatched.length, 1, 'المحتوى التالف يُكشف');
+  assert.deepEqual(badCheck.missing, ['Obsidian-Vault/عادي.md'], 'والمفقود فعلاً يُكشف');
+  const appJsText = read(path.join(import.meta.dirname, '..', 'src', 'features', 'dashboard-app', 'public', 'app.js'));
+  assert.match(appJsText, /\]\.filter\(Boolean\) \/\/ ISS-031/, 'تقرير التمرين لا يكتب «null»');
+  passed.push('اختبار مقارنة الاستعادة بأسماء موحّدة (ISS-031: المكرر بصيغتي يونيكود ليس فقداً على الماك، والتالف والمفقود فعلاً يُكشفان، ولا «null» في التقرير) بنجاح.');
 
   fs.rmSync(base, { recursive: true, force: true });
   return passed;

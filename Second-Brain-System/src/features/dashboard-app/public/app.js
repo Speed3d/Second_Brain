@@ -1688,10 +1688,12 @@
       const lines = rep.checks.map((c) => el('li', { text: (c.ok ? '✅ ' : '❌ ') + c.nameAr + ': ' + c.detailAr }));
       const cmp = rep.comparedWithLive;
       box.replaceChildren(
+        ...[
         el('p', { className: 'small', text: 'النسخة: ' + rep.backupFile + ' (' + formatDateAr(rep.backupCreatedAt) + (rep.backupAgeDays >= 0 ? '، عمرها ' + rep.backupAgeDays + ' يوماً' : '') + ') · ' + ({ local: 'من مجلد النسخ على هذا الجهاز', extra: 'من المجلد الإضافي', drive: 'من مجلد Backups على Google Drive' }[rep.location] || '') + ' · ' + rep.filesCount + ' ملفاً · ' + Math.round(rep.durationMs / 100) / 10 + ' ثانية' }),
         rep.ageWarningAr ? el('p', { className: 'small warn', text: rep.ageWarningAr }) : null,
         el('ul', { className: 'list compact', children: lines }),
-        cmp ? el('p', { className: 'small muted', text: 'مقارنة مع هذا الجهاز الآن (معلومة لا خطأ، فالنسخة قد تكون أقدم): ' + cmp.obsidianFilesOnlyLive + ' ملف Obsidian، و' + cmp.conversationsOnlyLive + ' محادثة، و' + cmp.memoryOnlyLive + ' سجل ذاكرة موجودة هنا وليست في النسخة.' }) : null
+        cmp ? el('p', { className: 'small muted', text: 'مقارنة مع هذا الجهاز الآن (معلومة لا خطأ، فالنسخة قد تكون أقدم): ' + cmp.obsidianFilesOnlyLive + ' ملف Obsidian، و' + cmp.conversationsOnlyLive + ' محادثة، و' + cmp.memoryOnlyLive + ' سجل ذاكرة موجودة هنا وليست في النسخة.' }) : null,
+        ].filter(Boolean) // ISS-031: replaceChildren يكتب null كنص «null»
       );
     },
     async 'change-password'(form, btn) {

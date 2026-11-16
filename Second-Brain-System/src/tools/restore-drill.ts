@@ -94,6 +94,45 @@ export interface RestoreDrillReport {
 const sha = (b: Buffer): string => crypto.createHash('sha256').update(b).digest('hex');
 
 /**
+ * Hint بالعربي: دالة مقارنة ما استُعيد على القرص بمحتوى النسخة، بأسماء موحّدة بصيغة NFC (ISS-031).
+ *               على الماك (APFS) الاسمان بصيغتي يونيكود هما ملف واحد، فالنسخة التي فيها الاسمان (من قبل 2.0.2)
+ *               تُستعاد ملفاً واحداً: يُعدّ سليماً إن طابق محتواه إحدى النسختين، ولا يُعدّ مفقوداً.
+ *               على Windows يبقيان ملفين، ويُفحص كلٌّ بمحتواه.
+ */
+export function checkRestoredFiles(
+  target: string,
+  filesMap: Record<string, string>
+): { groups: Array<{ name: string; keys: string[] }>; mismatched: string[]; missing: string[]; unicodeDuplicates: string[] } {
+  const groups = new Map<string, string[]>();
+  for (const key of Object.keys(filesMap)) {
+    const name = key.normalize('NFC');
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name)!.push(key);
+  }
+  const onDisk = new Map<string, string[]>();
+  for (const f of listFilesRecursive(target)) {
+    const raw = path.relative(target, f).replace(/\\/g, '/');
+    const name = raw.normalize('NFC');
+    if (!onDisk.has(name)) onDisk.set(name, []);
+    onDisk.get(name)!.push(f);
+  }
+  const mismatched: string[] = [];
+  const missing: string[] = [];
+  const unicodeDuplicates: string[] = [];
+  for (const [name, keys] of groups) {
+    if (keys.length > 1) unicodeDuplicates.push(name);
+    const files = onDisk.get(name);
+    if (!files || !files.length) {
+      missing.push(name);
+      continue;
+    }
+    const expected = new Set(keys.map((k) => sha(Buffer.from(filesMap[k], 'base64'))));
+    if (!files.every((f) => expected.has(sha(fs.readFileSync(f))))) mismatched.push(name);
+  }
+  return { groups: [...groups].map(([name, keys]) => ({ name, keys })), mismatched, missing, unicodeDuplicates };
+}
+
+/**
  * Hint بالعربي: دالة تشغيل تمرين الاستعادة. المدخلات: ملف النسخة، وكلمة المرور الرئيسية (أو مفتاح الطوارئ)،
  *               ومجلد الجهاز الحالي للمقارنة (اختياري)، ومجلد حفظ التقارير (اختياري).
  */
@@ -180,15 +219,19 @@ export function runRestoreDrill(
       }
     }
 
-    // 5) Obsidian: بصمة كل ملف مستعاد تطابق النسخة
-    const obsRels = rels.filter((r) => r.startsWith('Obsidian-Vault/'));
-    const mismatched = obsRels.filter((r) => sha(fs.readFileSync(path.join(target, r))) !== sha(Buffer.from(snapshot.filesMap[r], 'base64')));
-    checks.push({ nameAr: 'سلامة ملفات Obsidian', ok: mismatched.length === 0, detailAr: `${obsRels.length - mismatched.length} من ${obsRels.length} ملفاً مطابقاً للنسخة.` });
-
-    // 6) لا فقد أثناء الاستعادة: كل ملف في النسخة موجود على القرص بعد الاستعادة
-    const onDisk = new Set(listFilesRecursive(target).map((f) => path.relative(target, f).replace(/\\/g, '/')));
-    const missing = rels.filter((r) => !onDisk.has(r));
-    checks.push({ nameAr: 'عدم فقدان أي ملف', ok: missing.length === 0, detailAr: missing.length ? `${missing.length} ملفاً لم يُستعد.` : `كل الملفات (${rels.length}) استُعيدت.` });
+    // 5) و 6) مقارنة الملفات المستعادة بالنسخة، بأسماء موحّدة (ISS-031)
+    const fileCheck = checkRestoredFiles(target, snapshot.filesMap);
+    const obsTotal = fileCheck.groups.filter((g) => g.name.startsWith('Obsidian-Vault/')).length;
+    const obsBad = fileCheck.mismatched.filter((n) => n.startsWith('Obsidian-Vault/')).length;
+    const dupNote = fileCheck.unicodeDuplicates.length
+      ? ` وفي النسخة ${fileCheck.unicodeDuplicates.length} ملفاً مكرراً بصيغتي يونيكود (من قبل 2.0.2، ISS-025)؛ يُعدّ الملف سليماً إن طابق إحدى نسختيه.`
+      : '';
+    checks.push({ nameAr: 'سلامة ملفات Obsidian', ok: obsBad === 0, detailAr: `${obsTotal - obsBad} من ${obsTotal} ملفاً مطابقاً للنسخة.${dupNote}` });
+    checks.push({
+      nameAr: 'عدم فقدان أي ملف',
+      ok: fileCheck.missing.length === 0,
+      detailAr: fileCheck.missing.length ? `${fileCheck.missing.length} ملفاً لم يُستعد: ${fileCheck.missing.slice(0, 5).join('، ')}.` : `كل الملفات (${fileCheck.groups.length} اسماً موحّداً من ${rels.length} مدخلاً) استُعيدت.`,
+    });
 
     // مقارنة إعلامية مع الجهاز الحالي
     if (options.liveRootDir) {
@@ -204,9 +247,9 @@ export function runRestoreDrill(
         liveMemory = [];
       }
       const memSet = new Set(memoryIds);
-      const obsSet = new Set(obsRels);
+      const obsSet = new Set(rels.filter((r) => r.startsWith('Obsidian-Vault/')).map((r) => r.normalize('NFC')));
       comparedWithLive = {
-        obsidianFilesOnlyLive: liveObsRels.filter((r) => !obsSet.has(r) && !/\/\.obsidian\/workspace|\/\.trash\//.test(r)).length,
+        obsidianFilesOnlyLive: liveObsRels.filter((r) => !obsSet.has(r.normalize('NFC')) && !/\/\.obsidian\/workspace|\/\.trash\//.test(r)).length,
         conversationsOnlyLive: liveConv.filter((n) => !backupConvNames.has(n)).length,
         memoryOnlyLive: liveMemory.filter((id) => id && !memSet.has(id)).length,
       };
