@@ -34,6 +34,7 @@
 │   ├── 📄 11-IDEAS-DISCUSSION-DECISIONS.md     # قرارات نقاش الأفكار الجديدة
 │   ├── 📄 12-EXECUTION-PLAN.md                 # خطة التنفيذ التفصيلية المعتمدة وحالة كل مرحلة
 │   ├── 📄 13-ISSUES-AND-SOLUTIONS-REFERENCE.md # مرجع الأعطال والحلول
+│   ├── 📄 14-MAC-SYNC-2.0-HANDOFF.md          # تسليم الماك: ترحيل المزامنة 2.0 والتشخيص
 │   └── 📁 archive\                             # وثائق ونماذج تاريخية لم تعد مستخدمة
 │
 ├── 📁 Obsidian-Vault\                          # العقل المعرفي (يُفتح ببرنامج Obsidian)
