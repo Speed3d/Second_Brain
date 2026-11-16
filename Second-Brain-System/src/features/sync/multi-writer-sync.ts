@@ -22,7 +22,7 @@ import { formatTimestampIso, readJsonFileSafe, removePathSync, toSafeFileName, w
 import type { SealedData, VaultSecretItem } from '../../shared/types.ts';
 import { readVaultFile, type UnlockedVault, type VaultFileV2 } from '../vault/vault-manager.ts';
 import { hlcCompare, hlcParse, hlcReceive, hlcTick, hlcToString, type HlcStamp } from './hlc.ts';
-import { applyRecordWrites, hashContent, readLocalRecords, recordKind, recordsFromLegacyEntries, type RecordMap, type RecordWrite } from './records.ts';
+import { applyRecordWrites, hashContent, isGeneratedProjectDoc, normalizeObsidianFileNames, OBSIDIAN_LOCAL_ONLY, readLocalRecords, recordKind, recordsFromLegacyEntries, type RecordMap, type RecordWrite } from './records.ts';
 import { importLatestSnapshot, packSharedState, readManifest, saveLocalBackup, type SharedEntries } from './snapshot-sync.ts';
 import { readLocalSyncState, readSyncJson, type DeviceInfo, type SyncContext } from './sync-context.ts';
 import {
@@ -123,6 +123,16 @@ function myChangesDir(ctx: SyncContext): string {
 
 function snapshotsV2Dir(ctx: SyncContext): string {
   return path.join(ctx.syncRoot, SNAPSHOTS_V2_DIR);
+}
+
+/**
+ * Hint بالعربي: هل يُزامَن هذا السجل؟ ملفات Obsidian المحلية (الواجهة، والسلة، ومرآة فهرس الدوال) لا تُزامَن أبداً،
+ *               حتى لو وصلت من جهاز بإصدار أقدم (ISS-026).
+ */
+function isSyncableKey(key: string): boolean {
+  if (recordKind(key) !== 'obs') return true;
+  const rel = key.slice('obs:'.length).normalize('NFC');
+  return !OBSIDIAN_LOCAL_ONLY.some((re) => re.test(rel));
 }
 
 function bumpVv(vv: VersionVector | undefined, deviceId: string): VersionVector {
@@ -248,6 +258,10 @@ export function lockLegacyClients(ctx: SyncContext, now: number = Date.now()): v
  * Hint بالعربي: دالة كشف التغييرات المحلية ونشرها دفعةً واحدة. المخرجات: عدد التغييرات المنشورة.
  */
 export function publishLocalChanges(ctx: SyncContext, vault: UnlockedVault, index: SyncIndex, now: number = Date.now()): number {
+  // ISS-025: توحيد أسماء الملفات العربية قبل الكشف (Windows فقط)
+  normalizeObsidianFileNames(ctx, vault.dataKey, ctx.device.deviceName);
+  // ISS-026: السجلات التي صارت محلية فقط تُنسى من الفهرس، ولا يُنشر حذفها (فلا تُحذف من الأجهزة الأخرى)
+  for (const key of Object.keys(index.records)) if (!isSyncableKey(key)) delete index.records[key];
   const local = readLocalRecords(ctx, vault);
   const changes: ChangeRecord[] = [];
   const pending = new Set(index.pendingRepublish ?? []);
@@ -395,6 +409,7 @@ export function mergeIncoming(
 
   for (const batch of batches) {
     for (const c of batch.changes) {
+      if (!isSyncableKey(c.key)) continue;
       try {
         hlcReceive(clock, hlcParse(c.hlc), now);
       } catch {
@@ -453,6 +468,18 @@ export function mergeIncoming(
       }
       // تعديلان مختلفان للسجل نفسه
       const kind = recordKind(c.key);
+      if (isGeneratedProjectDoc(c.key)) {
+        // ISS-026: وثيقة مولّدة آلياً: الأحدث يُعتمد بصمت، والأخرى إلى السلة (لا بطاقة تعارض ولا نسخة جانبية)
+        if (incomingNewer) {
+          if (localContent) trash.push({ key: c.key, content: localContent, by: `${ctx.device.deviceName} (وثيقة مولّدة أقدم)` });
+          writes.set(c.key, incoming);
+          records[c.key] = { vv: merged, hlc: c.hlc, hash: c.hash! };
+        } else {
+          if (incoming) trash.push({ key: c.key, content: incoming, by: `${batch.deviceName} (وثيقة مولّدة أقدم)` });
+          records[c.key] = { ...rec, vv: merged };
+        }
+        continue;
+      }
       if (kind === 'vaultkeys') {
         // مغلّفا المفتاح (تغيير كلمة المرور): الأحدث يفوز، مع تنبيه
         if (incomingNewer) {

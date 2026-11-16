@@ -19,6 +19,7 @@ import { appendConversationTurn, resolveConversationsDir } from '../src/features
 import { createEncryptedSystemBackup } from '../src/features/family-emergency/backup-service.ts';
 import { isGeneratedDocsOwner } from '../src/features/sync/code-ownership.ts';
 import { hlcCompare, hlcParse, hlcReceive, hlcTick, hlcToString } from '../src/features/sync/hlc.ts';
+import { applyRecordWrites, normalizeObsidianFileNames, readLocalRecords } from '../src/features/sync/records.ts';
 import { bootstrapFromSnapshotV2, createSnapshotV2, pruneOwnSyncFiles, resolveConflict, restoreFromTrash, runSyncCycle } from '../src/features/sync/multi-writer-sync.ts';
 import { acquireLease, type SyncContext } from '../src/features/sync/sync-context.ts';
 import { publishSnapshot } from '../src/features/sync/snapshot-sync.ts';
@@ -291,6 +292,49 @@ export async function runMultiWriterSyncTests(): Promise<string[]> {
   assert.equal(exists(obs(C, 'ملاحظات/خطة-عربية.md')), false, 'وإلى المكتبي');
   assert.ok(listTrash(C, vC.dataKey).some((t) => t.key === 'obs:ملاحظات/خطة-عربية.md'), 'وهو في السلة');
   passed.push('اختبار الحذف بأسماء عربية (ISS-024: ملف ومجلد يُحذفان فعلاً، وحذف ملاحظة عربية على جهاز يصل إلى الجميع ويدخل السلة) بنجاح.');
+
+  // 10.6 ISS-025: الماك يعيد الأسماء العربية مفكّكة (NFD)، و Windows مركّبة (NFC): الملف نفسه لا يصبح ملفين
+  const nfcName = 'نظام ادارة الوثائق'; // «ئ» مركّبة
+  const nfdName = nfcName.normalize('NFD'); // «ي» + همزة فوقها، كما يعيدها الماك
+  assert.notEqual(nfcName, nfdName);
+  writeFixtureFile(obs(A, `02-Projects/${nfcName}/02-Run-And-Update.md`), 'الأصل باسم مركّب');
+  writeFixtureFile(obs(A, `02-Projects/${nfdName}/02-Run-And-Update.md`), 'مكرر باسم مفكّك');
+  writeFixtureFile(obs(A, `02-Projects/${nfdName}/05-Auto-Changelog.md`), 'سجل وصل باسم مفكّك فقط');
+  const keysA = [...readLocalRecords(A, vA).keys()].filter((k) => k.includes('ادارة'));
+  assert.ok(keysA.every((k) => k === k.normalize('NFC')), 'كل المفاتيح بصيغة مركّبة');
+  assert.equal(keysA.filter((k) => k.endsWith('02-Run-And-Update.md')).length, 1, 'الملف نفسه مفتاح واحد');
+  assert.equal(readLocalRecords(A, vA).get(`obs:02-Projects/${nfcName}/02-Run-And-Update.md`)!.toString(), 'الأصل باسم مركّب', 'الاسم المركّب يتقدّم');
+  assert.equal(normalizeObsidianFileNames(A, vA.dataKey, 'Asus', 'darwin'), 0, 'على الماك لا تغيير (النظام يعامل الصيغتين كاسم واحد)');
+  assert.equal(normalizeObsidianFileNames(A, vA.dataKey, 'Asus', 'win32'), 2);
+  assert.equal(exists(obs(A, `02-Projects/${nfdName}`)), false, 'المجلد المكرر اختفى');
+  assert.equal(read(obs(A, `02-Projects/${nfcName}/05-Auto-Changelog.md`)), 'سجل وصل باسم مفكّك فقط', 'الملف الذي لا أصل له نُقل إلى الاسم المركّب');
+  assert.equal(read(obs(A, `02-Projects/${nfcName}/02-Run-And-Update.md`)), 'الأصل باسم مركّب');
+  assert.ok(listTrash(A, vA.dataKey).some((t) => t.key === `obs:02-Projects/${nfcName}/02-Run-And-Update.md` && Buffer.from(t.content, 'base64').toString() === 'مكرر باسم مفكّك'), 'المكرر في السلة لا يضيع');
+  applyRecordWrites(A, vA, [{ key: `obs:02-Projects/${nfdName}/02-Run-And-Update.md`, content: null }]);
+  assert.equal(read(obs(A, `02-Projects/${nfcName}/02-Run-And-Update.md`)), 'الأصل باسم مركّب', 'حذف قادم بمفتاح مفكّك لا يمسّ الملف الحقيقي (على الماك كان سيحذفه)');
+  all((ctx, v) => cycle(ctx, v));
+  all((ctx, v) => cycle(ctx, v));
+  assert.equal(read(obs(C, `02-Projects/${nfcName}/05-Auto-Changelog.md`)), 'سجل وصل باسم مفكّك فقط', 'وصل للجميع باسم واحد');
+  assert.ok(!fs.readdirSync(obs(C, '02-Projects')).some((n) => n !== n.normalize('NFC')), 'لا مجلد مكرر على أي جهاز');
+  passed.push('اختبار الأسماء العربية بصيغتي يونيكود (ISS-025: مفتاح واحد بصيغة NFC، توحيد الأسماء على Windows مع نقل المكرر إلى السلة، تجاهل الحذف القادم بمفتاح مفكّك، ولا مجلد مكرر على أي جهاز) بنجاح.');
+
+  // 10.7 ISS-026: الوثائق المولّدة تُحسم بصمت، ومرآة فهرس الدوال لا تُزامَن
+  writeFixtureFile(obs(A, '02-Projects/App/01-Overview.md'), 'نظرة عامة ولّدها الأسوس');
+  tick();
+  writeFixtureFile(obs(B, '02-Projects/App/01-Overview.md'), 'نظرة عامة ولّدها الماك (أحدث)');
+  const conflictsBefore = listConflicts(A, vA.dataKey).length;
+  cycle(A, vA);
+  cycle(B, vB);
+  cycle(A, vA);
+  assert.equal(read(obs(A, '02-Projects/App/01-Overview.md')), 'نظرة عامة ولّدها الماك (أحدث)', 'الأحدث معتمد');
+  assert.equal(listConflicts(A, vA.dataKey).length, conflictsBefore, 'بلا بطاقة تعارض للوثائق المولّدة');
+  assert.ok(!fs.readdirSync(obs(A, '02-Projects/App')).some((n) => n.includes('تعارض')), 'ولا نسخة جانبية');
+  assert.ok(listTrash(A, vA.dataKey).some((t) => t.key === 'obs:02-Projects/App/01-Overview.md'), 'والأقدم في السلة');
+  writeFixtureFile(obs(A, '00-Command-Center/Code-Registry-Mirror.md'), 'مرآة الأسوس');
+  cycle(A, vA);
+  cycle(C, vC);
+  assert.equal(exists(obs(C, '00-Command-Center/Code-Registry-Mirror.md')), false, 'مرآة فهرس الدوال لا تُزامَن (تصل عبر Git)');
+  passed.push('اختبار الوثائق المولّدة (ISS-026: الأحدث يُعتمد بصمت بلا بطاقة تعارض ولا نسخة جانبية، والأقدم في السلة، ومرآة فهرس الدوال لا تُزامَن) بنجاح.');
 
   // 11. تغيير كلمة المرور على جهاز ينتقل إلى الآخرين
   const NEW_PASSWORD = 'New-Strong-Password-2026';

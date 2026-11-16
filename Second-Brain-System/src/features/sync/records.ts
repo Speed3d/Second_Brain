@@ -20,12 +20,34 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { openWithKey } from '../../core/crypto-engine.ts';
 import { listFilesRecursive, readJsonFileSafe, removePathSync, writeFileAtomic } from '../../shared/file-helpers.ts';
+import { moveToTrash } from './sync-store.ts';
 import type { SealedData, SharedAIMemoryEntry, VaultSecretItem } from '../../shared/types.ts';
 import { persistVault, readVaultFile, type UnlockedVault, type VaultFileV2 } from '../vault/vault-manager.ts';
 import type { SyncContext } from './sync-context.ts';
 
 /** ملفات Obsidian الخاصة بواجهة كل جهاز (لا تُزامَن) */
-export const OBSIDIAN_LOCAL_ONLY = [/^\.obsidian\/workspace[^/]*\.json$/, /^\.trash\//];
+export const OBSIDIAN_LOCAL_ONLY = [
+  /^\.obsidian\/workspace[^/]*\.json$/,
+  /^\.trash\//,
+  // ISS-026: مرآة فهرس الدوال يولّدها مشغّل الاختبارات على كل جهاز (وتصل عبر Git)، فلا تُزامَن
+  /^00-Command-Center\/Code-Registry-Mirror\.md$/,
+];
+
+/**
+ * Hint بالعربي: الوثائق المولّدة آلياً لكل مشروع (01–06). تعارضها لا يُعرض على القائد:
+ *               الأحدث يُعتمد بصمت، والأخرى تذهب إلى السلة 30 يوماً (ISS-026).
+ */
+export function isGeneratedProjectDoc(key: string): boolean {
+  return /^obs:02-Projects\/[^/]+\/0[1-6]-[^/]+\.md$/.test(key);
+}
+
+/**
+ * Hint بالعربي: توحيد الاسم بصيغة يونيكود المركّبة (NFC). ISS-025: الماك يعيد أسماء الملفات العربية
+ *               بصيغة مفكّكة (NFD: «ئ» = «ي» + همزة)، و Windows بالمركّبة، فيظهر الملف نفسه كملفين.
+ */
+export function nfc(text: string): string {
+  return text.normalize('NFC');
+}
 /** أسماء ملفات المحادثات المسموحة */
 const CONVERSATION_FILE = /^[a-z0-9-]{8,64}\.enc\.json$/;
 
@@ -98,11 +120,16 @@ export function readLocalRecords(ctx: SyncContext, vault: UnlockedVault): Record
       if (CONVERSATION_FILE.test(name)) map.set(`conv:${name}`, fs.readFileSync(path.join(convDir, name)));
     }
   }
+  // ISS-025: المفتاح دائماً بصيغة NFC. الملف ذو الاسم المركّب يتقدّم إن وُجد اسمان للملف نفسه
+  const later: Array<{ rel: string; file: string }> = [];
   for (const file of listFilesRecursive(ctx.obsidianDir)) {
-    const rel = toPosix(path.relative(ctx.obsidianDir, file));
+    const raw = toPosix(path.relative(ctx.obsidianDir, file));
+    const rel = nfc(raw);
     if (OBSIDIAN_LOCAL_ONLY.some((re) => re.test(rel))) continue;
-    map.set(`obs:${rel}`, fs.readFileSync(file));
+    if (raw !== rel) later.push({ rel, file });
+    else map.set(`obs:${rel}`, fs.readFileSync(file));
   }
+  for (const { rel, file } of later) if (!map.has(`obs:${rel}`)) map.set(`obs:${rel}`, fs.readFileSync(file));
   return map;
 }
 
@@ -136,7 +163,10 @@ export function recordsFromLegacyEntries(entries: Record<string, string>, dataKe
   }
   for (const key of Object.keys(entries)) {
     if (key.startsWith('conversations/')) map.set(`conv:${key.slice('conversations/'.length)}`, buf(key)!);
-    else if (key.startsWith('obsidian/')) map.set(`obs:${key.slice('obsidian/'.length)}`, buf(key)!);
+    else if (key.startsWith('obsidian/')) {
+      const rel = nfc(key.slice('obsidian/'.length));
+      if (!OBSIDIAN_LOCAL_ONLY.some((re) => re.test(rel)) && !map.has(`obs:${rel}`)) map.set(`obs:${rel}`, buf(key)!);
+    }
   }
   return map;
 }
@@ -146,7 +176,7 @@ export function recordsFromLegacyEntries(entries: Record<string, string>, dataKe
  */
 export function resolveObsidianPath(ctx: SyncContext, rel: string): string {
   const root = path.resolve(ctx.obsidianDir);
-  const dest = path.resolve(root, rel);
+  const dest = path.resolve(root, nfc(rel));
   if (!dest.startsWith(root + path.sep)) throw new Error(`مسار غير آمن في سجل المزامنة: ${rel}`);
   if (OBSIDIAN_LOCAL_ONLY.some((re) => re.test(toPosix(path.relative(root, dest))))) throw new Error(`ملف محلي لا يُزامَن: ${rel}`);
   return dest;
@@ -235,7 +265,11 @@ function writeRecords(ctx: SyncContext, vault: UnlockedVault, writes: RecordWrit
   }
 
   for (const w of byKind.get('obs') ?? []) {
-    const file = resolveObsidianPath(ctx, recordId(w.key));
+    const rel = recordId(w.key);
+    // ISS-025: سجل باسم غير موحّد (NFD، من 2.0.0/2.0.1 على الماك) لا يُطبَّق على القرص أبداً:
+    // على الماك يشير إلى الملف الحقيقي نفسه، فحذفه كان سيحذف الملف الصحيح
+    if (rel !== nfc(rel)) continue;
+    const file = resolveObsidianPath(ctx, rel);
     if (w.content === null) removePathSync(file, { force: true });
     else writeFileAtomic(file, w.content);
   }
@@ -275,4 +309,40 @@ export function applyRecordWrites(ctx: SyncContext, vault: UnlockedVault, writes
     }
     throw err;
   }
+}
+
+/**
+ * Hint بالعربي: دالة توحيد أسماء ملفات Obsidian على هذا الجهاز (ISS-025). على Windows، الملف الذي وصل باسم مفكّك (NFD)
+ *               صار ملفاً ثانياً بجانب الأصلي: إن وُجد الأصلي المركّب يُنقل المكرر إلى السلة ويُحذف،
+ *               وإلا يُعاد تسميته بالاسم المركّب. على الماك لا شيء (نظام الملفات يعامل الصيغتين كاسم واحد).
+ *               المخرجات: عدد الملفات التي عولجت.
+ */
+export function normalizeObsidianFileNames(ctx: SyncContext, dataKey: Buffer, deviceName: string, platform: NodeJS.Platform = process.platform): number {
+  if (platform === 'darwin' || !fs.existsSync(ctx.obsidianDir)) return 0;
+  let fixed = 0;
+  const touchedDirs = new Set<string>();
+  for (const file of listFilesRecursive(ctx.obsidianDir)) {
+    const raw = toPosix(path.relative(ctx.obsidianDir, file));
+    const rel = nfc(raw);
+    if (raw === rel) continue;
+    const target = path.join(ctx.obsidianDir, ...rel.split('/'));
+    if (fs.existsSync(target)) {
+      moveToTrash(ctx, dataKey, `obs:${rel}`, fs.readFileSync(file), `${deviceName} (اسم مكرر بصيغة يونيكود أخرى)`);
+      removePathSync(file);
+    } else {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.renameSync(file, target);
+    }
+    touchedDirs.add(path.dirname(file));
+    fixed += 1;
+  }
+  // حذف المجلدات المفكّكة الاسم التي فرغت
+  const root = path.resolve(ctx.obsidianDir);
+  for (let dir of [...touchedDirs].sort((a, b) => b.length - a.length)) {
+    while (path.resolve(dir) !== root && path.resolve(dir).startsWith(root) && fs.existsSync(dir) && fs.readdirSync(dir).length === 0) {
+      removePathSync(dir);
+      dir = path.dirname(dir);
+    }
+  }
+  return fixed;
 }
