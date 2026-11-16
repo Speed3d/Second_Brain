@@ -47,3 +47,8 @@ desktop.ini
 .vscode/
 .idea/
 *.log
+
+# Temporary private review material (contains private domain names)
+docs/DMS-Toolkit/
+# The commander's raw ideas file stays on his devices only
+docs/افكار.md
