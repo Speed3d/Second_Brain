@@ -16,7 +16,7 @@ import { openWithKey, sealWithKey } from '../../core/crypto-engine.ts';
 import { logSystemInfo } from '../../core/logger.ts';
 import { listFilesRecursive, readJsonFileSafe, removePathSync, toSafeFileName, writeFileAtomic } from '../../shared/file-helpers.ts';
 import type { SealedData } from '../../shared/types.ts';
-import { readVaultFile, type UnlockedVault, type VaultKeyEnvelopes } from '../vault/vault-manager.ts';
+import { readVaultFile, vaultKeysOf, type UnlockedVault, type VaultKeysRecord } from '../vault/vault-manager.ts';
 import { readLocalSyncState, readLeaseStatus, readSyncJson, writeLocalSyncState, type DeviceInfo, type SyncContext } from './sync-context.ts';
 
 const SNAPSHOT_PREFIX = 'Second-Brain-Snapshot-';
@@ -49,7 +49,7 @@ interface SnapshotFile {
   createdAt: string;
   device: DeviceInfo;
   contentHash: string;
-  vaultKeys: VaultKeyEnvelopes;
+  vaultKeys: VaultKeysRecord;
   payload: SealedData;
 }
 
@@ -317,7 +317,7 @@ export function publishSnapshot(
     createdAt,
     device: ctx.device,
     contentHash,
-    vaultKeys: { commanderWrap: vaultFile.commanderWrap, emergencyWrap: vaultFile.emergencyWrap },
+    vaultKeys: vaultKeysOf(vaultFile),
     payload: sealEntries(entries, vault),
   };
   const fileName = `${SNAPSHOT_PREFIX}${String(version).padStart(6, '0')}-${toSafeFileName(ctx.device.deviceName, 'device')}${SNAPSHOT_SUFFIX}`;

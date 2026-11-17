@@ -21,7 +21,7 @@ import { readAppVersion } from '../../core/config-manager.ts';
 import { logSystemInfo } from '../../core/logger.ts';
 import { formatTimestampIso, readJsonFileSafe, removePathSync, toSafeFileName, writeFileAtomic } from '../../shared/file-helpers.ts';
 import type { SealedData, VaultSecretItem } from '../../shared/types.ts';
-import { readVaultFile, type UnlockedVault, type VaultFileV2 } from '../vault/vault-manager.ts';
+import { hasMainDataKey, mergeVaultKeys, readVaultFile, vaultKeysOf, type UnlockedVault, type VaultFileV2, type VaultFileV3, type VaultKeysRecord } from '../vault/vault-manager.ts';
 import { hlcCompare, hlcParse, hlcReceive, hlcTick, hlcToString, type HlcStamp } from './hlc.ts';
 import { applyRecordWrites, hashContent, isGeneratedProjectDoc, normalizeObsidianFileNames, OBSIDIAN_LOCAL_ONLY, readLocalRecords, recordKind, recordsFromLegacyEntries, type RecordMap, type RecordWrite } from './records.ts';
 import { importLatestSnapshot, packSharedState, readManifest, saveLocalBackup, type SharedEntries } from './snapshot-sync.ts';
@@ -51,9 +51,9 @@ import {
  * 1 = 2.0.0–2.0.1 (مفاتيح كما هي)، 2 = منذ 2.0.2 (مفاتيح Obsidian بصيغة NFC، والوثائق المولّدة تُحسم بصمت).
  * أي دفعة بصيغة أعلى لا تُدمج، ويُطلب تحديث هذا الجهاز.
  */
-export const CHANGE_FORMAT = 2;
+export const CHANGE_FORMAT = 3;
 /** أقل إصدار يفهم ما ينشره هذا الإصدار بأمان؛ يُكتب في manifest.json، والأجهزة الأقدم تتوقف (من 2.2.0 فصاعداً) */
-export const MIN_SYNC_APP_VERSION = '2.2.0';
+export const MIN_SYNC_APP_VERSION = '3.0.0';
 /** ISS-028: حدّ الأمان: حذف هذا العدد أو أكثر دفعة واحدة لا يُنشر ولا يُطبَّق بلا تأكيد القائد */
 export const MASS_DELETE_THRESHOLD = 10;
 /** مجلد فيه هذا العدد أو أكثر اختفى كله دفعة واحدة = حذف جماعي */
@@ -137,7 +137,8 @@ interface SnapshotV2File {
   hlc: string;
   /** آخر دفعة تغطيها النسخة من كل جهاز */
   covers: Record<string, string>;
-  vaultKeys: Pick<VaultFileV2, 'commanderWrap' | 'emergencyWrap'>;
+  /** v2: commanderWrap + emergencyWrap، و v3 (3.0.0): commanderWrap + family */
+  vaultKeys: VaultKeysRecord;
   recordCount: number;
   payload: SealedData;
 }
@@ -576,14 +577,18 @@ export function mergeIncoming(
         continue;
       }
       if (kind === 'vaultkeys') {
-        // مغلّفا المفتاح (تغيير كلمة المرور): الأحدث يفوز، مع تنبيه
-        if (incomingNewer) {
-          writes.set(c.key, incoming);
-          records[c.key] = { vv: merged, hlc: c.hlc, hash: c.hash! };
-          options.warnings.push(`🔑 تغيّرت كلمة المرور الرئيسية (أو مفتاح الطوارئ) على «${batch.deviceName}». عند قفل الخزنة هنا استخدم كلمة المرور الجديدة.`);
-        } else {
-          records[c.key] = { ...rec, vv: merged };
+        // مغلّفات المفتاح: مغلّف القائد من الأحدث، والخزنة العائلية من أيٍّ منهما يحملها (3.0.0) فلا تُفقد أبداً.
+        // يُكتب المدموج، والبصمة تبقى بصمة القادم: إن اختلف المدموج عنه نشره هذا الجهاز في الدورة التالية.
+        const inKeys = incoming ? (JSON.parse(incoming.toString('utf8')) as VaultKeysRecord) : null;
+        const localKeys = localContent ? (JSON.parse(localContent.toString('utf8')) as VaultKeysRecord) : null;
+        const newer = incomingNewer ? inKeys : localKeys;
+        const older = incomingNewer ? localKeys : inKeys;
+        if (newer) {
+          const combined = Buffer.from(JSON.stringify(mergeVaultKeys(newer, older)), 'utf8');
+          if (!localContent || !combined.equals(localContent)) writes.set(c.key, combined);
         }
+        records[c.key] = incomingNewer ? { vv: merged, hlc: c.hlc, hash: c.hash! } : { ...rec, vv: merged };
+        if (incomingNewer) options.warnings.push(`🔑 تغيّرت كلمة المرور الرئيسية (أو مفتاح الطوارئ) على «${batch.deviceName}». عند قفل الخزنة هنا استخدم كلمة المرور الجديدة.`);
         continue;
       }
       if (kind === 'secret') {
@@ -673,7 +678,7 @@ export function createSnapshotV2(ctx: SyncContext, vault: UnlockedVault, index: 
     createdAt: new Date(now).toISOString(),
     hlc,
     covers,
-    vaultKeys: { commanderWrap: vaultFile.commanderWrap, emergencyWrap: vaultFile.emergencyWrap },
+    vaultKeys: vaultKeysOf(vaultFile),
     recordCount: Object.keys(payload.records).length,
     payload: sealWithKey(JSON.stringify(payload), vault.dataKey),
   };
@@ -735,17 +740,33 @@ export function bootstrapFromSnapshotV2(ctx: SyncContext, masterPassword: string
   }
   const payload = JSON.parse(openWithKey(snap.payload, dataKey).toString('utf8')) as SnapshotV2Payload;
   const nowIso = formatTimestampIso();
-  const emptyVault: VaultFileV2 = {
-    format: 'second-brain-vault',
-    version: 2,
-    commanderWrap: snap.vaultKeys.commanderWrap,
-    emergencyWrap: snap.vaultKeys.emergencyWrap,
-    data: sealWithKey(JSON.stringify([]), dataKey),
-    createdAt: nowIso,
-    updatedAt: nowIso,
-  };
+  // 3.0.0: نسخة تحمل الخزنة العائلية ← ملف v3 بالمفتاح العائلي نفسه (الأسرار والقسم العائلي يُكتبان عند تطبيق السجلات)
+  let familyKey: Buffer | null = null;
+  let emptyVault: VaultFileV2 | VaultFileV3;
+  if (snap.vaultKeys.family) {
+    familyKey = openWithKey(snap.vaultKeys.family.fkByCommander, dataKey);
+    emptyVault = {
+      format: 'second-brain-vault',
+      version: 3,
+      commanderWrap: snap.vaultKeys.commanderWrap,
+      family: { ...snap.vaultKeys.family, data: sealWithKey(JSON.stringify([]), familyKey), count: 0, migratedAt: nowIso },
+      data: sealWithKey(JSON.stringify([]), dataKey),
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+  } else {
+    emptyVault = {
+      format: 'second-brain-vault',
+      version: 2,
+      commanderWrap: snap.vaultKeys.commanderWrap,
+      emergencyWrap: snap.vaultKeys.emergencyWrap!,
+      data: sealWithKey(JSON.stringify([]), dataKey),
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+  }
   writeFileAtomic(ctx.vaultFile, JSON.stringify(emptyVault, null, 2));
-  const vault: UnlockedVault = { vaultFilePath: ctx.vaultFile, dataKey, unlockedBy: 'commander', secrets: [] };
+  const vault: UnlockedVault = { vaultFilePath: ctx.vaultFile, dataKey, familyKey, unlockedBy: 'commander', secrets: [] };
   const writes: RecordWrite[] = [];
   const index: SyncIndex = {
     format: 'second-brain-sync-index',
@@ -794,6 +815,10 @@ export function runSyncCycle(ctx: SyncContext, vault: UnlockedVault, options: Sy
   const now = options.now ?? Date.now();
   const warnings: string[] = [];
   try {
+    // 3.0.0: جلسة العائلة (مفتاح الطوارئ على خزنة v3) لا تملك مفتاح البيانات: لا نشر ولا دمج
+    if (!hasMainDataKey(vault)) {
+      return { migrated: false, published: 0, applied: 0, conflicts: 0, skippedBatches: 0, compacted: false, warnings: ['👪 جلسة العائلة لا تزامن: المزامنة تعمل حين يفتح القائد الخزنة بكلمة المرور.'] };
+    }
     let index = readSyncIndex(ctx);
     let migrated = false;
     if (!index) {

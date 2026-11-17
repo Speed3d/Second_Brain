@@ -85,6 +85,8 @@ export interface RestoreDrillReport {
   /** مكان النسخة: محلي، أو المجلد الإضافي، أو Drive */
   location?: BackupCandidate['location'];
   durationMs: number;
+  /** 3.0.0: «family» إن فُتحت النسخة بمفتاح الطوارئ (الحمولة العائلية وحدها) */
+  scope?: 'full' | 'family';
   ok: boolean;
   checks: DrillCheck[];
   /** مقارنة إعلامية مع حالة الجهاز الآن (النسخة قد تكون أقدم، فهذا ليس فشلاً) */
@@ -148,23 +150,29 @@ export function runRestoreDrill(
   let backupCreatedAt = '';
   let filesCount = 0;
   let comparedWithLive: RestoreDrillReport['comparedWithLive'];
+  let scope: RestoreDrillReport['scope'];
   try {
     const snapshot = openEncryptedBackup(backupFilePath, passwordOrKey);
     backupCreatedAt = snapshot.createdAt;
+    scope = snapshot.scope ?? 'full';
     const restored = restoreEncryptedBackup(backupFilePath, passwordOrKey, target);
     filesCount = restored.files.length;
     const rels = Object.keys(snapshot.filesMap);
 
     // 1) فتح الخزنة
     const vaultRel = rels.find((r) => /(^|\/)encrypted-vault\/[^/]+\.json$/.test(r));
+    // 3.0.0: كلمة المرور تفتح النسخة الكاملة، ومفتاح الطوارئ يفتح الحمولة العائلية وحدها
+    const familyScope = snapshot.scope === 'family';
     let dataKey: Buffer | null = null;
+    let familyKey: Buffer | null = null;
     if (!vaultRel) {
       checks.push({ nameAr: 'فتح الخزنة', ok: false, detailAr: 'لا يوجد ملف خزنة داخل النسخة.' });
     } else {
       try {
         const vault = unlockVault(passwordOrKey, path.join(target, vaultRel));
-        dataKey = vault.dataKey;
-        checks.push({ nameAr: 'فتح الخزنة', ok: true, detailAr: `فُتحت الخزنة المستعادة (${vault.secrets.length} سرّاً).` });
+        dataKey = vault.dataKey.length === 32 ? vault.dataKey : null;
+        familyKey = vault.familyKey ?? null;
+        checks.push({ nameAr: 'فتح الخزنة', ok: true, detailAr: familyScope ? `فُتحت الخزنة العائلية المستعادة (${vault.secrets.length} سرّاً للعائلة).` : `فُتحت الخزنة المستعادة (${vault.secrets.length} سرّاً).` });
       } catch (err) {
         checks.push({ nameAr: 'فتح الخزنة', ok: false, detailAr: `تعذّر فتح الخزنة المستعادة: ${err instanceof Error ? err.message : String(err)}` });
       }
@@ -176,9 +184,10 @@ export function runRestoreDrill(
     const convBad: string[] = [];
     for (const rel of convRels) {
       try {
-        const file = JSON.parse(fs.readFileSync(path.join(target, rel), 'utf8')) as { sealed: SealedData };
-        if (!dataKey) throw new Error('no key');
-        openWithKey(file.sealed, dataKey);
+        const file = JSON.parse(fs.readFileSync(path.join(target, rel), 'utf8')) as { sealed: SealedData; keyScope?: 'family' };
+        const key = file.keyScope === 'family' ? familyKey : dataKey;
+        if (!key) throw new Error('no key');
+        openWithKey(file.sealed, key);
         convOk += 1;
       } catch {
         convBad.push(path.posix.basename(rel));
@@ -193,7 +202,7 @@ export function runRestoreDrill(
     // 3) الذاكرة
     const memRel = rels.find((r) => r.endsWith('data/ai-memory-store.json'));
     let memoryIds: string[] = [];
-    if (!memRel) checks.push({ nameAr: 'اكتمال الذاكرة', ok: true, detailAr: 'لا ذاكرة مشتركة في النسخة بعد.' });
+    if (!memRel) checks.push({ nameAr: 'اكتمال الذاكرة', ok: true, detailAr: familyScope ? 'النسخة العائلية لا تضم الذاكرة المشتركة (خاصة بالقائد).' : 'لا ذاكرة مشتركة في النسخة بعد.' });
     else {
       try {
         const arr = JSON.parse(fs.readFileSync(path.join(target, memRel), 'utf8')) as Array<{ id?: string }>;
@@ -234,7 +243,7 @@ export function runRestoreDrill(
     });
 
     // مقارنة إعلامية مع الجهاز الحالي
-    if (options.liveRootDir) {
+    if (options.liveRootDir && !familyScope) {
       const liveObs = path.join(options.liveRootDir, 'Obsidian-Vault');
       const liveObsRels = fs.existsSync(liveObs) ? listFilesRecursive(liveObs).map((f) => `Obsidian-Vault/${path.relative(liveObs, f).replace(/\\/g, '/')}`) : [];
       const liveConvDir = path.join(options.liveRootDir, 'Second-Brain-System', 'data', 'conversations');
@@ -271,6 +280,7 @@ export function runRestoreDrill(
     device: options.deviceName ?? os.hostname(),
     filesCount,
     durationMs: Date.now() - started,
+    scope,
     ok: checks.length > 0 && checks.every((c) => c.ok),
     checks,
     comparedWithLive,

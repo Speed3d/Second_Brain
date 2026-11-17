@@ -5,6 +5,8 @@
  * Hint بالعربي: اختبار التعافي من الكوارث: يحاكي حرفياً دليل "التشغيل على جهاز جديد" الموجود في دليل العائلة:
  *               جهاز أ (خزنة + حساب + مشروع + نسخة احتياطية) ← فلاشة ← جهاز ب (استعادة إلى مجلد جديد بمفتاح
  *               الطوارئ، نسخ ملفات البرنامج كما في الدليل، تشغيل الخادم الحقيقي، فتح الخزنة، والتحقق من كل البيانات).
+ *               3.0.0: مفتاح الطوارئ يستعيد الحمولة العائلية وحدها (أسرار العائلة، والمشاريع، وأدلة العائلة)،
+ *               وكلمة المرور الرئيسية تستعيد كل شيء.
  *               كل شيء في مجلدات مؤقتة منفصلة، ولا يلمس أي بيانات حقيقية.
  * ============================================================================
  */
@@ -65,6 +67,8 @@ export async function runDisasterRecoveryTests(): Promise<string[]> {
     );
     fs.mkdirSync(path.join(machineA, 'Obsidian-Vault', '00-Command-Center'), { recursive: true });
     fs.writeFileSync(path.join(machineA, 'Obsidian-Vault', '00-Command-Center', 'note.md'), '# ملاحظة مهمة');
+    fs.mkdirSync(path.join(machineA, 'Obsidian-Vault', '04-Family-Emergency-Guide'), { recursive: true });
+    fs.writeFileSync(path.join(machineA, 'Obsidian-Vault', '04-Family-Emergency-Guide', '00-البداية.md'), '# دليل العائلة');
 
     const created = JSON.parse(
       runInCopy(
@@ -72,7 +76,8 @@ export async function runDisasterRecoveryTests(): Promise<string[]> {
         `const v = await import('./src/features/vault/vault-manager.ts');
          const b = await import('./src/features/family-emergency/backup-service.ts');
          const { emergencyRecoveryKey, vault } = v.createVault('Machine-A-Test-Pass-2026');
-         v.upsertVaultSecret(vault, { id: 'S1', category: 'email_account', title: 'إيميل المتجر', usernameOrEmail: 'shop@example.test', secretValue: 'shop-test-value', notesForCommanderAr: '', notesForWifeAr: 'الإيميل الرئيسي' });
+         v.upsertVaultSecret(vault, { id: 'S1', category: 'email_account', title: 'إيميل المتجر', usernameOrEmail: 'shop@example.test', secretValue: 'shop-test-value', notesForCommanderAr: '', notesForWifeAr: 'الإيميل الرئيسي', familyVisible: true });
+         v.upsertVaultSecret(vault, { id: 'S2', category: 'api_key', title: 'مفتاح خادم خاص', secretValue: 'commander-only-value', notesForCommanderAr: '', notesForWifeAr: '' });
          const backup = b.createEncryptedSystemBackup(vault);
          console.log(JSON.stringify({ key: emergencyRecoveryKey, backup: backup.backupFilePath }));`,
         env
@@ -138,14 +143,34 @@ export async function runDisasterRecoveryTests(): Promise<string[]> {
       assert.equal(((await unlock.json()) as { unlockedBy: string }).unlockedBy, 'wife_emergency');
       const cookie = String(unlock.headers.get('set-cookie')).split(';')[0];
       const secrets = (await (await fetch(`${url}/api/vault/secrets`, { headers: { Cookie: cookie } })).json()) as { secrets: Array<{ title: string; secretValue: string }> };
-      assert.ok(secrets.secrets.some((s) => s.title === 'إيميل المتجر' && s.secretValue === 'shop-test-value'), 'الحساب وكلمة مروره مستعادان');
+      assert.ok(secrets.secrets.some((s) => s.title === 'إيميل المتجر' && s.secretValue === 'shop-test-value'), 'حساب العائلة وكلمة مروره مستعادان');
+      assert.ok(!secrets.secrets.some((s) => s.secretValue === 'commander-only-value'), 'سرّ القائد لا يُستعاد بمفتاح الطوارئ');
       const state = (await (await fetch(`${url}/api/state`)).json()) as { projects: Array<{ name: string; monthlyIncome: string }> };
       assert.ok(state.projects.some((p) => p.name === 'MyApp' && p.monthlyIncome === '500$'), 'المشروع ودخله مستعادان');
-      assert.ok(fs.existsSync(path.join(restoredB, 'Obsidian-Vault', '00-Command-Center', 'note.md')), 'ملفات Obsidian مستعادة');
+      assert.ok(fs.existsSync(path.join(restoredB, 'Obsidian-Vault', '04-Family-Emergency-Guide', '00-البداية.md')), 'دليل العائلة مستعاد');
+      assert.ok(!fs.existsSync(path.join(restoredB, 'Obsidian-Vault', '00-Command-Center', 'note.md')), 'ملاحظات القائد لا تُستعاد بمفتاح الطوارئ');
     } finally {
       server.kill();
     }
-    passedChecks.push('اختبار التعافي من الكوارث: جهاز أ ← فلاشة ← جهاز جديد (استعادة بمفتاح الطوارئ، تشغيل الخادم من المجلد المستعاد، وظهور الحسابات والمشاريع وملفات Obsidian) بنجاح.');
+    passedChecks.push('اختبار التعافي من الكوارث: جهاز أ ← فلاشة ← جهاز جديد (استعادة بمفتاح الطوارئ للحمولة العائلية، تشغيل الخادم من المجلد المستعاد، وظهور حسابات العائلة والمشاريع ودليل العائلة دون أسرار القائد) بنجاح.');
+
+    // 6. الاستعادة الكاملة بكلمة المرور الرئيسية على الجهاز الجديد: كل الأسرار وكل ملفات Obsidian
+    const restoredFull = path.join(base, 'MachineB', 'Second Brain Full');
+    const full = JSON.parse(
+      runInCopy(
+        path.join(programOnB, 'Second-Brain-System'),
+        `const b = await import('./src/features/family-emergency/backup-service.ts');
+         const v = await import('./src/features/vault/vault-manager.ts');
+         const done = b.restoreEncryptedBackup(${JSON.stringify(backupOnFlash)}, 'Machine-A-Test-Pass-2026', ${JSON.stringify(restoredFull)});
+         const rel = done.files.find((f) => f.endsWith('vault.aes256.json'));
+         const vault = v.unlockVault('Machine-A-Test-Pass-2026', ${JSON.stringify(restoredFull)} + '/' + rel);
+         console.log(JSON.stringify({ secrets: vault.secrets.length }));`,
+        env
+      )
+    ) as { secrets: number };
+    assert.equal(full.secrets, 2, 'كلمة المرور تستعيد كل الأسرار');
+    assert.ok(fs.existsSync(path.join(restoredFull, 'Obsidian-Vault', '00-Command-Center', 'note.md')), 'وكل ملفات Obsidian');
+    passedChecks.push('اختبار الاستعادة الكاملة بكلمة المرور الرئيسية على جهاز جديد (كل الأسرار وكل ملفات Obsidian) بنجاح.');
   } finally {
     fs.rmSync(base, { recursive: true, force: true });
   }

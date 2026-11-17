@@ -22,7 +22,9 @@ import { openWithKey } from '../../core/crypto-engine.ts';
 import { listFilesRecursive, readJsonFileSafe, removePathSync, writeFileAtomic } from '../../shared/file-helpers.ts';
 import { moveToTrash } from './sync-store.ts';
 import type { SealedData, SharedAIMemoryEntry, VaultSecretItem } from '../../shared/types.ts';
-import { persistVault, readVaultFile, type UnlockedVault, type VaultFileV2 } from '../vault/vault-manager.ts';
+import { adoptFamilyKeys, mergeVaultKeys, persistVault, readVaultFile, vaultKeysOf, type UnlockedVault, type VaultFile, type VaultKeysRecord } from '../vault/vault-manager.ts';
+import { resealFamilyConversations } from '../conversations/conversation-store.ts';
+import { logSystemInfo } from '../../core/logger.ts';
 import type { SyncContext } from './sync-context.ts';
 
 /** ملفات Obsidian الخاصة بواجهة كل جهاز (لا تُزامَن) */
@@ -103,8 +105,8 @@ export function readLocalRecords(ctx: SyncContext, vault: UnlockedVault): Record
   const map: RecordMap = new Map();
   for (const secret of vault.secrets) map.set(`secret:${secret.id}`, json(secret));
   if (fs.existsSync(ctx.vaultFile)) {
-    const file = readVaultFile(ctx.vaultFile);
-    map.set('vaultkeys:main', json({ commanderWrap: file.commanderWrap, emergencyWrap: file.emergencyWrap }));
+    // 3.0.0: v3 = مغلّف القائد + مفاتيح الخزنة العائلية (بلا غلاف الطوارئ القديم)
+    map.set('vaultkeys:main', json(vaultKeysOf(readVaultFile(ctx.vaultFile))));
   }
   if (fs.existsSync(ctx.brandingPath)) map.set('branding:main', fs.readFileSync(ctx.brandingPath));
   for (const entry of readJsonFileSafe<SharedAIMemoryEntry[]>(memoryFile(ctx), [])) {
@@ -142,10 +144,10 @@ export function recordsFromLegacyEntries(entries: Record<string, string>, dataKe
   const buf = (key: string): Buffer | null => (entries[key] !== undefined ? Buffer.from(entries[key], 'base64') : null);
   const vault = buf('vault');
   if (vault) {
-    const file = JSON.parse(vault.toString('utf8')) as VaultFileV2;
+    const file = JSON.parse(vault.toString('utf8')) as VaultFile;
     const secrets = JSON.parse(openWithKey(file.data as SealedData, dataKey).toString('utf8')) as VaultSecretItem[];
     for (const secret of secrets) map.set(`secret:${secret.id}`, json(secret));
-    map.set('vaultkeys:main', json({ commanderWrap: file.commanderWrap, emergencyWrap: file.emergencyWrap }));
+    map.set('vaultkeys:main', json(vaultKeysOf(file)));
   }
   const branding = buf('branding');
   if (branding) map.set('branding:main', branding);
@@ -211,13 +213,22 @@ function writeRecords(ctx: SyncContext, vault: UnlockedVault, writes: RecordWrit
     persistVault(vault);
   }
 
-  // 2) مغلّفا المفتاح: بعد حفظ الأسرار، حتى لا يكتب persistVault فوقهما
+  // 2) مغلّفات المفتاح: بعد حفظ الأسرار، حتى لا يكتب persistVault فوقها.
+  //    3.0.0: الخزنة العائلية لا تُفقد أبداً (سجل بلا family لا يُلغيها)، وسجل يحملها يرقّي هذا الجهاز إلى v3
+  //    بالمفتاح العائلي نفسه، ثم تُنقل محادثات العائلة إليه.
   for (const w of byKind.get('vaultkeys') ?? []) {
     if (w.content === null) continue; // لا يُحذف مغلّف المفتاح أبداً
-    const keys = JSON.parse(w.content.toString('utf8')) as Pick<VaultFileV2, 'commanderWrap' | 'emergencyWrap'>;
-    if (!keys.commanderWrap || !keys.emergencyWrap) throw new Error('سجل مغلّفات المفتاح ناقص.');
+    const incoming = JSON.parse(w.content.toString('utf8')) as VaultKeysRecord;
+    if (!incoming.commanderWrap || (!incoming.emergencyWrap && !incoming.family)) throw new Error('سجل مغلّفات المفتاح ناقص.');
     const file = readVaultFile(ctx.vaultFile);
-    writeFileAtomic(ctx.vaultFile, JSON.stringify({ ...file, commanderWrap: keys.commanderWrap, emergencyWrap: keys.emergencyWrap }, null, 2), 5);
+    const keys = mergeVaultKeys(incoming, vaultKeysOf(file));
+    if (keys.family) {
+      const { upgraded, previousFamilyKey } = adoptFamilyKeys(vault, keys);
+      const moved = resealFamilyConversations(vault, conversationsDir(ctx), previousFamilyKey);
+      if (upgraded || previousFamilyKey) logSystemInfo('Sync', `${upgraded ? 'رُقّيت الخزنة هنا إلى الخزنة العائلية (v3) بمفاتيح وصلت بالمزامنة' : 'اعتُمد مفتاح عائلي جديد وصل بالمزامنة'}، ونُقلت ${moved} محادثة عائلية.`);
+    } else {
+      writeFileAtomic(ctx.vaultFile, JSON.stringify({ ...file, commanderWrap: keys.commanderWrap, emergencyWrap: keys.emergencyWrap }, null, 2), 5);
+    }
   }
 
   for (const w of byKind.get('branding') ?? []) {

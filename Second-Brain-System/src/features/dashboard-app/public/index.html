@@ -418,7 +418,7 @@
           </div>
           <div class="card">
             <h2>💾 النسخ الاحتياطي المشفر</h2>
-            <p class="small muted">تُفتح النسخة بكلمة المرور أو بمفتاح الطوارئ، حتى على جهاز جديد.</p>
+            <p class="small muted">تُفتح النسخة بكلمة المرور (كاملة)، أو بمفتاح الطوارئ (الجزء العائلي منها فقط)، حتى على جهاز جديد.</p>
             <button type="button" class="btn btn-primary" data-action="backup">💾 نسخة احتياطية الآن</button>
             <div class="list compact" id="backupsList"></div>
             <details data-commander-only>
@@ -430,6 +430,34 @@
               </form>
               <div class="report" id="drillReport" hidden></div>
             </details>
+          </div>
+          <div class="card" data-commander-only data-shown-when="0" id="familyVaultCard" hidden>
+            <h2>👪 الخزنة العائلية</h2>
+            <p class="small" id="familyVaultInfo"></p>
+            <div id="familyMigrate" hidden>
+              <p class="small">اليوم مفتاح الطوارئ المطبوع يفتح <strong>كل</strong> الأسرار والمحادثات. بعد الترقية يفتح الخزنة العائلية وحدها: الأسرار التي تختارها هنا، وأدلة العائلة، ومحادثات العائلة.</p>
+              <ul class="small">
+                <li>يُولَّد <strong>مفتاح طوارئ جديد</strong> إجبارياً: اطبع الكتيب الجديد فوراً، و<strong>أتلف الورقة القديمة</strong>.</li>
+                <li>نفّذ الترقية على <strong>جهاز واحد فقط</strong>. الأجهزة الأخرى تستقبل المفاتيح بالمزامنة.</li>
+                <li>يمكنك لاحقاً تعليم أي سرّ بـ «👪 يظهر للعائلة» من نافذة تعديله.</li>
+              </ul>
+              <form data-form="family-migrate" class="stack">
+                <p class="small muted">اختر ما تحتاجه العائلة (المقترح محدَّد مسبقاً):</p>
+                <div class="list compact" id="familySuggestList"></div>
+                <label>كلمة المرور الرئيسية للتأكيد<input type="password" name="masterPassword" autocomplete="current-password" required /></label>
+                <label class="check"><input type="checkbox" name="confirmSingleDevice" required /> أنفّذ الترقية على هذا الجهاز وحده</label>
+                <button type="submit" class="btn btn-primary">👪 رقِّ إلى الخزنة العائلية</button>
+              </form>
+            </div>
+            <div id="familyOldCopies" hidden>
+              <h3>🗂️ نسخ قديمة يفتحها مفتاح الطوارئ القديم</h3>
+              <p class="small">هذه النسخ كُتبت قبل الترقية، فالمفتاح القديم ما زال يفتح كل ما فيها. بعد التأكد من النسخة الجديدة احذفها، أو أبقها إن كانت الورقة القديمة قد أُتلفت.</p>
+              <div class="list compact" id="familyOldList"></div>
+              <form data-form="family-old-delete" class="stack">
+                <label>كلمة المرور الرئيسية للتأكيد<input type="password" name="masterPassword" autocomplete="current-password" required /></label>
+                <button type="submit" class="btn btn-danger">🗑️ احذف هذه النسخ القديمة</button>
+              </form>
+            </div>
           </div>
           <div class="card" data-commander-only>
             <h2>🔑 تغيير كلمة المرور</h2>
@@ -610,6 +638,7 @@
       <label>كلمة المرور أو الكود السري<input name="secretValue" type="password" autocomplete="off" required /></label>
       <label>رابط الموقع<input name="url" dir="ltr" maxlength="500" /></label>
       <label>شرح مبسط للعائلة<textarea name="notesForWifeAr" rows="2" maxlength="2000"></textarea></label>
+      <label class="check"><input type="checkbox" name="familyVisible" /> 👪 يظهر للعائلة (يُنسخ إلى الخزنة العائلية التي يفتحها مفتاح الطوارئ)</label>
       <label>ملاحظة لك<textarea name="notesForCommanderAr" rows="2" maxlength="2000"></textarea></label>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary" value="save">🔒 تشفير وحفظ</button>

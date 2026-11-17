@@ -21,6 +21,8 @@ import {
 } from '../src/core/crypto-engine.ts';
 import {
   backupCriticalFileToVault,
+  persistVault,
+  readVaultFile,
   restoreCriticalFileFromVault,
   unlockVault,
   upsertVaultSecret,
@@ -59,7 +61,7 @@ export async function runCoreAndVaultTests(): Promise<string[]> {
   assert.equal(isValidEmergencyKey(typo), false, 'يجب أن تكتشف خانة التحقق خطأ الكتابة');
   passedChecks.push('اختبار مفتاح الطوارئ (128 بت + خانة تحقق تكتشف أخطاء الكتابة) بنجاح.');
 
-  // 4. الخزنة v2: الفتح بكلمة المرور وبمفتاح الطوارئ (حتى لو كُتب بأحرف صغيرة ومسافات)
+  // 4. الخزنة v3 (3.0.0): كلمة المرور تفتح كل شيء، ومفتاح الطوارئ يفتح الخزنة العائلية وحدها
   const { vault, emergencyKey } = ensureTestVault();
   upsertVaultSecret(vault, {
     id: 'SEC-MAIN-EMAIL',
@@ -70,12 +72,21 @@ export async function runCoreAndVaultTests(): Promise<string[]> {
     notesForCommanderAr: 'الإيميل الأساسي المربوط بكل الحسابات',
     notesForWifeAr: 'هذا أهم إيميل؛ من خلاله يمكن استعادة أي حساب.',
   });
+  assert.equal(readVaultFile(vault.vaultFilePath).version, 3, 'الخزنة الجديدة تُنشأ بالصيغة v3 مباشرة');
   assert.equal(unlockVault(TEST_MASTER_PASSWORD).unlockedBy, 'commander');
-  const byWife = unlockVault(normalizeEmergencyKey(emergencyKey.toLowerCase().replace(/-/g, ' ')));
-  assert.equal(byWife.unlockedBy, 'wife_emergency');
-  assert.equal(byWife.secrets.find((s) => s.id === 'SEC-MAIN-EMAIL')?.usernameOrEmail, 'owner@example.test');
+  const wifeKeyTyped = normalizeEmergencyKey(emergencyKey.toLowerCase().replace(/-/g, ' '));
+  const beforeMark = unlockVault(wifeKeyTyped);
+  assert.equal(beforeMark.unlockedBy, 'wife_emergency');
+  assert.equal(beforeMark.secrets.some((s) => s.id === 'SEC-MAIN-EMAIL'), false, 'سرّ غير معلَّم للعائلة لا يظهر بمفتاح الطوارئ');
+  assert.equal(beforeMark.dataKey.length, 0, 'جلسة العائلة لا تملك مفتاح البيانات الرئيسي');
+  upsertVaultSecret(vault, { ...vault.secrets.find((s) => s.id === 'SEC-MAIN-EMAIL')!, familyVisible: true });
+  const byWife = unlockVault(wifeKeyTyped);
+  const familyCopy = byWife.secrets.find((s) => s.id === 'SEC-MAIN-EMAIL');
+  assert.equal(familyCopy?.usernameOrEmail, 'owner@example.test', 'بعد العلامة يظهر للعائلة');
+  assert.equal(familyCopy?.notesForCommanderAr, '', 'ملاحظات القائد لا تُنسخ إلى الخزنة العائلية');
+  assert.throws(() => persistVault(byWife), /للقراءة فقط/, 'جلسة العائلة لا تحفظ');
   assert.throws(() => unlockVault('wrong-password-123'));
-  passedChecks.push('اختبار الخزنة v2 (فتح بكلمة المرور + فتح بمفتاح الطوارئ + رفض المفتاح الخاطئ) بنجاح.');
+  passedChecks.push('اختبار الخزنة v3 (فتح بكلمة المرور + مفتاح الطوارئ يفتح الخزنة العائلية وحدها + العلامة «يظهر للعائلة» + رفض المفتاح الخاطئ) بنجاح.');
 
   // 5. تأمين ملف حساس مع نسخ تاريخية، واسترجاعه بمفتاح الطوارئ دون الكتابة فوق ملف موجود
   const dataDir = path.join(config.paths.rootDir, 'Second-Brain-System', 'data');
@@ -91,13 +102,17 @@ export async function runCoreAndVaultTests(): Promise<string[]> {
   assert.equal(backupCriticalFileToVault(vault, 'test-project', dummyEnvPath, 'ملف بيئة تجريبي').changed, true);
   assert.equal(vault.secrets.find((s) => s.id === first.secretId)?.fileVersions?.length, 1, 'يجب حفظ النسخة السابقة');
 
+  // 3.0.0: الملفات الحساسة التقنية لا تدخل الخزنة العائلية حتى لو عُلّمت، فتُسترجع بكلمة المرور
+  upsertVaultSecret(vault, { ...vault.secrets.find((s) => s.id === first.secretId)!, familyVisible: true });
   const wifeVault = unlockVault(emergencyKey);
-  restoreCriticalFileFromVault(wifeVault, first.secretId, restoredEnvPath);
+  assert.throws(() => restoreCriticalFileFromVault(wifeVault, first.secretId, restoredEnvPath), /لم يتم العثور/, 'الملف الحساس لا يظهر للعائلة');
+  const commanderVault = unlockVault(TEST_MASTER_PASSWORD);
+  restoreCriticalFileFromVault(commanderVault, first.secretId, restoredEnvPath);
   assert.ok(fs.readFileSync(restoredEnvPath, 'utf-8').includes('test-only-v2'));
-  assert.throws(() => restoreCriticalFileFromVault(wifeVault, first.secretId, restoredEnvPath), 'لا يكتب فوق ملف موجود');
+  assert.throws(() => restoreCriticalFileFromVault(commanderVault, first.secretId, restoredEnvPath), 'لا يكتب فوق ملف موجود');
   fs.unlinkSync(dummyEnvPath);
   fs.unlinkSync(restoredEnvPath);
-  passedChecks.push('اختبار تأمين ملف حساس بنسخ تاريخية واسترجاعه بمفتاح الطوارئ دون الكتابة فوق ملف موجود بنجاح.');
+  passedChecks.push('اختبار تأمين ملف حساس بنسخ تاريخية واسترجاعه بكلمة المرور (ولا يظهر للعائلة) دون الكتابة فوق ملف موجود بنجاح.');
 
   return passedChecks;
 }

@@ -168,6 +168,8 @@ export interface VaultSecretItem {
   tags?: string[];
   createdAt?: string;
   updatedAt: string;
+  /** الخزنة العائلية (3.0.0): السر يظهر للعائلة بمفتاح الطوارئ (يُنسخ إلى الخزنة العائلية عند كل حفظ) */
+  familyVisible?: boolean;
   /** للملفات الحساسة: بصمة المحتوى الحالي، والنسخ السابقة (آخر 5) */
   contentSha256?: string;
   fileVersions?: CriticalFileVersion[];

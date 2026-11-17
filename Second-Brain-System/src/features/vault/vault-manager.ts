@@ -1,12 +1,14 @@
 /**
  * ============================================================================
  * الملف: src/features/vault/vault-manager.ts
- * القسم: Features -> Vault (ميزة الخزنة السرية — الصيغة الثانية v2)
+ * القسم: Features -> Vault (ميزة الخزنة السرية — الصيغة الثالثة v3 مع الخزنة العائلية)
  * Hint بالعربي: يدير هذا الملف خزنة الأسرار المشفرة (إيميلات، باسووردات، 2FA، وملفات حساسة).
- *               التصميم:
- *               - الأسرار تُشفَّر مرة واحدة بمفتاح بيانات عشوائي (DEK).
- *               - مفتاح البيانات نفسه مغلَّف مرتين: بكلمة المرور الرئيسية، وبمفتاح الطوارئ للزوجة.
- *               - لذلك: الحفظ لا يحتاج مفتاح الطوارئ، والمفتاح المطبوع لا يتغير أبداً إلا بطلب صريح.
+ *               التصميم (v3، الإصدار 3.0.0):
+ *               - أسرار القائد تُشفَّر بمفتاح بيانات عشوائي (DEK)، ملفوف بكلمة المرور الرئيسية فقط.
+ *               - الخزنة العائلية: الأسرار المعلَّمة «يظهر للعائلة» تُنسخ تلقائياً عند كل حفظ إلى قسم مستقل
+ *                 مشفّر بمفتاح عائلي (FK). المفتاح العائلي مختوم بـ DEK (فيفتحه القائد)، وملفوف بمفتاح الطوارئ.
+ *               - مفتاح الطوارئ المطبوع يفتح الخزنة العائلية وحدها، ولا يصل إلى DEK أبداً.
+ *               - الصيغة v2 (مفتاح الطوارئ يفتح DEK) تُقرأ حتى يرقّيها القائد بنفسه (migrateVaultToFamilyV3).
  *               - كل حفظ ذرّي مع الاحتفاظ بآخر 5 نسخ سابقة من ملف الخزنة.
  * ============================================================================
  */
@@ -39,7 +41,7 @@ const MAX_FILE_VERSIONS = 5;
 export const MAX_CRITICAL_FILE_BYTES = 5 * 1024 * 1024;
 
 /**
- * Hint بالعربي: مفاتيح الخزنة المغلَّفة (مغلف القائد + مغلف الطوارئ للزوجة).
+ * Hint بالعربي: مفاتيح الخزنة v2 المغلَّفة (مغلف القائد + مغلف الطوارئ الذي يفتح DEK نفسه).
  */
 export interface VaultKeyEnvelopes {
   commanderWrap: WrappedKey;
@@ -47,7 +49,27 @@ export interface VaultKeyEnvelopes {
 }
 
 /**
- * Hint بالعربي: هيكل ملف الخزنة v2 المحفوظ على القرص.
+ * Hint بالعربي: مفاتيح الخزنة العائلية كما تُزامَن وتُحفظ في النسخ (بلا بيانات الأسرار نفسها).
+ */
+export interface FamilyKeyEnvelopes {
+  /** المفتاح العائلي FK مختوماً بمفتاح البيانات DEK (يفتحه القائد تلقائياً) */
+  fkByCommander: SealedData;
+  /** المفتاح العائلي FK ملفوفاً بمفتاح الطوارئ المطبوع */
+  fkByEmergency: WrappedKey;
+}
+
+/**
+ * Hint بالعربي: سجل المفاتيح كما يُزامَن (vaultkeys:main) ويُحفظ في النسخ:
+ *               v2 = commanderWrap + emergencyWrap، و v3 = commanderWrap + family.
+ */
+export interface VaultKeysRecord {
+  commanderWrap: WrappedKey;
+  emergencyWrap?: WrappedKey;
+  family?: FamilyKeyEnvelopes;
+}
+
+/**
+ * Hint بالعربي: هيكل ملف الخزنة v2 المحفوظ على القرص (قبل الخزنة العائلية).
  */
 export interface VaultFileV2 extends VaultKeyEnvelopes {
   format: 'second-brain-vault';
@@ -58,11 +80,41 @@ export interface VaultFileV2 extends VaultKeyEnvelopes {
 }
 
 /**
- * Hint بالعربي: خزنة مفتوحة في الذاكرة: مفتاح البيانات + الأسرار + من فتحها. لا تُحفظ على القرص أبداً.
+ * Hint بالعربي: قسم الخزنة العائلية داخل ملف v3.
+ */
+export interface FamilyVaultSection extends FamilyKeyEnvelopes {
+  /** الأسرار المعلَّمة للعائلة، مختومة بالمفتاح العائلي (تُبنى تلقائياً عند كل حفظ) */
+  data: SealedData;
+  count: number;
+  migratedAt: string;
+}
+
+/**
+ * Hint بالعربي: هيكل ملف الخزنة v3: بلا emergencyWrap، ومعه قسم الخزنة العائلية.
+ */
+export interface VaultFileV3 {
+  format: 'second-brain-vault';
+  version: 3;
+  commanderWrap: WrappedKey;
+  family: FamilyVaultSection;
+  data: SealedData;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type VaultFile = VaultFileV2 | VaultFileV3;
+
+/**
+ * Hint بالعربي: خزنة مفتوحة في الذاكرة. لا تُحفظ على القرص أبداً.
+ *               - القائد: dataKey = DEK، و familyKey = FK (أو null قبل الترقية).
+ *               - العائلة (v3): dataKey فارغ (طوله 0، فأي استخدام له يفشل فوراً)، و familyKey = FK،
+ *                 والأسرار هي أسرار الخزنة العائلية وحدها.
+ *               - العائلة (v2 قبل الترقية): dataKey = DEK كما في الإصدارات السابقة.
  */
 export interface UnlockedVault {
   vaultFilePath: string;
   dataKey: Buffer;
+  familyKey?: Buffer | null;
   unlockedBy: 'commander' | 'wife_emergency';
   secrets: VaultSecretItem[];
 }
@@ -82,8 +134,36 @@ export function vaultExists(customVaultFilePath?: string): boolean {
 }
 
 /**
- * Hint بالعربي: دالة إنشاء الخزنة لأول مرة فقط. ترفض العمل إذا كانت الخزنة موجودة (حتى لا تُمسح أبداً).
- *               المخرجات: مفتاح الطوارئ (يُعرض مرة واحدة ليُطبع) والخزنة مفتوحة.
+ * Hint بالعربي: دالة بناء نسخة الأسرار التي تراها العائلة: المعلَّمة فقط، بلا ملاحظات القائد،
+ *               وبلا الملفات الحساسة التقنية (لا تُفيد العائلة وحجمها كبير).
+ */
+export function buildFamilyProjection(secrets: VaultSecretItem[]): VaultSecretItem[] {
+  return secrets
+    .filter((s) => s.familyVisible === true && s.category !== 'critical_file')
+    .map((s) => ({
+      id: s.id,
+      category: s.category,
+      title: s.title,
+      projectId: s.projectId,
+      usernameOrEmail: s.usernameOrEmail,
+      secretValue: s.secretValue,
+      url: s.url,
+      notesForCommanderAr: '',
+      notesForWifeAr: s.notesForWifeAr,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      familyVisible: true,
+    }));
+}
+
+function sealFamilySection(secrets: VaultSecretItem[], familyKey: Buffer): Pick<FamilyVaultSection, 'data' | 'count'> {
+  const projection = buildFamilyProjection(secrets);
+  return { data: sealWithKey(JSON.stringify(projection), familyKey), count: projection.length };
+}
+
+/**
+ * Hint بالعربي: دالة إنشاء الخزنة لأول مرة فقط (بالصيغة v3 مباشرة). ترفض العمل إذا كانت الخزنة موجودة.
+ *               المخرجات: مفتاح الطوارئ (يُعرض مرة واحدة ليُطبع، ويفتح الخزنة العائلية وحدها) والخزنة مفتوحة.
  */
 export function createVault(
   masterPassword: string,
@@ -97,6 +177,35 @@ export function createVault(
 
   const emergencyRecoveryKey = generateEmergencyRecoveryKey();
   const dataKey = generateDataKey();
+  const familyKey = generateDataKey();
+  const now = formatTimestampIso();
+  const file: VaultFileV3 = {
+    format: 'second-brain-vault',
+    version: 3,
+    commanderWrap: wrapDataKey(dataKey, masterPassword),
+    family: {
+      fkByCommander: sealWithKey(familyKey, dataKey),
+      fkByEmergency: wrapDataKey(familyKey, emergencyRecoveryKey),
+      ...sealFamilySection([], familyKey),
+      migratedAt: now,
+    },
+    data: sealWithKey(JSON.stringify([]), dataKey),
+    createdAt: now,
+    updatedAt: now,
+  };
+  writeFileAtomic(vaultFilePath, JSON.stringify(file, null, 2));
+  logSystemInfo('VaultManager', `تم إنشاء خزنة جديدة (v3 مع الخزنة العائلية) في المسار: ${vaultFilePath}`);
+
+  return { emergencyRecoveryKey, vault: { vaultFilePath, dataKey, familyKey, unlockedBy: 'commander', secrets: [] } };
+}
+
+/**
+ * Hint بالعربي: دالة إنشاء خزنة بالصيغة القديمة v2 — للاختبارات فقط (لاختبار الترقية إلى v3).
+ */
+export function createLegacyV2VaultForTests(masterPassword: string, vaultFilePath: string): { emergencyRecoveryKey: string } {
+  if (fs.existsSync(vaultFilePath)) throw new Error('الخزنة موجودة بالفعل.');
+  const emergencyRecoveryKey = generateEmergencyRecoveryKey();
+  const dataKey = generateDataKey();
   const now = formatTimestampIso();
   const file: VaultFileV2 = {
     format: 'second-brain-vault',
@@ -108,9 +217,7 @@ export function createVault(
     updatedAt: now,
   };
   writeFileAtomic(vaultFilePath, JSON.stringify(file, null, 2));
-  logSystemInfo('VaultManager', `تم إنشاء خزنة جديدة (v2) في المسار: ${vaultFilePath}`);
-
-  return { emergencyRecoveryKey, vault: { vaultFilePath, dataKey, unlockedBy: 'commander', secrets: [] } };
+  return { emergencyRecoveryKey };
 }
 
 /**
@@ -123,41 +230,73 @@ export function assertStrongMasterPassword(masterPassword: string): void {
 }
 
 /**
- * Hint بالعربي: دالة قراءة ملف الخزنة v2 من القرص والتحقق من صيغته.
+ * Hint بالعربي: دالة قراءة ملف الخزنة (v2 أو v3) من القرص والتحقق من صيغته.
  */
-export function readVaultFile(vaultFilePath: string): VaultFileV2 {
-  const file = readJsonFileSafe<Partial<VaultFileV2> | null>(vaultFilePath, null);
+export function readVaultFile(vaultFilePath: string): VaultFile {
+  const file = readJsonFileSafe<Partial<VaultFile> | null>(vaultFilePath, null);
   if (!file) {
     throw new Error('ملف الخزنة المشفرة غير موجود بعد. يرجى إنشاء الخزنة أولاً.');
   }
-  if (file.format !== 'second-brain-vault' || file.version !== 2) {
+  if (file.format !== 'second-brain-vault' || (file.version !== 2 && file.version !== 3)) {
     throw new Error('صيغة ملف الخزنة قديمة أو غير معروفة.');
   }
-  return file as VaultFileV2;
+  if (file.version === 3 && (!file.family || !file.family.fkByEmergency || !file.family.fkByCommander)) {
+    throw new Error('ملف الخزنة (v3) ناقص: قسم الخزنة العائلية غير مكتمل.');
+  }
+  return file as VaultFile;
 }
 
 /**
- * Hint بالعربي: دالة فك تغليف مفتاح البيانات من المغلفين بكلمة المرور أو مفتاح الطوارئ.
- *               إذا كان المُدخل بشكل مفتاح طوارئ صحيح نجرب مغلف الطوارئ أولاً (أسرع).
+ * Hint بالعربي: دالة استخراج سجل المفاتيح من ملف الخزنة (للمزامنة والنسخ). الترتيب ثابت،
+ *               حتى تتطابق البصمة على كل الأجهزة.
  */
-export function unwrapVaultDataKey(
-  envelopes: VaultKeyEnvelopes,
-  passwordOrEmergencyKey: string
-): { dataKey: Buffer; unlockedBy: 'commander' | 'wife_emergency' } {
-  const attempts: Array<{ by: 'commander' | 'wife_emergency'; wrap: WrappedKey; secret: string }> = [];
-  const looksLikeEmergencyKey = isValidEmergencyKey(passwordOrEmergencyKey);
-  const emergencyAttempt = {
-    by: 'wife_emergency' as const,
-    wrap: envelopes.emergencyWrap,
-    secret: normalizeEmergencyKey(passwordOrEmergencyKey),
-  };
-  const commanderAttempt = { by: 'commander' as const, wrap: envelopes.commanderWrap, secret: passwordOrEmergencyKey };
-  if (looksLikeEmergencyKey) attempts.push(emergencyAttempt, commanderAttempt);
-  else attempts.push(commanderAttempt);
+export function vaultKeysOf(file: VaultFile): VaultKeysRecord {
+  if (file.version === 3) {
+    return { commanderWrap: file.commanderWrap, family: { fkByCommander: file.family.fkByCommander, fkByEmergency: file.family.fkByEmergency } };
+  }
+  return { commanderWrap: file.commanderWrap, emergencyWrap: file.emergencyWrap };
+}
 
+/**
+ * Hint بالعربي: دالة دمج سجلَّي مفاتيح: مغلّف القائد من الأحدث، والخزنة العائلية من أيٍّ منهما يحملها
+ *               (الأحدث أولاً). وجود الخزنة العائلية يُلغي غلاف الطوارئ القديم نهائياً.
+ */
+export function mergeVaultKeys(newer: VaultKeysRecord, older: VaultKeysRecord | null): VaultKeysRecord {
+  const family = newer.family ?? older?.family;
+  if (family) return { commanderWrap: newer.commanderWrap, family: { fkByCommander: family.fkByCommander, fkByEmergency: family.fkByEmergency } };
+  return { commanderWrap: newer.commanderWrap, emergencyWrap: newer.emergencyWrap ?? older?.emergencyWrap };
+}
+
+/** نتيجة فتح سجل المفاتيح */
+export interface OpenedVaultKeys {
+  unlockedBy: 'commander' | 'wife_emergency';
+  /** DEK (للقائد، أو للطوارئ في v2 فقط) */
+  dataKey: Buffer | null;
+  /** FK (v3 فقط) */
+  familyKey: Buffer | null;
+}
+
+/**
+ * Hint بالعربي: دالة فتح سجل المفاتيح بكلمة المرور أو بمفتاح الطوارئ.
+ *               - كلمة المرور ← DEK، ومعه FK إن كانت الخزنة العائلية موجودة.
+ *               - مفتاح الطوارئ ← FK وحده في v3، أو DEK في v2 (قبل الترقية).
+ */
+export function openVaultKeys(keys: VaultKeysRecord, passwordOrEmergencyKey: string): OpenedVaultKeys {
+  const tryCommander = (): OpenedVaultKeys => {
+    const dataKey = unwrapDataKey(keys.commanderWrap, passwordOrEmergencyKey);
+    const familyKey = keys.family ? openWithKey(keys.family.fkByCommander, dataKey) : null;
+    return { unlockedBy: 'commander', dataKey, familyKey };
+  };
+  const tryEmergency = (): OpenedVaultKeys => {
+    const secret = normalizeEmergencyKey(passwordOrEmergencyKey);
+    if (keys.family) return { unlockedBy: 'wife_emergency', dataKey: null, familyKey: unwrapDataKey(keys.family.fkByEmergency, secret) };
+    if (keys.emergencyWrap) return { unlockedBy: 'wife_emergency', dataKey: unwrapDataKey(keys.emergencyWrap, secret), familyKey: null };
+    throw new Error('لا يوجد مغلّف طوارئ.');
+  };
+  const attempts = isValidEmergencyKey(passwordOrEmergencyKey) ? [tryEmergency, tryCommander] : [tryCommander];
   for (const attempt of attempts) {
     try {
-      return { dataKey: unwrapDataKey(attempt.wrap, attempt.secret), unlockedBy: attempt.by };
+      return attempt();
     } catch {
       // نجرب المغلف التالي
     }
@@ -166,15 +305,22 @@ export function unwrapVaultDataKey(
 }
 
 /**
- * Hint بالعربي: دالة فتح الخزنة وقراءة جميع الأسرار بكلمة المرور الرئيسية أو بمفتاح الطوارئ للزوجة.
+ * Hint بالعربي: دالة فتح الخزنة بكلمة المرور الرئيسية (كل الأسرار) أو بمفتاح الطوارئ
+ *               (v3: الخزنة العائلية وحدها).
  */
 export function unlockVault(passwordOrEmergencyKey: string, customVaultFilePath?: string): UnlockedVault {
   const vaultFilePath = resolveVaultFilePath(customVaultFilePath);
   const file = readVaultFile(vaultFilePath);
   try {
-    const { dataKey, unlockedBy } = unwrapVaultDataKey(file, passwordOrEmergencyKey);
-    const secrets = JSON.parse(openWithKey(file.data, dataKey).toString('utf-8')) as VaultSecretItem[];
-    return { vaultFilePath, dataKey, unlockedBy, secrets };
+    const opened = openVaultKeys(vaultKeysOf(file), passwordOrEmergencyKey);
+    if (opened.dataKey) {
+      const secrets = JSON.parse(openWithKey(file.data, opened.dataKey).toString('utf-8')) as VaultSecretItem[];
+      return { vaultFilePath, dataKey: opened.dataKey, familyKey: opened.familyKey, unlockedBy: opened.unlockedBy, secrets };
+    }
+    // جلسة العائلة (v3): لا DEK إطلاقاً
+    const familyFile = file as VaultFileV3;
+    const secrets = JSON.parse(openWithKey(familyFile.family.data, opened.familyKey!).toString('utf-8')) as VaultSecretItem[];
+    return { vaultFilePath, dataKey: Buffer.alloc(0), familyKey: opened.familyKey, unlockedBy: 'wife_emergency', secrets };
   } catch (err) {
     logSystemError('VaultManager', 'محاولة فاشلة لفتح الخزنة المشفرة', err);
     throw new Error('كلمة المرور الرئيسية أو مفتاح الطوارئ غير صحيح!');
@@ -182,16 +328,47 @@ export function unlockVault(passwordOrEmergencyKey: string, customVaultFilePath?
 }
 
 /**
+ * Hint بالعربي: هل تملك هذه الجلسة مفتاح البيانات الرئيسي (أي يمكنها حفظ الأسرار والمزامنة والنسخ الكاملة)؟
+ */
+export function hasMainDataKey(vault: UnlockedVault): boolean {
+  return vault.dataKey.length === 32;
+}
+
+/**
+ * Hint بالعربي: هل ملف الخزنة مرقّى إلى الخزنة العائلية (v3)؟
+ */
+export function isFamilyVaultFile(file: VaultFile): file is VaultFileV3 {
+  return file.version === 3;
+}
+
+/**
+ * Hint بالعربي: دالة الحصول على المفتاح العائلي لجلسة القائد (من الجلسة، أو من الملف إن لم يُحمَّل بعد).
+ */
+export function resolveFamilyKey(vault: UnlockedVault, file?: VaultFile): Buffer | null {
+  if (vault.familyKey && vault.familyKey.length === 32) return vault.familyKey;
+  const f = file ?? readVaultFile(vault.vaultFilePath);
+  if (!isFamilyVaultFile(f) || !hasMainDataKey(vault)) return null;
+  vault.familyKey = openWithKey(f.family.fkByCommander, vault.dataKey);
+  return vault.familyKey;
+}
+
+/**
  * Hint بالعربي: دالة حفظ الأسرار الحالية للخزنة المفتوحة (إعادة تشفير البيانات بنفس المفتاح وحفظ ذرّي).
- *               المغلفان لا يتغيران، لذلك يبقى مفتاح الطوارئ المطبوع صالحاً دائماً.
+ *               في v3 تُعاد كتابة الخزنة العائلية من الأسرار المعلَّمة في كل حفظ (مصدر واحد للحقيقة).
+ *               جلسة العائلة لا تحفظ أبداً.
  */
 export function persistVault(vault: UnlockedVault): void {
+  if (!hasMainDataKey(vault)) throw new Error('جلسة العائلة للقراءة فقط: تعديل الخزنة يحتاج كلمة المرور الرئيسية.');
   const file = readVaultFile(vault.vaultFilePath);
-  const updated: VaultFileV2 = {
-    ...file,
-    data: sealWithKey(JSON.stringify(vault.secrets), vault.dataKey),
-    updatedAt: formatTimestampIso(),
-  };
+  const updatedAt = formatTimestampIso();
+  const data = sealWithKey(JSON.stringify(vault.secrets), vault.dataKey);
+  let updated: VaultFile;
+  if (isFamilyVaultFile(file)) {
+    const familyKey = resolveFamilyKey(vault, file)!;
+    updated = { ...file, data, family: { ...file.family, ...sealFamilySection(vault.secrets, familyKey) }, updatedAt };
+  } else {
+    updated = { ...file, data, updatedAt };
+  }
   writeFileAtomic(vault.vaultFilePath, JSON.stringify(updated, null, 2), VAULT_FILE_BACKUPS);
 }
 
@@ -227,7 +404,7 @@ export function deleteVaultSecret(vault: UnlockedVault, secretId: string): boole
 
 /**
  * Hint بالعربي: دالة تغيير كلمة المرور الرئيسية: تعيد تغليف مفتاح البيانات فقط،
- *               ولا تلمس مغلف الطوارئ (مفتاح الزوجة المطبوع يبقى صالحاً).
+ *               ولا تلمس مفتاح الطوارئ (الورقة المطبوعة تبقى صالحة).
  */
 export function changeMasterPassword(vault: UnlockedVault, currentPassword: string, newPassword: string): void {
   const file = readVaultFile(vault.vaultFilePath);
@@ -237,14 +414,14 @@ export function changeMasterPassword(vault: UnlockedVault, currentPassword: stri
     throw new Error('كلمة المرور الحالية غير صحيحة.');
   }
   assertStrongMasterPassword(newPassword);
-  const updated: VaultFileV2 = { ...file, commanderWrap: wrapDataKey(vault.dataKey, newPassword), updatedAt: formatTimestampIso() };
+  const updated: VaultFile = { ...file, commanderWrap: wrapDataKey(vault.dataKey, newPassword), updatedAt: formatTimestampIso() };
   writeFileAtomic(vault.vaultFilePath, JSON.stringify(updated, null, 2), VAULT_FILE_BACKUPS);
   logSystemInfo('VaultManager', 'تم تغيير كلمة المرور الرئيسية للخزنة.');
 }
 
 /**
  * Hint بالعربي: دالة تدوير مفتاح الطوارئ (عند فقدان الوثيقة المطبوعة مثلاً): تولّد مفتاحاً جديداً
- *               وتُبطل القديم. تتطلب كلمة المرور الرئيسية. المخرجات: المفتاح الجديد (يُطبع فوراً).
+ *               وتُبطل القديم. تتطلب كلمة المرور الرئيسية. في v3 يُعاد لفّ المفتاح العائلي فقط.
  */
 export function rotateEmergencyKey(vault: UnlockedVault, masterPassword: string): string {
   const file = readVaultFile(vault.vaultFilePath);
@@ -254,10 +431,85 @@ export function rotateEmergencyKey(vault: UnlockedVault, masterPassword: string)
     throw new Error('كلمة المرور الرئيسية غير صحيحة.');
   }
   const newKey = generateEmergencyRecoveryKey();
-  const updated: VaultFileV2 = { ...file, emergencyWrap: wrapDataKey(vault.dataKey, newKey), updatedAt: formatTimestampIso() };
+  const updatedAt = formatTimestampIso();
+  const updated: VaultFile = isFamilyVaultFile(file)
+    ? { ...file, family: { ...file.family, fkByEmergency: wrapDataKey(resolveFamilyKey(vault, file)!, newKey) }, updatedAt }
+    : { ...file, emergencyWrap: wrapDataKey(vault.dataKey, newKey), updatedAt };
   writeFileAtomic(vault.vaultFilePath, JSON.stringify(updated, null, 2), VAULT_FILE_BACKUPS);
   logSystemInfo('VaultManager', 'تم تدوير مفتاح الطوارئ العائلي وإبطال المفتاح السابق.');
   return newKey;
+}
+
+/**
+ * Hint بالعربي: دالة الترقية إلى الخزنة العائلية (v2 ← v3). تُنفَّذ مرة واحدة على جهاز واحد بطلب القائد:
+ *               - تولّد مفتاحاً عائلياً FK ومفتاح طوارئ جديداً إجبارياً (القديم يفتح النسخ القديمة كلها).
+ *               - تعلّم الأسرار المختارة «يظهر للعائلة» وتبني منها الخزنة العائلية.
+ *               - تحذف غلاف الطوارئ القديم من الملف، فلا يفتح المفتاح القديم هذه الخزنة بعد الآن.
+ *               المخرجات: مفتاح الطوارئ الجديد (يُطبع فوراً).
+ */
+export function migrateVaultToFamilyV3(vault: UnlockedVault, masterPassword: string, familySecretIds: string[]): { emergencyRecoveryKey: string; familyCount: number } {
+  if (vault.unlockedBy !== 'commander' || !hasMainDataKey(vault)) throw new Error('الترقية تحتاج فتح الخزنة بكلمة المرور الرئيسية.');
+  const file = readVaultFile(vault.vaultFilePath);
+  if (isFamilyVaultFile(file)) throw new Error('الخزنة مرقّاة إلى الخزنة العائلية بالفعل.');
+  try {
+    unwrapDataKey(file.commanderWrap, masterPassword).fill(0);
+  } catch {
+    throw new Error('كلمة المرور الرئيسية غير صحيحة.');
+  }
+  const chosen = new Set(familySecretIds);
+  const now = formatTimestampIso();
+  vault.secrets = vault.secrets.map((s) => {
+    const visible = chosen.has(s.id) && s.category !== 'critical_file';
+    return visible === (s.familyVisible === true) ? s : { ...s, familyVisible: visible, updatedAt: now };
+  });
+  const familyKey = generateDataKey();
+  const emergencyRecoveryKey = generateEmergencyRecoveryKey();
+  const section = sealFamilySection(vault.secrets, familyKey);
+  const upgraded: VaultFileV3 = {
+    format: 'second-brain-vault',
+    version: 3,
+    commanderWrap: file.commanderWrap,
+    family: { fkByCommander: sealWithKey(familyKey, vault.dataKey), fkByEmergency: wrapDataKey(familyKey, emergencyRecoveryKey), ...section, migratedAt: now },
+    data: sealWithKey(JSON.stringify(vault.secrets), vault.dataKey),
+    createdAt: file.createdAt,
+    updatedAt: now,
+  };
+  writeFileAtomic(vault.vaultFilePath, JSON.stringify(upgraded, null, 2), VAULT_FILE_BACKUPS);
+  vault.familyKey = familyKey;
+  logSystemInfo('VaultManager', `تمت الترقية إلى الخزنة العائلية v3 (${section.count} سرّاً للعائلة)، وأُبطل مفتاح الطوارئ القديم.`);
+  return { emergencyRecoveryKey, familyCount: section.count };
+}
+
+/**
+ * Hint بالعربي: دالة تطبيق مفاتيح خزنة عائلية وصلت بالمزامنة من جهاز رقّى خزنته (أو غيّر مفاتيحها).
+ *               - ملف v2 هنا ← يُرقّى إلى v3 بالمفتاح العائلي نفسه (لا يولَّد مفتاح جديد على هذا الجهاز).
+ *               - ملف v3 بمفتاح عائلي آخر ← يُعتمد القادم. المخرجات: المفتاح العائلي السابق إن تغيّر.
+ */
+export function adoptFamilyKeys(vault: UnlockedVault, keys: VaultKeysRecord): { upgraded: boolean; previousFamilyKey: Buffer | null } {
+  if (!keys.family) throw new Error('سجل المفاتيح لا يحمل خزنة عائلية.');
+  if (!hasMainDataKey(vault)) throw new Error('تطبيق مفاتيح الخزنة العائلية يحتاج جلسة القائد.');
+  const file = readVaultFile(vault.vaultFilePath);
+  const familyKey = openWithKey(keys.family.fkByCommander, vault.dataKey);
+  const previous = isFamilyVaultFile(file) ? resolveFamilyKey(vault, file) : null;
+  const now = formatTimestampIso();
+  const upgraded: VaultFileV3 = {
+    format: 'second-brain-vault',
+    version: 3,
+    commanderWrap: keys.commanderWrap,
+    family: {
+      fkByCommander: keys.family.fkByCommander,
+      fkByEmergency: keys.family.fkByEmergency,
+      ...sealFamilySection(vault.secrets, familyKey),
+      migratedAt: isFamilyVaultFile(file) ? file.family.migratedAt : now,
+    },
+    data: file.data,
+    createdAt: file.createdAt,
+    updatedAt: now,
+  };
+  writeFileAtomic(vault.vaultFilePath, JSON.stringify(upgraded, null, 2), VAULT_FILE_BACKUPS);
+  vault.familyKey = familyKey;
+  const changed = previous && !previous.equals(familyKey) ? previous : null;
+  return { upgraded: !isFamilyVaultFile(file), previousFamilyKey: changed };
 }
 
 /**
@@ -280,7 +532,7 @@ export function verifyEmergencyKey(emergencyKey: string, customVaultFilePath?: s
   if (!isValidEmergencyKey(emergencyKey)) return false;
   const file = readVaultFile(resolveVaultFilePath(customVaultFilePath));
   try {
-    unwrapDataKey(file.emergencyWrap, normalizeEmergencyKey(emergencyKey));
+    unwrapDataKey(isFamilyVaultFile(file) ? file.family.fkByEmergency : file.emergencyWrap, normalizeEmergencyKey(emergencyKey)).fill(0);
     return true;
   } catch {
     return false;
@@ -372,5 +624,7 @@ export function restoreCriticalFileFromVault(
  */
 export function wipeUnlockedVault(vault: UnlockedVault): void {
   vault.dataKey.fill(0);
+  vault.familyKey?.fill(0);
+  vault.familyKey = null;
   vault.secrets = [];
 }

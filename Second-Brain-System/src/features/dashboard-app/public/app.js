@@ -734,6 +734,7 @@
       state.secrets = [];
       renderSecrets();
     }
+    await loadFamilyVault();
   }
 
   /**
@@ -760,9 +761,57 @@
     $('#familyVaultStatus').textContent = !v.exists
       ? 'لم تُنشأ الخزنة على هذا الجهاز. إن كان لديكِ ملف نسخة احتياطية استخدمي "استعادة نسخة احتياطية" بالأسفل.'
       : v.unlocked
-        ? '🔓 الخزنة مفتوحة — ' + v.secretsCount + ' عنصر.'
+        ? v.unlockedBy === 'commander' ? '🔓 الخزنة مفتوحة — ' + v.secretsCount + ' عنصر.' : v.vaultFormat === 3 ? '👪 الخزنة العائلية مفتوحة — ' + v.secretsCount + ' عنصر.' : '🔓 الخزنة مفتوحة — ' + v.secretsCount + ' عنصر.'
         : '🔒 الخزنة مقفلة.';
     updateAutoLockBadge();
+  }
+
+  /**
+   * 3.0.0: بطاقة الخزنة العائلية: الترقية (v2) أو الحالة والنسخ القديمة (v3)
+   */
+  async function loadFamilyVault() {
+    const card = $('#familyVaultCard');
+    if (!card) return;
+    if (!isCommander()) {
+      showWhen(card, false);
+      return;
+    }
+    let r;
+    try {
+      r = await api('/api/vault/family');
+    } catch (e) {
+      showWhen(card, false);
+      return;
+    }
+    showWhen(card, true);
+    const upgraded = r.vaultFormat === 3;
+    $('#familyVaultInfo').textContent = upgraded
+      ? '✅ الخزنة العائلية مفعّلة: ' + r.familyCount + ' سرّاً يظهر للعائلة. مفتاح الطوارئ يفتحها وحدها، ولا يصل إلى أسرارك ولا محادثاتك.'
+      : '⚠️ الخزنة بالصيغة القديمة: مفتاح الطوارئ المطبوع يفتح كل شيء. رقِّها إلى الخزنة العائلية.';
+    $('#familyMigrate').hidden = upgraded;
+    if (!upgraded) {
+      $('#familySuggestList').replaceChildren(
+        ...(r.suggestions.length
+          ? r.suggestions.map((sg) =>
+              el('label', {
+                className: 'check list-item',
+                children: [
+                  el('input', { attrs: Object.assign({ type: 'checkbox', value: sg.id, 'data-family-pick': '1' }, sg.suggested ? { checked: 'checked' } : {}) }),
+                  el('span', { children: [el('strong', { text: sg.title }), el('span', { className: 'muted small', text: ' — ' + (CATEGORY_LABELS[sg.category] || sg.category) + (sg.reasonAr ? ' · ' + sg.reasonAr : '') })] }),
+                ],
+              })
+            )
+          : [el('p', { className: 'muted small', text: 'لا أسرار في الخزنة بعد. يمكنك الترقية الآن وتعليم الأسرار لاحقاً.' })])
+      );
+    }
+    const old = upgraded ? r.oldCopies || [] : [];
+    $('#familyOldCopies').hidden = !old.length;
+    if (old.length) {
+      $('#familyOldList').replaceChildren(
+        ...old.slice(0, 30).map((c) => el('div', { className: 'list-item small', children: [el('strong', { text: c.labelAr }), el('bdi', { className: 'mono muted', text: ' ' + c.fileName, attrs: { dir: 'ltr' } }), el('span', { className: 'muted', text: ' · ' + formatDateAr(c.modifiedAt) })] })),
+        ...(old.length > 30 ? [el('p', { className: 'muted small', text: '… و' + (old.length - 30) + ' غيرها' })] : [])
+      );
+    }
   }
 
   function updateAutoLockBadge() {
@@ -824,7 +873,16 @@
 
   function buildSecretCard(s, familyView) {
     const card = el('article', { className: 'card secret-card' });
-    card.appendChild(el('div', { className: 'secret-head', children: [el('h3', { text: s.title }), el('span', { className: 'badge', text: CATEGORY_LABELS[s.category] || s.category })] }));
+    card.appendChild(
+      el('div', {
+        className: 'secret-head',
+        children: [
+          el('h3', { text: s.title }),
+          el('span', { className: 'badge', text: CATEGORY_LABELS[s.category] || s.category }),
+          !familyView && s.familyVisible ? el('span', { className: 'badge ok', text: '👪 للعائلة', attrs: { title: 'يظهر في الخزنة العائلية (مفتاح الطوارئ)' } }) : null,
+        ],
+      })
+    );
 
     if (s.usernameOrEmail) {
       card.appendChild(el('div', { className: 'secret-field', children: [el('span', { className: 'value', text: s.usernameOrEmail }), el('span', { className: 'btns', children: [copyButton(s.usernameOrEmail, 'نسخ')] })] }));
@@ -868,6 +926,7 @@
       ['id', 'category', 'title', 'usernameOrEmail', 'secretValue', 'url', 'notesForWifeAr', 'notesForCommanderAr'].forEach((k) => {
         if (form.elements[k]) form.elements[k].value = secret[k] || '';
       });
+      if (form.elements.familyVisible) form.elements.familyVisible.checked = secret.familyVisible === true;
     } else {
       form.elements.id.value = '';
       form.elements.category.value = 'password';
@@ -1783,6 +1842,25 @@
         const data = await api('/api/vault/change-password', formData(form));
         form.reset();
         toast(data.messageAr, 'ok');
+      });
+    },
+    async 'family-migrate'(form, btn) {
+      const ids = $$('[data-family-pick]', form).filter((i) => i.checked).map((i) => i.value);
+      if (!window.confirm('سيُولَّد مفتاح طوارئ جديد، ولن يفتح المفتاح المطبوع الحالي هذه الخزنة بعد الآن. للعائلة: ' + ids.length + ' سرّاً. متابعة؟')) return;
+      await busy(btn, async () => {
+        const data = await api('/api/vault/family/migrate', Object.assign(formData(form), { secretIds: ids }));
+        form.reset();
+        revealEmergencyKey(data.emergencyRecoveryKey, data.messageAr);
+        await refreshVault();
+      });
+    },
+    async 'family-old-delete'(form, btn) {
+      if (!window.confirm('ستُحذف النسخ القديمة المعروضة نهائياً (من هذا الجهاز ومن Drive). النسخة الجديدة بالصيغة 3 تبقى. متابعة؟')) return;
+      await busy(btn, async () => {
+        const data = await api('/api/vault/family/old-copies/delete', formData(form));
+        form.reset();
+        toast(data.messageAr, data.failed && data.failed.length ? 'warn' : 'ok', 10000);
+        await loadFamilyVault();
       });
     },
     async rotate(form, btn) {

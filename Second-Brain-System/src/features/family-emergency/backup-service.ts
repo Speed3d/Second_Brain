@@ -2,20 +2,23 @@
  * ============================================================================
  * الملف: src/features/family-emergency/backup-service.ts
  * القسم: Features -> Family Emergency (ميزة النسخ الاحتياطي المشفر والاستعادة)
- * Hint بالعربي: يجمع ملفات Obsidian-Vault والخزنة والإعدادات والذاكرة في حزمة واحدة مشفرة بمفتاح
- *               بيانات الخزنة. الحزمة تحمل معها مغلّفي المفتاح، لذلك تُفتح بكلمة المرور الرئيسية
- *               أو بمفتاح الطوارئ للزوجة — حتى على جهاز جديد تماماً بعد تعطّل الحاسوب.
+ * Hint بالعربي: يجمع ملفات Obsidian-Vault والخزنة والإعدادات والذاكرة والمحادثات في حزمة مشفرة.
+ *               الصيغة 3 (3.0.0، بعد الخزنة العائلية) فيها حمولتان:
+ *               - الحمولة الكاملة: بمفتاح البيانات، وتُفتح بكلمة المرور الرئيسية وحدها.
+ *               - الحمولة العائلية: بالمفتاح العائلي، وتُفتح بمفتاح الطوارئ. فيها ما تحتاجه العائلة فقط:
+ *                 ملف الخزنة (الجزء العائلي منه)، والإعدادات، وأدلة العائلة، ومحادثات العائلة.
+ *               الصيغة 2 القديمة (مفتاح الطوارئ يفتح كل شيء) تُقرأ فقط، ولا تُكتب بعد الترقية.
  * ============================================================================
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { SealedData } from '../../shared/types.ts';
+import type { SealedData, WrappedKey } from '../../shared/types.ts';
 import { ensureDirectoryExists, formatTimestampIso, listFilesRecursive, readJsonFileSafe, writeFileAtomic } from '../../shared/file-helpers.ts';
-import { openWithKey, sealWithKey } from '../../core/crypto-engine.ts';
+import { isValidEmergencyKey, normalizeEmergencyKey, openWithKey, sealWithKey, unwrapDataKey } from '../../core/crypto-engine.ts';
 import { loadSystemConfig, resolveDefaultConfigPath, resolveSettingsPath } from '../../core/config-manager.ts';
 import { logSystemInfo } from '../../core/logger.ts';
-import { readVaultFile, unwrapVaultDataKey, type UnlockedVault, type VaultKeyEnvelopes } from '../vault/vault-manager.ts';
+import { hasMainDataKey, isFamilyVaultFile, openVaultKeys, readVaultFile, resolveFamilyKey, type UnlockedVault, type VaultKeyEnvelopes } from '../vault/vault-manager.ts';
 
 /** بادئة ولاحقة اسم ملف النسخة الاحتياطية */
 const BACKUP_PREFIX = 'Second-Brain-Backup-';
@@ -32,6 +35,8 @@ export interface FullSystemSnapshot {
   appName: string;
   filesCount: number;
   filesMap: Record<string, string>; // مسار نسبي -> محتوى بترميز Base64
+  /** 3.0.0: «family» = الحمولة العائلية وحدها (فُتحت بمفتاح الطوارئ)، وغيابه = النسخة الكاملة */
+  scope?: 'full' | 'family';
 }
 
 /**
@@ -44,6 +49,33 @@ export interface EncryptedBackupFileV2 {
   filesCount: number;
   vaultKeys: VaultKeyEnvelopes;
   payload: SealedData;
+}
+
+/**
+ * Hint بالعربي: هيكل ملف النسخة الاحتياطية (الصيغة الثالثة، 3.0.0): لا غلاف طوارئ للحمولة الكاملة.
+ */
+export interface EncryptedBackupFileV3 {
+  format: 'second-brain-backup';
+  version: 3;
+  createdAt: string;
+  filesCount: number;
+  vaultKeys: { commanderWrap: WrappedKey };
+  payload: SealedData;
+  family: { fkByEmergency: WrappedKey; filesCount: number; payload: SealedData };
+}
+
+/**
+ * Hint بالعربي: هل يدخل هذا الملف في الحمولة العائلية؟ (أدلة العائلة، ودليل كل مشروع للعائلة، والإعدادات، وملف الخزنة)
+ *               محادثات العائلة تُضاف بعد فحص نطاقها.
+ */
+export function isFamilyBackupEntry(rel: string): boolean {
+  return (
+    rel === CONFIG_ENTRY ||
+    rel === SETTINGS_ENTRY ||
+    /(^|\/)encrypted-vault\/[^/]+\.json$/.test(rel) ||
+    /^Obsidian-Vault\/04-Family-Emergency-Guide\//.test(rel) ||
+    /^Obsidian-Vault\/02-Projects\/[^/]+\/06-Wife-Guide\.md$/.test(rel)
+  );
 }
 
 /**
@@ -81,17 +113,46 @@ export function createEncryptedSystemBackup(
     }
   }
 
+  if (!hasMainDataKey(vault)) throw new Error('النسخة الاحتياطية الكاملة تحتاج فتح الخزنة بكلمة المرور الرئيسية.');
   const createdAt = formatTimestampIso();
   const snapshot: FullSystemSnapshot = { createdAt, appName: config.appName, filesCount: Object.keys(filesMap).length, filesMap };
   const vaultFile = readVaultFile(vault.vaultFilePath);
-  const backup: EncryptedBackupFileV2 = {
-    format: 'second-brain-backup',
-    version: 2,
-    createdAt,
-    filesCount: snapshot.filesCount,
-    vaultKeys: { commanderWrap: vaultFile.commanderWrap, emergencyWrap: vaultFile.emergencyWrap },
-    payload: sealWithKey(JSON.stringify(snapshot), vault.dataKey),
-  };
+  let backup: EncryptedBackupFileV2 | EncryptedBackupFileV3;
+  if (isFamilyVaultFile(vaultFile)) {
+    // 3.0.0: الحمولة العائلية: ما تحتاجه العائلة فقط، مختوماً بالمفتاح العائلي
+    const familyKey = resolveFamilyKey(vault, vaultFile)!;
+    const familyMap: Record<string, string> = {};
+    for (const [rel, b64] of Object.entries(filesMap)) {
+      if (isFamilyBackupEntry(rel)) familyMap[rel] = b64;
+      else if (/(^|\/)data\/conversations\/[a-z0-9-]{8,64}\.enc\.json$/.test(rel)) {
+        try {
+          const conv = JSON.parse(Buffer.from(b64, 'base64').toString('utf8')) as { mode?: string; keyScope?: string };
+          if (conv.mode === 'family' && conv.keyScope === 'family') familyMap[rel] = b64;
+        } catch {
+          // ملف تالف: لا يدخل الحمولة العائلية
+        }
+      }
+    }
+    const familySnapshot: FullSystemSnapshot = { createdAt, appName: config.appName, filesCount: Object.keys(familyMap).length, filesMap: familyMap, scope: 'family' };
+    backup = {
+      format: 'second-brain-backup',
+      version: 3,
+      createdAt,
+      filesCount: snapshot.filesCount,
+      vaultKeys: { commanderWrap: vaultFile.commanderWrap },
+      payload: sealWithKey(JSON.stringify(snapshot), vault.dataKey),
+      family: { fkByEmergency: vaultFile.family.fkByEmergency, filesCount: familySnapshot.filesCount, payload: sealWithKey(JSON.stringify(familySnapshot), familyKey) },
+    };
+  } else {
+    backup = {
+      format: 'second-brain-backup',
+      version: 2,
+      createdAt,
+      filesCount: snapshot.filesCount,
+      vaultKeys: { commanderWrap: vaultFile.commanderWrap, emergencyWrap: vaultFile.emergencyWrap },
+      payload: sealWithKey(JSON.stringify(snapshot), vault.dataKey),
+    };
+  }
 
   const stamp = createdAt.replace(/[:.]/g, '-').slice(0, 19);
   const fileName = `${BACKUP_PREFIX}${stamp}${BACKUP_SUFFIX}`;
@@ -139,19 +200,45 @@ export function listEncryptedBackups(backupsDir?: string): Array<{ fileName: str
 
 /**
  * Hint بالعربي: دالة فتح نسخة احتياطية وفك تشفيرها بكلمة المرور الرئيسية أو بمفتاح الطوارئ (دون الحاجة لخزنة على الجهاز).
+ *               الصيغة 3: كلمة المرور تفتح الحمولة الكاملة، ومفتاح الطوارئ يفتح الحمولة العائلية وحدها (scope = family).
  */
 export function openEncryptedBackup(backupFilePath: string, passwordOrEmergencyKey: string): FullSystemSnapshot {
   if (!backupFilePath.endsWith(BACKUP_SUFFIX)) {
     throw new Error(`ملف النسخة الاحتياطية يجب أن ينتهي بـ ${BACKUP_SUFFIX}`);
   }
-  const backup = readJsonFileSafe<Partial<EncryptedBackupFileV2> | null>(backupFilePath, null);
+  const backup = readJsonFileSafe<Partial<EncryptedBackupFileV2> | Partial<EncryptedBackupFileV3> | null>(backupFilePath, null);
   if (!backup) throw new Error(`ملف النسخة الاحتياطية غير موجود أو تالف: ${backupFilePath}`);
-  if (backup.format !== 'second-brain-backup' || backup.version !== 2 || !backup.vaultKeys || !backup.payload) {
+  if (backup.format !== 'second-brain-backup' || (backup.version !== 2 && backup.version !== 3) || !backup.vaultKeys || !backup.payload) {
     throw new Error('صيغة النسخة الاحتياطية قديمة أو غير معروفة.');
   }
-  const { dataKey } = unwrapVaultDataKey(backup.vaultKeys, passwordOrEmergencyKey);
+  if (backup.version === 3) {
+    const v3 = backup as EncryptedBackupFileV3;
+    if (!v3.family) throw new Error('صيغة النسخة الاحتياطية (3) ناقصة: لا حمولة عائلية.');
+    // كلمة المرور ← الحمولة الكاملة، ومفتاح الطوارئ ← الحمولة العائلية وحدها
+    const attempts: Array<() => { key: Buffer; scope: 'full' | 'family' }> = [
+      () => ({ key: unwrapDataKey(v3.vaultKeys.commanderWrap, passwordOrEmergencyKey), scope: 'full' }),
+    ];
+    if (isValidEmergencyKey(passwordOrEmergencyKey)) attempts.unshift(() => ({ key: unwrapDataKey(v3.family.fkByEmergency, normalizeEmergencyKey(passwordOrEmergencyKey)), scope: 'family' }));
+    for (const attempt of attempts) {
+      let opened: { key: Buffer; scope: 'full' | 'family' };
+      try {
+        opened = attempt();
+      } catch {
+        continue;
+      }
+      try {
+        const snapshot = JSON.parse(openWithKey(opened.scope === 'full' ? v3.payload : v3.family.payload, opened.key).toString('utf-8')) as FullSystemSnapshot;
+        return { ...snapshot, scope: opened.scope };
+      } finally {
+        opened.key.fill(0);
+      }
+    }
+    throw new Error('كلمة المرور الرئيسية أو مفتاح الطوارئ غير صحيح!');
+  }
+  const opened = openVaultKeys(backup.vaultKeys as VaultKeyEnvelopes, passwordOrEmergencyKey);
+  const dataKey = opened.dataKey!;
   try {
-    return JSON.parse(openWithKey(backup.payload, dataKey).toString('utf-8')) as FullSystemSnapshot;
+    return { ...(JSON.parse(openWithKey(backup.payload, dataKey).toString('utf-8')) as FullSystemSnapshot), scope: 'full' };
   } finally {
     dataKey.fill(0);
   }

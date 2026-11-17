@@ -101,9 +101,11 @@ export async function runSecurityTests(): Promise<string[]> {
       secretValue: `value-${i}`,
       notesForCommanderAr: '',
       notesForWifeAr: '',
+      familyVisible: i === 3,
     });
   }
   const reopened = unlockVault(emergencyKey);
+  assert.ok(!reopened.secrets.some((s) => s.id === 'SEC-STABLE-2'), 'غير المعلَّم لا يظهر بمفتاح الطوارئ (3.0.0)');
   assert.equal(reopened.unlockedBy, 'wife_emergency');
   assert.ok(reopened.secrets.some((s) => s.id === 'SEC-STABLE-3'), 'مفتاح الطوارئ الأصلي يفتح الخزنة بعد عدة عمليات حفظ');
   passedChecks.push('اختبار ثبات مفتاح الطوارئ بعد عمليات حفظ متعددة بنجاح.');
@@ -141,20 +143,27 @@ export async function runSecurityTests(): Promise<string[]> {
   assert.ok(!fs.readdirSync(path.dirname(atomicPath)).some((n) => n.includes('.tmp-')), 'لا تبقى ملفات مؤقتة');
   passedChecks.push('اختبار الكتابة الذرّية والاحتفاظ بالنسخ السابقة بنجاح.');
 
-  // 6. الاستعادة: بمفتاح الطوارئ إلى مجلد جديد فقط، ورفض المفتاح الخاطئ والمجلد غير الفارغ
+  // 6. الاستعادة إلى مجلد جديد فقط: كلمة المرور تستعيد الكل، ومفتاح الطوارئ يستعيد الحمولة العائلية وحدها (3.0.0)
   const backup = createEncryptedSystemBackup(vault);
   const restoreDir = path.join(config.paths.rootDir, 'restored-copy');
-  const preview = restoreEncryptedBackup(backup.backupFilePath, emergencyKey, restoreDir, { dryRun: true });
+  const preview = restoreEncryptedBackup(backup.backupFilePath, TEST_MASTER_PASSWORD, restoreDir, { dryRun: true });
   assert.equal(preview.written, false);
   assert.ok(!fs.existsSync(restoreDir), 'المعاينة لا تكتب شيئاً');
-  const restored = restoreEncryptedBackup(backup.backupFilePath, emergencyKey, restoreDir);
+  const restored = restoreEncryptedBackup(backup.backupFilePath, TEST_MASTER_PASSWORD, restoreDir);
   assert.equal(restored.files.length, backup.filesIncluded);
   const restoredVault = restored.files.find((f) => f.endsWith('vault.aes256.json'));
   assert.ok(restoredVault, 'يجب أن تتضمن الاستعادة ملف الخزنة');
   assert.equal(unlockVault(TEST_MASTER_PASSWORD, path.join(restoreDir, restoredVault)).secrets.length, vault.secrets.length);
-  assert.throws(() => restoreEncryptedBackup(backup.backupFilePath, emergencyKey, restoreDir), /فارغ/);
+  assert.throws(() => restoreEncryptedBackup(backup.backupFilePath, TEST_MASTER_PASSWORD, restoreDir), /فارغ/);
   assert.throws(() => restoreEncryptedBackup(backup.backupFilePath, 'wrong-password-123', path.join(config.paths.rootDir, 'r2')));
-  passedChecks.push('اختبار الاستعادة (معاينة، استعادة لمجلد جديد، فتح الخزنة المستعادة، رفض المجلد غير الفارغ والمفتاح الخاطئ) بنجاح.');
+  const familyDir = path.join(config.paths.rootDir, 'restored-family');
+  const familyRestore = restoreEncryptedBackup(backup.backupFilePath, emergencyKey, familyDir);
+  assert.ok(familyRestore.files.length < backup.filesIncluded, 'مفتاح الطوارئ يستعيد الحمولة العائلية وحدها');
+  const familyVaultRel = familyRestore.files.find((f) => f.endsWith('vault.aes256.json'));
+  assert.ok(familyVaultRel, 'والحمولة العائلية فيها ملف الخزنة، فتفتح العائلة جزءها منه على الجهاز الجديد');
+  const familyOpened = unlockVault(emergencyKey, path.join(familyDir, familyVaultRel));
+  assert.ok(familyOpened.secrets.every((s) => s.familyVisible === true), 'وفيها أسرار العائلة فقط');
+  passedChecks.push('اختبار الاستعادة (معاينة، استعادة كاملة بكلمة المرور، والعائلية بمفتاح الطوارئ، رفض المجلد غير الفارغ والمفتاح الخاطئ) بنجاح.');
 
   // 7. منع XSS في الواجهة
   assert.equal(escapeHtml('<b>"x" & \'y\'</b>'), '&lt;b&gt;&quot;x&quot; &amp; &#39;y&#39;&lt;/b&gt;');

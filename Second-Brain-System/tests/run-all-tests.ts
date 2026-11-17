@@ -29,6 +29,7 @@ import { runInstallerTests } from './14-installer.test.ts';
 import { runSyncTests } from './15-sync.test.ts';
 import { runMultiWriterSyncTests } from './16-multi-writer-sync.test.ts';
 import { runRuntimeSafetyTests } from './17-runtime-safety.test.ts';
+import { runFamilyVaultTests } from './18-family-vault.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -124,6 +125,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '17. اختبارات حمايات التشغيل (ISS-032: كشف الكود القديم في الذاكرة، وإيقاف المزامنة، وإعادة التشغيل)',
       file: 'tests/17-runtime-safety.test.ts',
       runner: runRuntimeSafetyTests,
+    },
+    {
+      name: '18. اختبارات الخزنة العائلية v3 (الترقية، مفتاح الطوارئ للعائلة وحدها، العلامة، المحادثات، المزامنة بين جهازين، النسخ القديمة، المسارات)',
+      file: 'tests/18-family-vault.test.ts',
+      runner: runFamilyVaultTests,
     },
   ];
 

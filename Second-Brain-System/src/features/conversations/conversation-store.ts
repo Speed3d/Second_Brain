@@ -69,6 +69,8 @@ interface ConversationFile {
   createdAt: string;
   updatedAt: string;
   messageCount: number;
+  /** 3.0.0: محادثات العائلة مختومة بالمفتاح العائلي (FK) فتفتحها جلسة الطوارئ. غيابه = مختومة بمفتاح البيانات */
+  keyScope?: 'family';
   sealed: SealedData;
 }
 
@@ -97,21 +99,32 @@ function readFile(id: string): ConversationFile | null {
   return JSON.parse(fs.readFileSync(filePath, 'utf8')) as ConversationFile;
 }
 
+/**
+ * Hint بالعربي: دالة اختيار مفتاح فك المحادثة حسب نطاقها (العائلي أو الرئيسي).
+ */
+function keyFor(file: { keyScope?: 'family' }, vault: UnlockedVault): Buffer {
+  const key = file.keyScope === 'family' ? vault.familyKey : vault.dataKey;
+  if (!key || key.length !== 32) throw new Error('لا تملك هذه الجلسة مفتاح هذه المحادثة.');
+  return key;
+}
+
 function decrypt(file: ConversationFile, vault: UnlockedVault): { title: string; messages: StoredMessage[] } {
-  return JSON.parse(openWithKey(file.sealed, vault.dataKey).toString('utf8')) as { title: string; messages: StoredMessage[] };
+  return JSON.parse(openWithKey(file.sealed, keyFor(file, vault)).toString('utf8')) as { title: string; messages: StoredMessage[] };
 }
 
 function writeConversation(conv: Conversation, vault: UnlockedVault): void {
   ensureDirectoryExists(resolveConversationsDir());
-  const file: ConversationFile = {
+  const file: Omit<ConversationFile, 'sealed'> & { sealed?: SealedData } = {
     version: 1,
     id: conv.id,
     mode: conv.mode,
     createdAt: conv.createdAt,
     updatedAt: conv.updatedAt,
     messageCount: conv.messages.length,
-    sealed: sealWithKey(JSON.stringify({ title: conv.title, messages: conv.messages }), vault.dataKey),
   };
+  // 3.0.0: محادثة العائلة تُختم بالمفتاح العائلي متى وُجد (فتفتحها الزوجة بمفتاح الطوارئ وحده)
+  if (conv.mode === 'family' && vault.familyKey && vault.familyKey.length === 32) file.keyScope = 'family';
+  file.sealed = sealWithKey(JSON.stringify({ title: conv.title, messages: conv.messages }), keyFor(file, vault));
   writeFileAtomic(fileFor(conv.id), JSON.stringify(file, null, 2));
 }
 
@@ -236,4 +249,41 @@ export function deleteAllConversations(vault: UnlockedVault, mode: ConversationM
     }
   }
   return count;
+}
+
+/**
+ * Hint بالعربي: دالة نقل محادثات العائلة إلى المفتاح العائلي (بعد الترقية إلى v3، أو بعد وصول مفتاح عائلي جديد):
+ *               - المختومة بمفتاح البيانات (بلا keyScope) ← تُعاد ختمها بالمفتاح العائلي.
+ *               - المختومة بمفتاح عائلي سابق ← تُفتح به وتُعاد ختمها بالحالي.
+ *               تحتاج جلسة القائد. المخرجات: عدد المحادثات المنقولة.
+ */
+export function resealFamilyConversations(vault: UnlockedVault, dir: string = resolveConversationsDir(), previousFamilyKey: Buffer | null = null): number {
+  const familyKey = vault.familyKey;
+  if (!familyKey || familyKey.length !== 32 || vault.dataKey.length !== 32 || !fs.existsSync(dir)) return 0;
+  let moved = 0;
+  for (const name of fs.readdirSync(dir)) {
+    if (!/^[a-z0-9-]{8,64}\.enc\.json$/.test(name)) continue;
+    const filePath = path.join(dir, name);
+    try {
+      const file = JSON.parse(fs.readFileSync(filePath, 'utf8')) as ConversationFile;
+      if (file.mode !== 'family') continue;
+      let plain: Buffer;
+      if (file.keyScope !== 'family') plain = openWithKey(file.sealed, vault.dataKey);
+      else {
+        try {
+          openWithKey(file.sealed, familyKey);
+          continue; // مختومة بالمفتاح الحالي
+        } catch {
+          if (!previousFamilyKey) continue;
+          plain = openWithKey(file.sealed, previousFamilyKey);
+        }
+      }
+      const updated: ConversationFile = { ...file, keyScope: 'family', sealed: sealWithKey(plain, familyKey) };
+      writeFileAtomic(filePath, JSON.stringify(updated, null, 2));
+      moved += 1;
+    } catch {
+      // ملف تالف أو بمفتاح آخر: يُترك كما هو
+    }
+  }
+  return moved;
 }
