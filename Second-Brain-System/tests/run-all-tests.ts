@@ -28,6 +28,7 @@ import { runConversationsAndVoiceTests } from './13-conversations-and-voice.test
 import { runInstallerTests } from './14-installer.test.ts';
 import { runSyncTests } from './15-sync.test.ts';
 import { runMultiWriterSyncTests } from './16-multi-writer-sync.test.ts';
+import { runRuntimeSafetyTests } from './17-runtime-safety.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -118,6 +119,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '16. اختبارات المزامنة متعددة الكتابة (3 أجهزة: تعارضات، أسرار، حذف مقابل تعديل، ساعة متقدمة، فشل الدمج، Drive متأخر، السلة، كلمة المرور، جهاز جديد، تمرين الاستعادة)',
       file: 'tests/16-multi-writer-sync.test.ts',
       runner: runMultiWriterSyncTests,
+    },
+    {
+      name: '17. اختبارات حمايات التشغيل (ISS-032: كشف الكود القديم في الذاكرة، وإيقاف المزامنة، وإعادة التشغيل)',
+      file: 'tests/17-runtime-safety.test.ts',
+      runner: runRuntimeSafetyTests,
     },
   ];
 

@@ -16,6 +16,7 @@ import { startProjectWatcher } from '../project-indexer/project-watcher.ts';
 import { warmUpVoice } from '../voice/tts-service.ts';
 import { syncTick } from '../sync/sync-service.ts';
 import { logSystemError, logSystemInfo } from '../../core/logger.ts';
+import { getRuntimeVersionStatus, requestServerRestart } from '../../core/runtime-version.ts';
 import {
   applySecurityHeaders,
   HttpError,
@@ -53,7 +54,22 @@ export function buildRouteTable(): RouteDefinition[] {
       path: '/api/health',
       handler: ({ res }) => {
         const config = loadSystemConfig();
-        sendJson(res, 200, { status: 'ok', appName: config.appName, version: config.version });
+        // ISS-032: version هو إصدار الكود الذي يعمل فعلاً، لا ما على القرص
+        const v = getRuntimeVersionStatus();
+        sendJson(res, 200, { status: 'ok', appName: config.appName, version: v.runningVersion, diskVersion: v.diskVersion, restartRequired: v.restartRequired, startedAt: v.startedAt });
+      },
+    },
+    {
+      // ISS-032: إعادة تشغيل الخادم من الواجهة بعد تحديث البرنامج (يعيده المشغّل بالكود الجديد)
+      method: 'POST',
+      path: '/api/system/restart',
+      requiresSession: true,
+      commanderOnly: true,
+      handler: ({ res }) => {
+        const v = getRuntimeVersionStatus();
+        logSystemInfo('DesktopServer', `إعادة تشغيل الخادم بطلب القائد (يعمل ${v.runningVersion}، وعلى القرص ${v.diskVersion}).`);
+        sendJson(res, 200, { ok: true, messageAr: '🔄 يُعاد تشغيل الخادم الآن. افتح الخزنة من جديد بعد ثوانٍ.', ...v });
+        requestServerRestart();
       },
     },
     ...getVaultRoutes(),

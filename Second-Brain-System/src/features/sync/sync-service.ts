@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { loadSystemConfig, readAppVersion } from '../../core/config-manager.ts';
 import { logSystemInfo } from '../../core/logger.ts';
+import { describeRestartRequired, getRuntimeVersionStatus } from '../../core/runtime-version.ts';
 import { readJsonFileSafe, toSafeFileName, writeFileAtomic } from '../../shared/file-helpers.ts';
 import type { VaultSecretItem } from '../../shared/types.ts';
 import type { UnlockedVault } from '../vault/vault-manager.ts';
@@ -43,6 +44,8 @@ export interface SyncStatusView {
   device: { deviceId: string; deviceName: string; platform: string } | null;
   ready: boolean;
   multiWriter: boolean;
+  /** ISS-032: الكود على القرص أحدث من الذي يعمل، والمزامنة متوقفة */
+  restartRequired?: boolean;
   problemAr?: string;
   migrated?: boolean;
   lastMergeAt?: string;
@@ -95,6 +98,8 @@ export function getSyncStatus(): SyncStatusView {
     multiWriter: true,
   };
   if (!settings.enabled) return { ...view, problemAr: 'المزامنة مطفأة على هذا الجهاز.' };
+  const stale = describeRestartRequired();
+  if (stale) return { ...view, restartRequired: true, problemAr: `⏸️ ${stale}` };
   if (!device) return { ...view, problemAr: 'هذا الجهاز بلا هوية. شغّل المثبّت (install-windows.ps1 أو install-macos.sh) مرة واحدة.' };
   if (!view.folderExists) return { ...view, problemAr: 'مجلد المزامنة غير موجود. تأكد أن Google Drive for desktop يعمل وأن المسار صحيح.' };
   const ctx = buildSyncContext()!;
@@ -131,6 +136,8 @@ export function writeDeviceStatusFile(ctx: SyncContext): void {
       {
         ...ctx.device,
         appVersion: readAppVersion(),
+        runningVersion: getRuntimeVersionStatus().runningVersion,
+        restartRequired: getRuntimeVersionStatus().restartRequired,
         syncFormat: index ? 2 : 1,
         lastSeenAt: new Date().toISOString(),
         lastMergeAt: index?.lastMergeAt,
@@ -162,6 +169,8 @@ function describeCycle(r: SyncCycleResult): string {
 export function syncOnUnlock(vault: UnlockedVault): { imported: boolean; messageAr?: string } {
   const ctx = buildSyncContext();
   if (!ctx) return { imported: false };
+  const stale = describeRestartRequired();
+  if (stale) return { imported: false, messageAr: `⏸️ ${stale}` };
   try {
     const r = runSyncCycle(ctx, vault);
     writeDeviceStatusFile(ctx);
@@ -181,6 +190,16 @@ export function syncOnUnlock(vault: UnlockedVault): { imported: boolean; message
 export function syncTick(activeVault: UnlockedVault | null): void {
   const ctx = buildSyncContext();
   if (!ctx) return;
+  // ISS-032: كود قديم في الذاكرة ← لا دمج ولا نشر (قد يطبّق تغييرات بصيغة لا يفهمها، كما في ISS-028).
+  // تُكتب حالة الجهاز فقط، فترى الأجهزة الأخرى أنه يحتاج إعادة تشغيل.
+  if (describeRestartRequired()) {
+    try {
+      writeDeviceStatusFile(ctx);
+    } catch {
+      // لا شيء
+    }
+    return;
+  }
   try {
     if (activeVault) {
       const r = runSyncCycle(ctx, activeVault);
@@ -213,6 +232,8 @@ function withSyncErrors<T>(fn: () => T): T {
  */
 export function syncNow(vault: UnlockedVault): { messageAr: string } {
   return withSyncErrors(() => {
+    const stale = describeRestartRequired();
+    if (stale) throw new Error(stale);
     const ctx = requireCtx();
     const r = runSyncCycle(ctx, vault);
     writeDeviceStatusFile(ctx);
@@ -299,7 +320,7 @@ export function resolveSyncConflict(vault: UnlockedVault, id: string, choice: 'k
   return withSyncErrors(() => {
     const ctx = requireCtx();
     resolveConflict(ctx, vault, id, choice);
-    runSyncCycle(ctx, vault);
+    if (!describeRestartRequired()) runSyncCycle(ctx, vault);
     return { messageAr: choice === 'keep' ? '✅ بقيت النسخة الحالية، ونُقلت الأخرى إلى السلة 30 يوماً.' : '✅ اعتُمدت النسخة الأخرى، ونُقلت الحالية إلى السلة 30 يوماً.' };
   });
 }
@@ -335,7 +356,7 @@ export function restoreSyncTrash(vault: UnlockedVault, id: string): { messageAr:
     if (!entry) throw new Error('العنصر غير موجود في السلة.');
     restoreFromTrash(ctx, vault, entry);
     removeTrashEntry(ctx, id);
-    runSyncCycle(ctx, vault);
+    if (!describeRestartRequired()) runSyncCycle(ctx, vault);
     return { messageAr: '♻️ استُرجع العنصر، ونُشر فيعود على الأجهزة الأخرى أيضاً.' };
   });
 }

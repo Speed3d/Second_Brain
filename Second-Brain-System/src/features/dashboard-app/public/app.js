@@ -345,6 +345,41 @@
     if (n) $('#syncAlertText').textContent = '⚠️ ' + n + ' تعارض في المزامنة ينتظر قرارك (عُدّل الشيء نفسه على جهازين).';
   }
 
+  // ===================== ISS-032: الكود على القرص أحدث من الذي يعمل =====================
+  async function checkRuntimeVersion() {
+    let h;
+    try {
+      h = await (await fetch('/api/health', { credentials: 'same-origin' })).json();
+    } catch (err) {
+      return null;
+    }
+    const banner = $('#restartBanner');
+    if (banner) {
+      banner.hidden = !h.restartRequired;
+      if (h.restartRequired) {
+        $('#restartText').textContent = '⏸️ حُدّث البرنامج على القرص إلى ' + h.diskVersion + '، والخادم ما زال يعمل بالإصدار ' + h.version + '. المزامنة متوقفة حتى تعيد تشغيل الخادم.';
+      }
+    }
+    return h;
+  }
+
+  async function restartServer(btn) {
+    if (!window.confirm('سيُعاد تشغيل الخادم بالإصدار الجديد، وتُقفل الخزنة (تفتحها من جديد بعد ثوانٍ). متابعة؟')) return;
+    const r = await busy(btn, () => api('/api/system/restart', {}));
+    if (!r) return;
+    toast(r.messageAr, 'ok', 8000);
+    // ننتظر عودة الخادم بالكود الجديد ثم نعيد تحميل الصفحة
+    for (let i = 0; i < 30; i += 1) {
+      await new Promise((res) => setTimeout(res, 1500));
+      const h = await checkRuntimeVersion();
+      if (h && !h.restartRequired && h.startedAt !== r.startedAt) {
+        location.reload();
+        return;
+      }
+    }
+    toast('لم يعد الخادم خلال 45 ثانية. إن كان يعمل يدوياً (لا من الاختصار) فشغّله من جديد.', 'error', 12000);
+  }
+
   async function syncAction(btn, pathName, body) {
     const r = await busy(btn, () => api(pathName, body || {}));
     if (!r) return;
@@ -1765,6 +1800,7 @@
     'open-conversations': (b) => openConversations(b.dataset.mode),
     'sync-refresh': () => loadSync(),
     'sync-now': (b) => syncAction(b, '/api/sync/now'),
+    'restart-server': (b) => restartServer(b),
     'sync-resolve': (b) => {
       const other = b.dataset.choice === 'other';
       if (other && !window.confirm('ستُعتمد النسخة الأخرى، وتُنقل الحالية إلى السلة 30 يوماً. متابعة؟')) return;
@@ -1989,8 +2025,12 @@
     setInterval(() => {
       if (!document.hidden) refreshVault();
     }, 30000);
+    checkRuntimeVersion();
     setInterval(() => {
-      if (!document.hidden) loadSync();
+      if (!document.hidden) {
+        loadSync();
+        checkRuntimeVersion();
+      }
     }, 60000);
     setInterval(updateAutoLockBadge, 15000);
   }

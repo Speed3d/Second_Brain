@@ -57,6 +57,10 @@
     </nav>
 
     <main id="main" class="views" tabindex="-1">
+      <div class="readonly-banner" id="restartBanner" role="alert" hidden>
+        <span id="restartText"></span>
+        <button type="button" class="btn btn-primary btn-sm" data-action="restart-server">🔄 أعد تشغيل الخادم</button>
+      </div>
       <div class="readonly-banner" id="syncAlertBanner" role="status" hidden>
         <span id="syncAlertText"></span>
         <button type="button" class="btn btn-ghost btn-sm" data-action="view" data-view="sync">🔄 المزامنة</button>

@@ -4,6 +4,7 @@
 # Hint بالعربي: يُشغَّل مخفياً عند تسجيل الدخول (عبر start-hidden.vbs). إن كان الخادم يعمل يخرج فوراً.
 #               يكتب السجل في data/logs/server.log، ويعيد تشغيل الخادم إن توقف فجأة
 #               (حتى 5 مرات خلال 10 دقائق، ثم يتوقف حتى لا يدور بلا نهاية).
+#               رمز الخروج 75 = «أعد تشغيلي» بعد تحديث البرنامج (ISS-032): يُعاد فوراً ولا يُعدّ تعطلاً.
 # ============================================================================
 . (Join-Path $PSScriptRoot 'common.ps1')
 
@@ -37,6 +38,7 @@ try {
     }
     Add-Content -LiteralPath $log -Value ("[{0}] server exited with code {1}" -f (Get-Date -Format s), $p.ExitCode) -Encoding UTF8
     if ($p.ExitCode -eq 0) { break }               # إيقاف مقصود
+    if ($p.ExitCode -eq 75) { continue }           # ISS-032: إعادة تشغيل بطلب القائد بعد تحديث البرنامج (ليست تعطلاً)
     if (Test-SBServer) { break }                    # نسخة أخرى تعمل على المنفذ
     $now = Get-Date
     $crashes.Add($now)
