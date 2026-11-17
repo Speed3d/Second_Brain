@@ -20,6 +20,7 @@ import { resetSessionStateForTests } from '../src/features/dashboard-app/session
 import { detectDriveFolders, DRIVE_APP_FOLDER } from '../src/features/dashboard-app/routes/sync-routes.ts';
 import { acquireLease, checkWriteAccess, describeSyncIoError, heartbeatLease, LEASE_EXPIRY_MS, readLeaseStatus, readLocalSyncState, releaseLease, type SyncContext } from '../src/features/sync/sync-context.ts';
 import { checkSync, importLatestSnapshot, publishSnapshot, readManifest } from '../src/features/sync/snapshot-sync.ts';
+import { MIN_SYNC_APP_VERSION } from '../src/features/sync/multi-writer-sync.ts';
 import { createVault, unlockVault } from '../src/features/vault/vault-manager.ts';
 import { postJson, rawRequest } from './06-security.test.ts';
 import { ensureTestVault, TEST_MASTER_PASSWORD, writeFixtureFile } from './test-environment.ts';
@@ -264,7 +265,7 @@ export async function runSyncTests(): Promise<string[]> {
     assert.match(legacyView.kind === 'other' ? legacyView.lease.deviceName : '', /حدّث هذا الجهاز إلى الإصدار 2\.0/);
     assert.equal(readLeaseStatus(Other, Date.now() + 365 * 24 * 3600 * 1000).kind, 'other', 'قفل الأجهزة القديمة لا ينتهي');
     assert.throws(() => publishSnapshot(Other, vaultOther), /لا يملك هذا الجهاز صلاحية الكتابة/);
-    assert.equal(JSON.parse(read(manifestFile)).minAppVersion, '2.0.0');
+    assert.equal(JSON.parse(read(manifestFile)).minAppVersion, MIN_SYNC_APP_VERSION, 'الحدّ الأدنى للمزامنة في manifest (ISS-028)');
 
     // الكتابة بلا قفل: إضافة مشروع وحفظ المحادثة يعملان دائماً
     const added = await postJson(port, '/api/projects/add', { name: 'X', path: base }, cookie);

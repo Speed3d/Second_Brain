@@ -11,7 +11,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { readRawSettings, setDeviceProjectPath, updateSystemSettings } from '../../../core/config-manager.ts';
-import { getSyncStatus, listSyncConflicts, listSyncTrash, resolveSyncConflict, restoreSyncTrash, syncNow } from '../../sync/sync-service.ts';
+import { getSyncStatus, listHeldDeletes, listSyncConflicts, listSyncTrash, resolveSyncConflict, resolveSyncHeldDeletes, restoreSyncTrash, syncNow } from '../../sync/sync-service.ts';
 import { HttpError, readString, sendJson, type RouteDefinition } from '../http-utils.ts';
 import { requireProject } from './project-routes.ts';
 import { assertSettingsAuth } from './state-routes.ts';
@@ -123,6 +123,26 @@ export function getSyncRoutes(): RouteDefinition[] {
         const choice = body.choice === 'other' ? 'other' : body.choice === 'keep' ? 'keep' : null;
         if (!id || !choice) throw new HttpError(400, 'حدد التعارض والقرار (keep أو other).');
         const result = failAs400(() => resolveSyncConflict(session!.vault, id, choice));
+        sendJson(res, 200, { ok: true, ...result, status: getSyncStatus() });
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/sync/held',
+      requiresSession: true,
+      commanderOnly: true,
+      handler: ({ res, session }) => sendJson(res, 200, listHeldDeletes(session!.vault)),
+    },
+    {
+      method: 'POST',
+      path: '/api/sync/held/resolve',
+      requiresSession: true,
+      commanderOnly: true,
+      handler: ({ res, body, session }) => {
+        const direction = body.direction === 'incoming' ? 'incoming' : body.direction === 'outgoing' ? 'outgoing' : null;
+        const action = body.action === 'confirm' ? 'confirm' : body.action === 'reject' ? 'reject' : null;
+        if (!direction || !action) throw new HttpError(400, 'حدد الاتجاه (outgoing أو incoming) والقرار (confirm أو reject).');
+        const result = failAs400(() => resolveSyncHeldDeletes(session!.vault, direction, action));
         sendJson(res, 200, { ok: true, ...result, status: getSyncStatus() });
       },
     },

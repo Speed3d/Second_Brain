@@ -252,6 +252,7 @@
       trashCard.dataset.bound = '1';
     }
     await loadSyncConflicts(s);
+    await loadSyncHeld(s);
 
     const form = $('[data-form="sync-settings"]');
     if (form && !form.dataset.filled) {
@@ -311,6 +312,40 @@
     return kind === 'obs' || kind === 'project' || kind === 'memory' ? key.slice(kind.length + 1) : '';
   }
 
+  /** ISS-028: الحذف الجماعي المعلّق */
+  async function loadSyncHeld(s) {
+    const card = $('#syncHeldCard');
+    if (!card) return;
+    const any = s && s.ready && ((s.heldOutgoing || 0) > 0 || s.heldIncoming);
+    card.hidden = !any;
+    if (!any) return;
+    let r;
+    try {
+      r = await api('/api/sync/held');
+    } catch (err) {
+      return;
+    }
+    const block = (title, item, direction, confirmLabel, rejectLabel) =>
+      el('div', {
+        className: 'report',
+        children: [
+          el('p', { className: 'small', children: [el('strong', { text: title }), el('span', { className: 'muted', text: ' — ' + item.reasonAr + ' · ' + formatDateAr(item.detectedAt) })] }),
+          el('ul', { className: 'list compact', children: item.sample.map((k) => el('li', { children: [el('bdi', { className: 'mono small', text: k, attrs: { dir: 'auto' } })] })).concat(item.count > item.sample.length ? [el('li', { className: 'muted small', text: '… و' + (item.count - item.sample.length) + ' غيرها' })] : []) }),
+          el('div', {
+            className: 'card-actions',
+            children: [
+              el('button', { className: 'btn btn-danger btn-sm', text: confirmLabel, attrs: { type: 'button', 'data-action': 'sync-held', 'data-direction': direction, 'data-choice': 'confirm' } }),
+              el('button', { className: 'btn btn-primary btn-sm', text: rejectLabel, attrs: { type: 'button', 'data-action': 'sync-held', 'data-direction': direction, 'data-choice': 'reject' } }),
+            ],
+          }),
+        ],
+      });
+    const parts = [];
+    if (r.outgoing) parts.push(block('من هذا الجهاز: ' + r.outgoing.count + ' عنصراً اختفت', r.outgoing, 'outgoing', '🗑️ نعم، حذفتها: احذفها من كل الأجهزة', '♻️ لا، أعدها هنا'));
+    r.incoming.forEach((h) => parts.push(block('من «' + h.deviceName + '»: حذف ' + h.count + ' عنصراً', h, 'incoming', '🗑️ طبّق الحذف هنا أيضاً', '♻️ لا، أبقها وأعدها للجهاز الآخر')));
+    $('#syncHeldList').replaceChildren(...parts);
+  }
+
   async function loadSyncTrash() {
     let r;
     try {
@@ -341,8 +376,10 @@
     const banner = $('#syncAlertBanner');
     if (!banner) return;
     const n = s && s.ready ? s.conflicts || 0 : 0;
-    banner.hidden = !n;
-    if (n) $('#syncAlertText').textContent = '⚠️ ' + n + ' تعارض في المزامنة ينتظر قرارك (عُدّل الشيء نفسه على جهازين).';
+    const held = s && s.ready && ((s.heldOutgoing || 0) > 0 || s.heldIncoming);
+    banner.hidden = !n && !held;
+    if (held) $('#syncAlertText').textContent = '🛑 حذف جماعي في المزامنة ينتظر تأكيدك (لم يُحذف شيء من الأجهزة الأخرى بعد).';
+    else if (n) $('#syncAlertText').textContent = '⚠️ ' + n + ' تعارض في المزامنة ينتظر قرارك (عُدّل الشيء نفسه على جهازين).';
   }
 
   // ===================== ISS-032: الكود على القرص أحدث من الذي يعمل =====================
@@ -1801,6 +1838,11 @@
     'sync-refresh': () => loadSync(),
     'sync-now': (b) => syncAction(b, '/api/sync/now'),
     'restart-server': (b) => restartServer(b),
+    'sync-held': (b) => {
+      const confirmDelete = b.dataset.choice === 'confirm';
+      if (confirmDelete && !window.confirm('سيُحذف كل ما في القائمة من كل الأجهزة (ويبقى في السلة 30 يوماً). متابعة؟')) return;
+      syncAction(b, '/api/sync/held/resolve', { direction: b.dataset.direction, action: b.dataset.choice });
+    },
     'sync-resolve': (b) => {
       const other = b.dataset.choice === 'other';
       if (other && !window.confirm('ستُعتمد النسخة الأخرى، وتُنقل الحالية إلى السلة 30 يوماً. متابعة؟')) return;

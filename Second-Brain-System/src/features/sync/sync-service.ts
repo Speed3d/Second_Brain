@@ -18,10 +18,10 @@ import { describeRestartRequired, getRuntimeVersionStatus } from '../../core/run
 import { readJsonFileSafe, toSafeFileName, writeFileAtomic } from '../../shared/file-helpers.ts';
 import type { VaultSecretItem } from '../../shared/types.ts';
 import type { UnlockedVault } from '../vault/vault-manager.ts';
-import { LEGACY_LOCK_DEVICE_ID, lockLegacyClients, resolveConflict, restoreFromTrash, runSyncCycle, type SyncCycleResult } from './multi-writer-sync.ts';
+import { LEGACY_LOCK_DEVICE_ID, lockLegacyClients, resolveConflict, resolveHeldDeletes, restoreFromTrash, runSyncCycle, type SyncCycleResult } from './multi-writer-sync.ts';
 import { recordKind } from './records.ts';
 import { buildSyncContext, describeSyncIoError, readDeviceInfo, readSyncSettings, type SyncContext } from './sync-context.ts';
-import { countConflicts, countTrash, listConflicts, listTrash, readSyncIndex, removeTrashEntry, syncDataDir, type ConflictEntry } from './sync-store.ts';
+import { countConflicts, countHeldIncoming, countTrash, listConflicts, listTrash, readHeldIncoming, readSyncIndex, removeTrashEntry, syncDataDir, type ConflictEntry } from './sync-store.ts';
 
 /** جهاز كما يظهر في صفحة المزامنة */
 export interface SyncDeviceView {
@@ -55,6 +55,9 @@ export interface SyncStatusView {
   lastWarning?: string;
   conflicts?: number;
   trash?: number;
+  /** ISS-028: حذف جماعي بانتظار التأكيد (من هذا الجهاز، أو قادم من جهاز آخر) */
+  heldOutgoing?: number;
+  heldIncoming?: boolean;
   devices?: SyncDeviceView[];
 }
 
@@ -116,6 +119,8 @@ export function getSyncStatus(): SyncStatusView {
       lastWarning: index?.lastWarning,
       conflicts: countConflicts(ctx),
       trash: countTrash(ctx),
+      heldOutgoing: index?.heldDeletes?.keys.length ?? 0,
+      heldIncoming: countHeldIncoming(ctx),
       devices: readDevices(ctx),
       problemAr: index ? undefined : 'لم يُرحَّل هذا الجهاز إلى المزامنة الجديدة بعد: افتح الخزنة بكلمة المرور الرئيسية فيتم ذلك تلقائياً.',
     };
@@ -358,6 +363,50 @@ export function restoreSyncTrash(vault: UnlockedVault, id: string): { messageAr:
     removeTrashEntry(ctx, id);
     if (!describeRestartRequired()) runSyncCycle(ctx, vault);
     return { messageAr: '♻️ استُرجع العنصر، ونُشر فيعود على الأجهزة الأخرى أيضاً.' };
+  });
+}
+
+/** حذف جماعي معلّق كما تعرضه الواجهة */
+export interface HeldDeletesView {
+  outgoing: { count: number; reasonAr: string; detectedAt: string; sample: string[] } | null;
+  incoming: Array<{ deviceName: string; reasonAr: string; detectedAt: string; count: number; sample: string[] }>;
+}
+
+function labelKey(key: string): string {
+  const kind = recordKind(key);
+  return kind === 'obs' ? key.slice(4) : kind === 'secret' ? 'سرّ في الخزنة' : key;
+}
+
+/**
+ * Hint بالعربي: دالة عرض الحذف الجماعي المعلّق (ISS-028).
+ */
+export function listHeldDeletes(vault: UnlockedVault): HeldDeletesView {
+  const ctx = requireCtx();
+  const index = readSyncIndex(ctx);
+  const held = index?.heldDeletes;
+  return {
+    outgoing: held ? { count: held.keys.length, reasonAr: held.reasonAr, detectedAt: held.detectedAt, sample: held.keys.slice(0, 8).map(labelKey) } : null,
+    incoming: readHeldIncoming(ctx, vault.dataKey).map((h) => ({ deviceName: h.deviceName, reasonAr: h.reasonAr, detectedAt: h.detectedAt, count: h.changes.length, sample: h.changes.slice(0, 8).map((c) => labelKey(c.key)) })),
+  };
+}
+
+/**
+ * Hint بالعربي: دالة حسم الحذف الجماعي المعلّق ثم دورة مزامنة لنشر القرار.
+ */
+export function resolveSyncHeldDeletes(vault: UnlockedVault, direction: 'outgoing' | 'incoming', action: 'confirm' | 'reject'): { messageAr: string } {
+  return withSyncErrors(() => {
+    const ctx = requireCtx();
+    const n = resolveHeldDeletes(ctx, vault, direction, action);
+    if (!describeRestartRequired()) runSyncCycle(ctx, vault);
+    const msg =
+      direction === 'outgoing'
+        ? action === 'confirm'
+          ? `🗑️ نُشر حذف ${n} عنصراً إلى كل الأجهزة (وتبقى في السلة 30 يوماً).`
+          : `♻️ أُعيد ${n} عنصراً إلى هذا الجهاز، ولم يُنشر أي حذف.`
+        : action === 'confirm'
+          ? `🗑️ طُبّق الحذف القادم هنا (${n} عنصراً، في السلة 30 يوماً).`
+          : `♻️ بقيت ${n} عنصراً هنا، وستعود إلى الجهاز الآخر أيضاً.`;
+    return { messageAr: msg };
   });
 }
 

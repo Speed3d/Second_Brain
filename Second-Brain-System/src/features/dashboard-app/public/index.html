@@ -153,6 +153,12 @@
           <ul class="list" id="syncDevicesList"></ul>
         </article>
 
+        <article class="card danger-zone" data-commander-only id="syncHeldCard" hidden>
+          <div class="card-head"><h2>🛑 حذف جماعي ينتظر تأكيدك</h2></div>
+          <p class="small muted">اختفى عدد كبير من العناصر دفعة واحدة (أو مجلد كامل). لم يُحذف شيء من الأجهزة الأخرى بعد: إن كنت حذفتها أنت فأكّد، وإلا أعدها.</p>
+          <div id="syncHeldList"></div>
+        </article>
+
         <article class="card" data-commander-only id="syncConflictsCard" hidden>
           <div class="card-head"><h2>⚠️ تعارضات تنتظر قرارك</h2><span class="badge warn" id="syncConflictsCount"></span></div>
           <p class="small muted">عُدّل الشيء نفسه على جهازين قبل أن يرى أحدهما تعديل الآخر. النسختان محفوظتان: اختر أيهما تبقى، والأخرى تذهب إلى السلة 30 يوماً. الأسرار لا تُحسم تلقائياً أبداً.</p>

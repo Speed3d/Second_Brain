@@ -47,6 +47,10 @@ export interface SyncIndex {
   lastBatch?: string;
   /** سجلات يجب إعادة نشرها في الدورة القادمة (تعديل محلي بقي أمام حذف من جهاز آخر، أو حسم تعارض) */
   pendingRepublish?: string[];
+  /** ISS-028: حذف جماعي اختفى من هذا الجهاز ولم يُنشر بانتظار تأكيد القائد */
+  heldDeletes?: { keys: string[]; detectedAt: string; reasonAr: string };
+  /** ISS-028: حذف أكّده القائد، يُنشر في الدورة القادمة دون حدّ الأمان */
+  confirmedDeletes?: string[];
   lastMergeAt?: string;
   lastPublishAt?: string;
   lastCompactionAt?: string;
@@ -271,3 +275,41 @@ export function countTrash(ctx: SyncContext): number {
   const dir = trashDir(ctx);
   return fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => n.endsWith('.enc.json')).length : 0;
 }
+
+// ===================== ISS-028: حذف جماعي قادم من جهاز آخر بانتظار التأكيد =====================
+
+/** حذف قادم معلّق */
+export interface HeldIncoming {
+  deviceName: string;
+  detectedAt: string;
+  reasonAr: string;
+  /** تغييرات الحذف كما وصلت (مفتاح، ومتجه، وختم) */
+  changes: Array<{ key: string; vv: VersionVector; hlc: string }>;
+}
+
+function heldIncomingPath(ctx: SyncContext): string {
+  return path.join(syncDataDir(ctx), 'held-incoming.enc.json');
+}
+
+export function readHeldIncoming(ctx: SyncContext, dataKey: Buffer): HeldIncoming[] {
+  const raw = readJsonFileSafe<{ sealed: SealedData } | null>(heldIncomingPath(ctx), null);
+  if (!raw) return [];
+  try {
+    return JSON.parse(openWithKey(raw.sealed, dataKey).toString('utf8')) as HeldIncoming[];
+  } catch {
+    return [];
+  }
+}
+
+export function writeHeldIncoming(ctx: SyncContext, dataKey: Buffer, held: HeldIncoming[]): void {
+  if (!held.length) {
+    removePathSync(heldIncomingPath(ctx));
+    return;
+  }
+  writeFileAtomic(heldIncomingPath(ctx), JSON.stringify({ sealed: sealWithKey(JSON.stringify(held), dataKey) }));
+}
+
+export function countHeldIncoming(ctx: SyncContext): boolean {
+  return fs.existsSync(heldIncomingPath(ctx));
+}
+
