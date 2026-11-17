@@ -232,7 +232,7 @@
     $('[data-action="sync-now"]').hidden = !s.ready;
 
     const devices = (s.devices || []).filter((d) => d.deviceId !== 'second-brain-2-multi-writer');
-    $('#syncDevicesCard').hidden = !devices.length;
+    showWhen($('#syncDevicesCard'), devices.length > 0);
     $('#syncDevicesList').replaceChildren(
       ...devices.map((d) =>
         el('li', {
@@ -267,7 +267,7 @@
     const card = $('#syncConflictsCard');
     if (!card) return;
     const count = s && s.ready ? s.conflicts || 0 : 0;
-    card.hidden = !count;
+    showWhen(card, count > 0);
     if (!count) return;
     let r;
     try {
@@ -317,7 +317,7 @@
     const card = $('#syncHeldCard');
     if (!card) return;
     const any = s && s.ready && ((s.heldOutgoing || 0) > 0 || s.heldIncoming);
-    card.hidden = !any;
+    showWhen(card, Boolean(any));
     if (!any) return;
     let r;
     try {
@@ -736,13 +736,23 @@
     }
   }
 
+  /**
+   * ISS-033: إظهار عنصر حسب شرط، مع حفظ الشرط حتى لا يُظهره renderVaultChrome لاحقاً بالخطأ.
+   */
+  function showWhen(node, shown) {
+    if (!node) return;
+    node.dataset.shownWhen = shown ? '1' : '0';
+    node.hidden = !shown || (node.hasAttribute('data-commander-only') && !isCommander());
+  }
+
   function renderVaultChrome() {
     const v = state.vault;
     $('#vaultSetup').hidden = v.exists;
     $('#vaultUnlock').hidden = !v.exists || v.unlocked;
     $('#vaultOpen').hidden = !v.unlocked;
     $('#vaultToolbar').hidden = !v.unlocked;
-    $$('[data-commander-only]').forEach((n) => (n.hidden = !isCommander()));
+    // ISS-033: عنصر له شرط ظهور خاص (data-shown-when) لا يُظهره القائد إن كان شرطه «0»
+    $$('[data-commander-only]').forEach((n) => (n.hidden = !isCommander() || n.dataset.shownWhen === '0'));
 
     const chip = $('#chipVault');
     chip.textContent = !v.exists ? 'غير مُنشأة' : v.unlocked ? 'مفتوحة' : 'مقفلة';
@@ -1594,7 +1604,7 @@
       text.textContent = status.reasonAr || 'لا يوجد صوت عربي على هذا الجهاز.';
     }
     const installBtn = $('[data-action="install-arabic-voice"]');
-    if (installBtn) installBtn.hidden = status.engine === 'piper' || status.fallbackEngine === 'piper' || status.engine === 'macos' || status.fallbackEngine === 'macos';
+    showWhen(installBtn, !(status.engine === 'piper' || status.fallbackEngine === 'piper' || status.engine === 'macos' || status.fallbackEngine === 'macos'));
   }
 
   async function loadProvidersGuide() {

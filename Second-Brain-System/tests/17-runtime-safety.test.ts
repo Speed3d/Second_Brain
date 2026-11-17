@@ -132,7 +132,14 @@ export async function runRuntimeSafetyTests(): Promise<string[]> {
   assert.match(appJs, /'restart-server': \(b\) => restartServer\(b\)/);
   assert.match(html, /id="syncHeldCard"/, 'بطاقة الحذف الجماعي المعلّق (ISS-028)');
   assert.match(appJs, /'\/api\/sync\/held\/resolve'/);
-  passed.push('اختبار إعادة التشغيل من الواجهة (المشغّلان يعيدان الخادم عند الرمز 75، والشريط والزر في الواجهة) بنجاح.');
+  // ISS-033: renderVaultChrome لا يُظهر بطاقة شرطها «0»، والبطاقات الشرطية تبدأ مخفية بشرط «0»
+  assert.match(appJs, /n\.hidden = !isCommander\(\) \|\| n\.dataset\.shownWhen === '0'/, 'renderVaultChrome يحترم شرط الظهور (ISS-033)');
+  for (const id of ['syncDevicesCard', 'syncHeldCard', 'syncConflictsCard']) {
+    assert.match(html, new RegExp(`data-shown-when="0" id="${id}"`), `${id} يبدأ بشرط ظهور «0» (ISS-033)`);
+    assert.ok(!appJs.includes("$('#" + id + "').hidden ="), `${id} لا يُضبط بـ hidden مباشرة (ISS-033)`);
+  }
+  assert.doesNotMatch(appJs, /\n {4}card\.hidden = /, 'بطاقات المزامنة الشرطية تمرّ بـ showWhen (ISS-033)');
+  passed.push('اختبار إعادة التشغيل من الواجهة (المشغّلان يعيدان الخادم عند الرمز 75، والشريط والزر في الواجهة، وبطاقات المزامنة الشرطية لا تظهر فارغة: ISS-033) بنجاح.');
 
   // ===================== ISS-028: حماية الحذف بين الأجهزة =====================
   const base = path.join(config.paths.rootDir, 'iss028-sim');
