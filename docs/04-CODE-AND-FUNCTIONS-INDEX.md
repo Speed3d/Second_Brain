@@ -1,8 +1,8 @@
 # 📑 الفهرس الحي الشامل للدوال والأكواد والأدوات (Live Code & Function Registry)
 
 > **تطبيقاً للقانون السابع (7):** يتم توليد وتحديث هذا الفهرس تلقائياً بواسطة الأداة `src/tools/code-registry-scanner.ts`.  
-> **تاريخ آخر فحص آلي:** `2026-11-17T15:06:56.700Z`  
-> **إجمالي الدوال المفحوصة:** `336` | **المستخدمة حالياً (Active):** `334` | **الجاهزة للتوسع المستقبلي:** `2`
+> **تاريخ آخر فحص آلي:** `2026-11-17T15:19:47.815Z`  
+> **إجمالي الدوال المفحوصة:** `337` | **المستخدمة حالياً (Active):** `335` | **الجاهزة للتوسع المستقبلي:** `2`
 
 ---
 
@@ -63,7 +63,8 @@
 | `matchSessionToProject` | **Features** | `src/features/ai-memory/transcript-harvester.ts#L66` | دالة إيجاد المشروع المراقب الذي تنتمي إليه الجلسة: من مجلد العمل (cwd) أولاً، ثم من ذكر مسار المشروع داخل نص المحادثة. يُختار المسار الأطول تطابقاً. | `src/features/ai-memory/transcript-harvester.ts (داخلي)`, `tests/07-integration.test.ts` | **مستخدم (Active)** |
 | `resolveArchivePath` | **Features** | `src/features/ai-memory/transcript-harvester.ts#L85` | دالة تحديد مسار ملف الأرشيف للجلسة داخل Obsidian. | `src/features/ai-memory/transcript-harvester.ts (داخلي)` | **مستخدم (Active)** |
 | `renderSessionMarkdown` | **Features** | `src/features/ai-memory/transcript-harvester.ts#L102` | دالة تحويل الجلسة إلى Markdown بعد حذف الأسرار. المخرجات: النص وعدد الأسرار المحذوفة. | `src/features/ai-memory/transcript-harvester.ts (داخلي)` | **مستخدم (Active)** |
-| `harvestLocalAITranscripts` | **Features** | `src/features/ai-memory/transcript-harvester.ts#L136` | دالة سحب وأرشفة المحادثات من كل الموصلات المفعّلة (تزايدياً). مع force = true تُعاد أرشفة كل الجلسات حتى غير المتغيرة. | `src/features/dashboard-app/routes/memory-routes.ts`, `src/features/project-indexer/project-watcher.ts`, `tests/03-ai-shared-memory.test.ts` | **مستخدم (Active)** |
+| `removeSupersededArchive` | **Features** | `src/features/ai-memory/transcript-harvester.ts#L139` | دالة حذف الأرشيف القديم لجلسة انتقلت إلى مكان جديد (ISS-029). لا تحذف إن كان المساران الملف نفسه: - متطابقان بعد توحيد يونيكود NFC (على الماك «همزة» مركّبة ومفكّكة اسمٌ واحد). - أو يشيران إلى الملف نفسه على القرص (المعرّف ino و dev)، كحالة الأحرف على نظام لا يميّزها. ولا تحذف إلا داخل مجلد Obsidian. المخرجات: true إن حُذف شيء. | `src/features/ai-memory/transcript-harvester.ts (داخلي)`, `tests/03-ai-shared-memory.test.ts` | **مستخدم (Active)** |
+| `harvestLocalAITranscripts` | **Features** | `src/features/ai-memory/transcript-harvester.ts#L161` | دالة سحب وأرشفة المحادثات من كل الموصلات المفعّلة (تزايدياً). مع force = true تُعاد أرشفة كل الجلسات حتى غير المتغيرة. | `src/features/dashboard-app/routes/memory-routes.ts`, `src/features/project-indexer/project-watcher.ts`, `tests/03-ai-shared-memory.test.ts` | **مستخدم (Active)** |
 | `readCommanderProfile` | **Features** | `src/features/assistant/assistant-engine.ts#L57` | دالة قراءة ملف هوية القائد من Obsidian (مع حد أقصى للطول). | `src/features/assistant/assistant-engine.ts (داخلي)` | **مستخدم (Active)** |
 | `buildAssistantSystemPrompt` | **Features** | `src/features/assistant/assistant-engine.ts#L69` | دالة بناء تعليمات النظام (System Prompt) للمساعد حسب الوضع، مع تنقية أي سر قد يظهر فيها. | `src/features/assistant/assistant-engine.ts (داخلي)` | **مستخدم (Active)** |
 | `sanitizeHistory` | **Features** | `src/features/assistant/assistant-engine.ts#L131` | دالة تنظيف سجل المحادثة القادم من الواجهة (أدوار صحيحة، حدود للطول والعدد، وتنقية الأسرار). | `src/features/assistant/assistant-engine.ts (داخلي)` | **مستخدم (Active)** |

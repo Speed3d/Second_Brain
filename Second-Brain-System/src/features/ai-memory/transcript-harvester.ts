@@ -130,6 +130,31 @@ export function renderSessionMarkdown(
 }
 
 /**
+ * Hint بالعربي: دالة حذف الأرشيف القديم لجلسة انتقلت إلى مكان جديد (ISS-029).
+ *               لا تحذف إن كان المساران الملف نفسه:
+ *               - متطابقان بعد توحيد يونيكود NFC (على الماك «همزة» مركّبة ومفكّكة اسمٌ واحد).
+ *               - أو يشيران إلى الملف نفسه على القرص (المعرّف ino و dev)، كحالة الأحرف على نظام لا يميّزها.
+ *               ولا تحذف إلا داخل مجلد Obsidian. المخرجات: true إن حُذف شيء.
+ */
+export function removeSupersededArchive(previousOutFile: string, outFile: string, obsidianRoot: string): boolean {
+  const old = path.resolve(previousOutFile);
+  const current = path.resolve(outFile);
+  if (old.normalize('NFC') === current.normalize('NFC')) return false;
+  if (!old.startsWith(path.resolve(obsidianRoot) + path.sep) || !fs.existsSync(old)) return false;
+  try {
+    if (fs.existsSync(current)) {
+      const a = fs.statSync(old, { bigint: true });
+      const b = fs.statSync(current, { bigint: true });
+      if (a.ino === b.ino && a.dev === b.dev) return false;
+    }
+  } catch {
+    return false; // لا نحذف ما لم نتأكد أنه ملف آخر
+  }
+  fs.unlinkSync(old);
+  return true;
+}
+
+/**
  * Hint بالعربي: دالة سحب وأرشفة المحادثات من كل الموصلات المفعّلة (تزايدياً).
  *               مع force = true تُعاد أرشفة كل الجلسات حتى غير المتغيرة.
  */
@@ -158,10 +183,8 @@ export function harvestLocalAITranscripts(options: { force?: boolean } = {}): Ha
         writeTextFileSafe(outFile, markdown);
 
         // إذا انتقلت الجلسة لمكان جديد (مثلاً بعد إضافة مشروعها) نحذف أرشيفها القديم الذي أنشأناه نحن
-        if (previous?.outFile && path.resolve(previous.outFile) !== path.resolve(outFile)) {
-          const old = path.resolve(previous.outFile);
-          if (old.startsWith(obsidianRoot + path.sep) && fs.existsSync(old)) fs.unlinkSync(old);
-        }
+        // ISS-029: لا يُحذف أبداً إن كان هو الملف الذي كُتب للتو (اختلاف بصيغة يونيكود أو بحالة الأحرف فقط)
+        if (previous?.outFile) removeSupersededArchive(previous.outFile, outFile, obsidianRoot);
 
         state.sessions[key] = { modifiedMs: ref.modifiedMs, sizeBytes: ref.sizeBytes, outFile, archivedAt: formatTimestampIso() };
         result.archivedFiles.push(outFile);

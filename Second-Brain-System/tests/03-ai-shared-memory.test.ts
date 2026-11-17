@@ -13,7 +13,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { loadSystemConfig } from '../src/core/config-manager.ts';
 import { querySharedAIMemory, recordSharedAIMemory } from '../src/features/ai-memory/shared-memory-service.ts';
-import { harvestLocalAITranscripts } from '../src/features/ai-memory/transcript-harvester.ts';
+import { harvestLocalAITranscripts, removeSupersededArchive } from '../src/features/ai-memory/transcript-harvester.ts';
 import { FAKE_SECRETS } from './test-environment.ts';
 
 /**
@@ -70,6 +70,40 @@ export async function runAISharedMemoryTests(): Promise<string[]> {
   assert.equal(second.antigravityCount + second.claudeCodeCount, 0);
   assert.equal(second.skippedUnchanged, 2);
   passedChecks.push('اختبار السحب التزايدي (لا تُعاد أرشفة الجلسات غير المتغيرة) بنجاح.');
+
+  // 4. ISS-029: الأرشيف القديم لا يُحذف إن كان هو الملف الذي كُتب للتو
+  const obsRoot = loadSystemConfig().paths.obsidianVaultDir;
+  const dir = path.join(obsRoot, '02-Projects', 'iss029-مشروع', 'AI-Conversations');
+  fs.mkdirSync(dir, { recursive: true });
+  const nfcName = path.join(dir, 'جلسة-أسئلة.md'.normalize('NFC'));
+  fs.writeFileSync(nfcName, 'أرشيف جديد');
+  // (أ) المسار القديم نفسه بصيغة NFD (على الماك هو الملف نفسه)
+  // على Windows الاسمان ملفان مختلفان، فنكتب الاسم المفكّك أيضاً: الحذف عند الالتباس ممنوع على كل نظام
+  const nfdName = nfcName.normalize('NFD');
+  if (nfdName !== nfcName && !fs.existsSync(nfdName)) fs.writeFileSync(nfdName, 'الاسم المفكّك');
+  assert.equal(removeSupersededArchive(nfdName, nfcName, obsRoot), false, 'صيغة يونيكود أخرى للمسار نفسه لا تُحذف');
+  assert.ok(fs.existsSync(nfcName), 'الملف الذي كُتب للتو باقٍ');
+  assert.ok(fs.existsSync(nfdName), 'ولا يُحذف الاسم المفكّك (على الماك هو الملف نفسه)');
+  // (ب) اسم آخر يشير إلى الملف نفسه على القرص (رابط صلب، كحالة الأحرف على نظام لا يميّزها)
+  const sameFile = path.join(dir, 'اسم-آخر-للملف-نفسه.md');
+  fs.linkSync(nfcName, sameFile);
+  assert.equal(removeSupersededArchive(sameFile, nfcName, obsRoot), false, 'الملف نفسه باسم آخر لا يُحذف');
+  assert.equal(fs.readFileSync(nfcName, 'utf8'), 'أرشيف جديد');
+  assert.ok(fs.existsSync(sameFile), 'ولا يُحذف أي اسم من أسمائه');
+  fs.unlinkSync(sameFile);
+  // (ج) أرشيف قديم حقيقي في مكان آخر: يُحذف. (د) خارج Obsidian: لا يُحذف أبداً
+  const oldArchive = path.join(obsRoot, '03-AI-Shared-Memory', 'iss029-قديم.md');
+  fs.mkdirSync(path.dirname(oldArchive), { recursive: true });
+  fs.writeFileSync(oldArchive, 'أرشيف قديم');
+  assert.equal(removeSupersededArchive(oldArchive, nfcName, obsRoot), true, 'الأرشيف القديم الحقيقي يُحذف');
+  assert.ok(!fs.existsSync(oldArchive));
+  const outside = path.join(path.dirname(obsRoot), 'iss029-خارج-obsidian.md');
+  fs.writeFileSync(outside, 'لا يُلمس');
+  assert.equal(removeSupersededArchive(outside, nfcName, obsRoot), false, 'لا حذف خارج مجلد Obsidian');
+  assert.ok(fs.existsSync(outside));
+  fs.unlinkSync(outside);
+  fs.rmSync(path.join(obsRoot, '02-Projects', 'iss029-مشروع'), { recursive: true, force: true });
+  passedChecks.push('اختبار حذف الأرشيف القديم بأمان (ISS-029: لا يُحذف الملف الذي كُتب للتو بصيغة يونيكود أخرى أو باسم آخر له، ويُحذف القديم الحقيقي، ولا حذف خارج Obsidian) بنجاح.');
 
   return passedChecks;
 }
