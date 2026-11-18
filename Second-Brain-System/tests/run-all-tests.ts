@@ -33,6 +33,7 @@ import { runFamilyVaultTests } from './18-family-vault.test.ts';
 import { runFamilyPortalTests } from './19-family-portal.test.ts';
 import { runPasskeyProbeTests } from './20-passkey-probe.test.ts';
 import { runPasskeysTests } from './21-passkeys.test.ts';
+import { runQrCodeTests } from './22-qr-code.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -148,6 +149,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '21. اختبارات الدخول بالبصمة أو رمز الجهاز (Passkeys بامتداد PRF: CBOR، والتسجيل والفتح بمصادق برمجي ES256 و RS256، والرفض، والإبطال، والعزل، والمسارات)',
       file: 'tests/21-passkeys.test.ts',
       runner: runPasskeysTests,
+    },
+    {
+      name: '22. اختبارات مولّد باركود QR (متجهات المعيار، والسعة الرسمية، والقارئ العكسي لكل الإصدارات والأقنعة، والكتيب)',
+      file: 'tests/22-qr-code.test.ts',
+      runner: runQrCodeTests,
     },
   ];
 

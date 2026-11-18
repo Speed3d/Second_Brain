@@ -616,6 +616,7 @@
           <label>مفتاح الطوارئ<input name="key" dir="ltr" autocomplete="off" placeholder="SB-XXXX-XXXX-…" /></label>
           <div class="form-actions">
             <button type="submit" class="btn btn-family btn-lg">🔓 فتح الحسابات</button>
+            <button type="button" class="btn btn-ghost btn-lg" data-action="scan-key" hidden>📷 امسحي الباركود</button>
             <button type="button" class="btn btn-ghost btn-lg" data-action="lock">🔒 قفل</button>
           </div>
         </form>
@@ -717,6 +718,16 @@
         <button type="button" class="btn btn-ghost" data-action="close-dialog">إلغاء</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- نافذة مسح باركود مفتاح الطوارئ بالكاميرا (3.4.0) -->
+  <dialog id="scanDialog" aria-labelledby="scanDialogTitle">
+    <div class="stack">
+      <h2 id="scanDialogTitle">📷 وجّهي الكاميرا إلى باركود المفتاح</h2>
+      <video id="scanVideo" class="scan-video" muted playsinline></video>
+      <p class="small muted">الباركود مطبوع بجانب المفتاح في كتيب الطوارئ. الصورة لا تُحفظ ولا تُرسل إلى أي مكان.</p>
+      <div class="form-actions"><button type="button" class="btn btn-ghost" data-action="close-dialog">إغلاق</button></div>
+    </div>
   </dialog>
 
   <!-- نافذة عنصر في بوابة العائلة (3.1.0) -->

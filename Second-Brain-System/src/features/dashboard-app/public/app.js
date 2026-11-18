@@ -1073,6 +1073,65 @@
     });
   }
 
+  /**
+   * 3.4.0: مسح باركود مفتاح الطوارئ بالكاميرا (BarcodeDetector في المتصفح: Chrome على الماك و Android).
+   *        الصورة تبقى في الذاكرة ولا تُرسل، والكاميرا تُغلق فور القراءة أو الإغلاق.
+   */
+  async function setupKeyScanner() {
+    const btns = $$('[data-action="scan-key"]');
+    if (!btns.length) return;
+    let ok = false;
+    try {
+      ok = 'BarcodeDetector' in window && Boolean(navigator.mediaDevices) && (await window.BarcodeDetector.getSupportedFormats()).indexOf('qr_code') >= 0;
+    } catch (e) {
+      ok = false;
+    }
+    btns.forEach((b) => (b.hidden = !ok));
+  }
+
+  async function scanKeyIntoForm(btn) {
+    const input = btn.closest('form').elements.key;
+    const dialog = $('#scanDialog');
+    const video = $('#scanVideo');
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    } catch (e) {
+      toast('تعذّر فتح الكاميرا. اكتبي المفتاح بيدكِ.', 'error');
+      return;
+    }
+    let done = false;
+    const stop = () => {
+      done = true;
+      stream.getTracks().forEach((t) => t.stop());
+      video.srcObject = null;
+      if (dialog.open) dialog.close();
+    };
+    dialog.addEventListener('close', stop, { once: true });
+    video.srcObject = stream;
+    dialog.showModal();
+    try {
+      await video.play();
+    } catch (e) {
+      /* يبدأ التشغيل وحده */
+    }
+    const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+    while (!done) {
+      try {
+        const found = (await detector.detect(video)).map((c) => String(c.rawValue || '').trim()).find((v) => /^SB-[0-9A-F-]{20,}$/i.test(v));
+        if (found) {
+          input.value = found;
+          stop();
+          toast('📷 قُرئ المفتاح. اضغطي «فتح الحسابات».', 'ok');
+          return;
+        }
+      } catch (e) {
+        /* إطار غير جاهز بعد */
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+
   function openPortalDialog(category, item) {
     const dialog = $('#portalDialog');
     const form = $('[data-form="portal-item"]');
@@ -2373,6 +2432,7 @@
     'portal-new': (b) => openPortalDialog(b.dataset.category),
     'passkey-probe': (b) => runPasskeyProbe(b),
     'passkey-unlock': (b) => passkeyUnlock(b),
+    'scan-key': (b) => scanKeyIntoForm(b),
     'open-conversations': (b) => openConversations(b.dataset.mode),
     'sync-refresh': () => loadSync(),
     'sync-now': (b) => syncAction(b, '/api/sync/now'),
@@ -2614,6 +2674,7 @@
       }
     }, 60000);
     setInterval(updateAutoLockBadge, 15000);
+    setupKeyScanner();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

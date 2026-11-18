@@ -13,6 +13,7 @@ import { escapeHtml } from '../../shared/html-helpers.ts';
 import { loadSystemConfig } from '../../core/config-manager.ts';
 import { normalizeEmergencyKey } from '../../core/crypto-engine.ts';
 import { logSystemInfo } from '../../core/logger.ts';
+import { generateQr, qrToSvg } from '../../shared/qr-code.ts';
 
 /**
  * Hint بالعربي: دالة توليد صفحة HTML لكتيب الطوارئ العائلي (تُطبع أو تُحفظ PDF من المتصفح).
@@ -63,6 +64,9 @@ export function generatePrintableEmergencyKit(
     th { background: #e0f2fe; color: #0369a1; }
     .warning { background: #fff1f2; border-right: 4px solid #e11d48; padding: 14px; border-radius: 8px; margin-top: 20px; }
     .print-btn { background: #0284c7; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 15px; float: left; }
+    .qr-box { display: flex; align-items: center; gap: 20px; justify-content: center; margin: 8px 0 20px; }
+    .qr-box svg { width: 180px; height: 180px; border: 1px solid #cbd5e1; border-radius: 8px; }
+    .qr-box p { max-width: 360px; margin: 0; font-size: 14px; color: #334155; }
     @media print { body { background: #fff; padding: 0; } .no-print { display: none; } .card { border: none; } }
   </style>
 </head>
@@ -78,6 +82,7 @@ export function generatePrintableEmergencyKit(
     <h2>🔑 مفتاح الطوارئ لفتح الخزنة</h2>
     <p>هذا المفتاح يفتح <strong>الخزنة العائلية</strong> في <strong>${escapeHtml(config.appName)}</strong>: الحسابات وكلمات المرور التي اخترتها لكِ، وأدلة العائلة، ومحادثات العائلة. اكتبيه كما هو (الحروف الصغيرة والمسافات مقبولة):</p>
     <div class="key-box">${escapeHtml(key)}</div>
+    <div class="qr-box">${qrToSvg(generateQr(key), { moduleSize: 6, title: 'باركود مفتاح الطوارئ' })}<p>📷 <strong>باركود المفتاح نفسه:</strong> بدل كتابة المفتاح حرفاً حرفاً، اضغطي «📷 امسحي الباركود» في «وضع العائلة» ووجّهي الكاميرا إليه. أو امسحيه بكاميرا الهاتف لتري المفتاح مكتوباً. احفظيه كما تحفظين المفتاح تماماً: من يملكه يفتح الخزنة العائلية.</p></div>
 
     <h2>🧭 الدخول على نفس الجهاز</h2>
     <ol>
