@@ -338,10 +338,11 @@
 > **التسليم الكامل وسجل النتائج:** [`docs/15`](15-PASSKEYS-MEASUREMENT-HANDOFF.md).
 >
 > **قائمة القياس (القائد):**
-> - [ ] Windows 10، Chrome، «🖥️ قِس هذا الجهاز» (Windows Hello).
-> - [ ] Windows 10، Chrome، «📱 قِس بالهاتف» (الهاتف عبر الباركود).
+> - [x] Windows 10، Chrome، «🖥️ قِس هذا الجهاز»: **Windows Hello ← keystore**، و **Google Password Manager ← prf** (Chrome 149، Windows 10 22H2 بناء 19045.6466، 3.2.2). اللابتوب بلا بصمة ولا كاميرا، والتحقق برقم PIN Windows.
+> - [x] Windows 10، Chrome، «📱 قِس بالهاتف»: ⚠️ **keystore** (3.2.2).
 > - [x] الماك، Chrome، «🖥️ قِس هذا الجهاز» (Touch ID): ✅ **prf** (Chrome 157). و Safari 26.6.2: ✅ **prf**. والهاتف من Chrome على الماك: ⚠️ keystore (3.2.1).
-> - [ ] تسجيل النتيجة (prf أو keystore أو unsupported) لكل سطر هنا.
+> - [x] تسجيل النتيجة لكل سطر (هنا، وفي `docs/15` القسم 7).
+> - [ ] **قرار التصميم مع القائد** (`docs/15` القسم 8): PRF عبر Touch ID على الماك، وعبر Google Password Manager على Windows (Passkey مُزامَن بحساب Google، يُناقَش أثره). و Windows Hello بلا PRF.
 **الهدف:** الوجه أو البصمة يفتح الخزنة يومياً.
 
 **الطريقة الأولى: PRF**

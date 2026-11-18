@@ -11,6 +11,18 @@
 
 ---
 
+## [3.2.2] — 2026-11-18 — قياس Passkeys على Windows (توثيق فقط)
+### تحقّق
+- **Windows 10 Pro 22H2 (19045.6466)، Chrome 149:**
+  - «هذا الجهاز» ← **Windows Hello:** ⚠️ **keystore** (UV برقم PIN Windows، بلا PRF).
+  - «هذا الجهاز» ← **Google Password Manager:** ✅ **prf** (32 بايت ثابتة في المرتين).
+  - «الهاتف»: ⚠️ **keystore**.
+  - اللابتوب (ASUS) بلا بصمة ولا كاميرا، فالتحقق برقم PIN Windows في كل مرة.
+- **القياس مكتمل على الجهازين:** PRF متاح بـ Touch ID على الماك (Chrome و Safari)، وبـ Google Password Manager على Windows. Windows Hello على Windows 10 والهاتف بلا PRF.
+- **ملاحظة للتصميم:** Passkey مدير كلمات مرور Google مُزامَن بحساب Google، وهو حساب Drive نفسه الذي يحمل النسخ. يُعرض أثره على القائد قبل القرار.
+- **السجل:** `docs/15` القسم 7، و `docs/12` القسم 2.2.
+- **لا تغيير في الكود، ولا أعطال جديدة.**
+
 ## [3.2.1] — 2026-11-18 — قياس Passkeys على الماك (توثيق فقط)
 ### تحقّق (3.2.0) على الماك
 - **macOS 26.6.2، MacBook-M5، Touch ID، على `http://localhost:4777`:**

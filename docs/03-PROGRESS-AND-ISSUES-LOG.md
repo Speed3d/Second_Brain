@@ -704,3 +704,15 @@
 * **localhost على الماك:** يحاول `::1` فيُرفض فوراً ثم يتصل على IPv4. لا تأخير، فلا خلل جديد.
 * **السجل:** [`docs/15`](15-PASSKEYS-MEASUREMENT-HANDOFF.md) القسم 7، الأسطر 1 و 2 و 5.
 * **التالي:** القياس على Windows 10 (Windows Hello، والهاتف)، ثم القرار في القسم 8 من `docs/15` مع القائد.
+
+### [تحديث #50] — الإصدار 3.2.2: قياس Passkeys على Windows (`2026-11-18`)
+* **توثيق فقط.** قرأ Claude على Windows التقريرين من `data/passkey-probe/`.
+* **Windows 10 Pro 22H2 (19045.6466)، Chrome 149** (أعاد القائد القياس باختيار المخزن صراحةً):
+  * **Windows Hello:** ⚠️ keystore (بلا PRF).
+  * **Google Password Manager:** ✅ prf.
+  * **الهاتف:** ⚠️ keystore.
+  * اللابتوب بلا بصمة ولا كاميرا، والتحقق برقم PIN Windows.
+* **الخلاصة:** القياس مكتمل. PRF بـ Touch ID على الماك، وبـ Google Password Manager على Windows.
+* **للتصميم:** Passkey مدير Google مُزامَن بحساب Google نفسه الذي يحمل Drive.
+* **التالي:** قرار تصميم 2.2 مع القائد (`docs/15` القسم 8).
+

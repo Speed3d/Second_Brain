@@ -22,7 +22,7 @@
 | المرحلة 1 (المزامنة متعددة الكتابة) | ✅ مكتملة ومتحقق منها على الجهازين |
 | المرحلة 2.1 (الخزنة العائلية v3) | ✅ 3.0.0، والتحقق على الجهازين ✅ |
 | المرحلة 2.1 (بوابة العائلة) | ✅ 3.1.0، والتحقق على الجهازين ✅ (جهة اتصال أُضيفت فظهرت على الجهازين) |
-| **المرحلة 2.2 (Passkeys)** | 🔄 **أداة القياس جاهزة (3.2.0). الماك ✅ مقيس (3.2.1): prf في Chrome و Safari. المتبقي: Windows** |
+| **المرحلة 2.2 (Passkeys)** | 🔄 **القياس مكتمل على الجهازين** (3.2.1 و 3.2.2): Touch ID على الماك **prf**، و **Google Password Manager** على Windows **prf**، أما **Windows Hello** على Windows 10 فـ **keystore**. **المتبقي: قرار التصميم مع القائد** (القسم 8) |
 | الاختبارات | **128/128** في 20 حزمة (`node tests/run-all-tests.ts`) |
 
 **الأجهزة:**
@@ -166,8 +166,10 @@ cat "Second-Brain-System/data/passkey-probe/"$(ls -1 Second-Brain-System/data/pa
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | 1 | الماك (macOS 26.6.2، MacBook-M5) | Chrome 157 | هذا الجهاز | ✅ **prf** | نعم / نعم / نعم / 32 | نعم | لا يوجد | `attachment=platform`، `platform=macOS`. Touch ID. 2026-11-18 14:58Z |
 | 2 | الماك (macOS 26.6.2، MacBook-M5) | Safari 26.6.2 | هذا الجهاز | ✅ **prf** | نعم / نعم / نعم / 32 | نعم | لا يوجد | `attachment=platform`، `platform=MacIntel`. Touch ID. 2026-11-18 14:59Z |
-| 3 | Windows 10 | Chrome | هذا الجهاز | ⏳ | | | | |
-| 4 | Windows 10 | Chrome | الهاتف | ⏳ | | | | |
+| 3 | Windows 10 Pro 22H2 (19045.6466)، DESKTOP-PBQB96B | Chrome 149 | هذا الجهاز (المخزن لم يُسجَّل، والأرجح Google Password Manager، انظر السطرين 6 و 7) | ✅ **prf** | نعم / نعم / نعم / 32 | نعم | لا يوجد | `attachment=platform`، و `clientPrfCapability=true`. 2026-11-18 15:07Z |
+| 4 | Windows 10 Pro 22H2 | Chrome 149 | الهاتف | ⚠️ **keystore** | لا / لا / لا / 0 | نعم | لا يوجد | `attachment=cross-platform`. أُنشئ وتحقق من المستخدم، بلا PRF. 2026-11-18 15:07Z |
+| 6 | Windows 10 Pro 22H2 | Chrome 149 | هذا الجهاز ← **Windows Hello** (اختيار القائد صراحةً) | ⚠️ **keystore** | لا / لا / لا / 0 | نعم (PIN Windows) | لا يوجد | `attachment=platform`. 2026-11-18 15:18Z |
+| 7 | Windows 10 Pro 22H2 | Chrome 149 | هذا الجهاز ← **Google Password Manager** (اختيار القائد صراحةً) | ✅ **prf** | نعم / نعم / نعم / 32 | نعم (PIN Windows) | لا يوجد | `attachment=platform`. 2026-11-18 15:19Z |
 | 5 | الماك (macOS 26.6.2) | Chrome 157 | الهاتف (اختياري) | ⚠️ **keystore** | لا / لا / لا / 0 | نعم | لا يوجد | `attachment=cross-platform`. الـ Passkey أُنشئ وتحقق من المستخدم، لكن بلا PRF. 2026-11-18 15:01Z |
 
 **ملاحظات الماك (3.2.1):**
@@ -176,6 +178,20 @@ cat "Second-Brain-System/data/passkey-probe/"$(ls -1 Second-Brain-System/data/pa
 - `userAgent` في المتصفحين يذكر `Mac OS X 10_15_7`، وهذه قيمة ثابتة مجمّدة في المتصفحات، لا إصدار النظام الحقيقي (26.6.2 من `sw_vers`).
 - **نوع الـ Passkey** الذي اقترحته نافذة النظام (iCloud Keychain أو ملف Chrome) ونوع الهاتف في السطر 5: لم يُحدَّدا بعد، ويضيفهما القائد.
 - **الخلاصة للماك:** Touch ID يدعم PRF في المتصفحين، فالطريقة الأولى ممكنة على الماك. الهاتف عبر Chrome على الماك أعطى keystore.
+
+**ملاحظات Windows (3.2.2، قرأها Claude على Windows من `data/passkey-probe/`):**
+- النظام: Windows 10 Pro 22H2، البناء 19045.6466. والتوقع في القسم 6 كان أن PRF غير مضمون هنا، **لكنه نجح**.
+- **أُجيب سؤال النافذة (إعادة القياس، 15:18Z و 15:19Z):** Chrome يعرض خيارين للحفظ: «مدير كلمات المرور في Google» و «Windows Hello».
+  - **Windows Hello ← keystore** (بلا PRF على Windows 10).
+  - **Google Password Manager ← prf.**
+  - في الحالتين طلب Windows **رقم PIN الحاسوب** في كل مرة («Windows Security — Making sure it's you»).
+- **عتاد اللابتوب (ASUS):** بلا قارئ بصمة وبلا كاميرا Windows Hello. التحقق منك هنا = **PIN Windows**، لا وجه ولا بصمة.
+- **أثر مهم على التصميم:** Passkey مدير كلمات مرور Google **مُزامَن بحساب Google**. ونسخ الخزنة ومجلد المزامنة على Google Drive للحساب نفسه. فمن يملك حساب Google ورقم PIN مدير كلمات المرور على جهاز جديد يملك العاملين معاً. هذا يُعرض على القائد في القسم 8 قبل أي قرار.
+- الهاتف أعطى keystore على الجهازين (السطران 4 و 5)، فالسبب في الهاتف أو مدير كلمات المرور فيه، لا في الجهاز.
+
+**الخلاصة الكلية:**
+- **PRF متاح:** Touch ID على الماك (Chrome و Safari)، و Google Password Manager على Windows.
+- **بلا PRF:** Windows Hello على Windows 10، والهاتف عبر الباركود. يعمل الاثنان مع UV، فيصلحان للطريقة الثانية (مخزن مفاتيح النظام) فقط.
 
 **بعد ملء أي سطر:**
 - **في `docs/12`، القسم 2.2:** علّم سطر القياس المقابل بـ `[x]`، واكتب النتيجة.
