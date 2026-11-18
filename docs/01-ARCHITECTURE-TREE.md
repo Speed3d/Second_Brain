@@ -84,6 +84,7 @@
     │   │   │   └── 📁 connectors\              # claude-code-connector.ts، antigravity-connector.ts، connector-types.ts
     │   │   ├── 📁 assistant\
     │   │   │   ├── 📄 assistant-engine.ts      # بناء السياق (بلا محتوى الخزنة) ووضعا القائد والعائلة + خلاصة المشروع
+    │   │   │   ├── 📄 untrusted-content.ts     # الحماية من التعليمات المدسوسة: وسم البيانات غير الموثوقة والتنقية
     │   │   │   ├── 📄 provider-tester.ts       # زر اختبار الاتصال لكل مزوّد مع سبب الفشل والحل المقترح
     │   │   │   └── 📁 providers\               # claude-cli (Claude عبر الاشتراك) / claude / gemini / ollama / local + provider-registry (التراجع) + stream-parsers
     │   │   ├── 📁 auth\
@@ -160,7 +161,8 @@
         ├── 📄 20-passkey-probe.test.ts         # قياس Passkeys: التصنيف، والتقرير بلا أسرار، والمسارات، والمشغّلات على localhost
         ├── 📄 21-passkeys.test.ts              # الدخول بالـ Passkeys: مصادق برمجي حقيقي، والرفض في 11 حالة، والإبطال، والعزل، والمسارات
         ├── 📄 22-qr-code.test.ts               # مولّد QR: متجهات المعيار، والسعة الرسمية، وقارئ عكسي مستقل، والكتيب
-        └── 📄 23-two-factor.test.ts            # المصادقة الثنائية: متجهات RFC، والحالة، والرموز الاحتياطية، وبوابة الفتح بكلمة المرور
+        ├── 📄 23-two-factor.test.ts            # المصادقة الثنائية: متجهات RFC، والحالة، والرموز الاحتياطية، وبوابة الفتح بكلمة المرور
+        └── 📄 24-prompt-injection.test.ts      # التعليمات المدسوسة: التنقية، والوسوم في كل الأوضاع، والعزل بلا أدوات
 ```
 
 ---
