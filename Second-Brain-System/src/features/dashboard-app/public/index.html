@@ -376,6 +376,19 @@
           </div>
           <div class="card-grid" id="secretsList"></div>
 
+          <div class="card" data-commander-only id="passkeyProbeCard">
+            <h2>🧪 قياس دعم البصمة والوجه (Passkeys)</h2>
+            <p class="small muted">قبل أن تفتح البصمة أو الوجه الخزنة، نقيس ما يدعمه هذا الجهاز وهذا المتصفح. القياس يُنشئ Passkey تجريبياً باسم «Second Brain — قياس»، ثم يطلب التحقق منك مرتين. لا يُفتح شيء ولا يُحفظ أي سر، ويُحفظ التقرير على هذا الجهاز فقط.</p>
+            <p class="small warn-text" id="probeHostWarn" hidden></p>
+            <div class="form-actions">
+              <button type="button" class="btn btn-primary" data-action="passkey-probe" data-attachment="platform">🖥️ قِس هذا الجهاز (Windows Hello أو Touch ID)</button>
+              <button type="button" class="btn btn-ghost" data-action="passkey-probe" data-attachment="cross-platform">📱 قِس بالهاتف أو مفتاح أمان</button>
+            </div>
+            <div class="report" id="probeReport" hidden></div>
+            <div class="list compact" id="probeReports"></div>
+            <p class="small muted">بعد القياس يمكنك حذف الـ Passkey التجريبي: في Windows من «الإعدادات ← الحسابات ← مفاتيح المرور»، وعلى الماك من «كلمات السر».</p>
+          </div>
+
           <details class="card" data-commander-only>
             <summary>🤖 مفاتيح API (متقدم — فوترة منفصلة)</summary>
             <form data-form="ai-key" class="form-grid">

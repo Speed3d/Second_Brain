@@ -740,6 +740,7 @@
     }
     await loadFamilyVault();
     await loadPortal();
+    await loadProbeReports();
   }
 
   /**
@@ -808,6 +809,157 @@
         : [el('p', { className: 'muted small', text: 'لا فواتير مسجلة.' })])
     );
     $('#familyLog').replaceChildren(...p.log.slice(0, 50).map(logRow));
+  }
+
+  /**
+   * 3.2.0: قياس دعم Passkeys وامتداد PRF في هذا المتصفح. يُرسل إلى الخادم الخلاصة فقط، لا ناتج PRF.
+   */
+  function probeHostOk() {
+    return location.hostname === 'localhost';
+  }
+
+  function renderProbeHost() {
+    const warn = $('#probeHostWarn');
+    if (!warn) return;
+    const ok = probeHostOk();
+    warn.hidden = ok;
+    $$('[data-action="passkey-probe"]').forEach((b) => (b.disabled = !ok));
+    if (!ok) {
+      const url = 'http://localhost:' + location.port + '/';
+      warn.replaceChildren(el('span', { text: '⚠️ Passkeys لا تعمل على العنوان ' + location.host + '. افتح البرنامج على ' }), safeLink(url), el('span', { text: ' (ستحتاج فتح الخزنة مرة أخرى هناك).' }));
+    }
+  }
+
+  async function loadProbeReports() {
+    const box = $('#probeReports');
+    if (!box || !isCommander()) return;
+    renderProbeHost();
+    let r;
+    try {
+      r = await api('/api/passkeys/probe/reports');
+    } catch (e) {
+      return;
+    }
+    box.replaceChildren(
+      ...r.reports.slice(0, 10).map((p) =>
+        el('div', {
+          className: 'list-item small',
+          children: [
+            el('strong', { text: p.verdictAr }),
+            el('p', { className: 'muted', text: formatDateAr(p.at) + ' · ' + p.deviceName + ' · ' + (p.requested === 'platform' ? 'مصادق الجهاز' : 'هاتف أو مفتاح أمان') + (p.attachment ? ' (' + p.attachment + ')' : '') + ' · ' + p.platform }),
+          ],
+        })
+      )
+    );
+  }
+
+  function randomBytes(n) {
+    const b = new Uint8Array(n);
+    crypto.getRandomValues(b);
+    return b;
+  }
+
+  async function runPasskeyProbe(btn) {
+    if (!probeHostOk()) return renderProbeHost();
+    const requested = btn.dataset.attachment === 'cross-platform' ? 'cross-platform' : 'platform';
+    const r = {
+      requested: requested,
+      userAgent: navigator.userAgent,
+      platform: (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '',
+      origin: location.origin,
+      webauthn: Boolean(window.PublicKeyCredential && navigator.credentials),
+      platformAuthenticator: null,
+      clientPrfCapability: null,
+      created: false,
+      attachment: null,
+      createPrfEnabled: null,
+      getPrfReturned: false,
+      prfLength: 0,
+      prfStable: false,
+      userVerified: false,
+      errorName: null,
+      errorStep: null,
+    };
+    let step = 'capabilities';
+    await busy(btn, async () => {
+      try {
+        if (r.webauthn) {
+          r.platformAuthenticator = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+          if (typeof PublicKeyCredential.getClientCapabilities === 'function') {
+            const caps = await PublicKeyCredential.getClientCapabilities();
+            if (caps && Object.prototype.hasOwnProperty.call(caps, 'extension:prf')) r.clientPrfCapability = caps['extension:prf'] === true;
+          }
+          const salt = randomBytes(32);
+          step = 'create';
+          const cred = await navigator.credentials.create({
+            publicKey: {
+              rp: { name: 'Second Brain', id: location.hostname },
+              user: { id: randomBytes(16), name: 'second-brain-probe', displayName: 'Second Brain — قياس' },
+              challenge: randomBytes(32),
+              pubKeyCredParams: [
+                { type: 'public-key', alg: -7 },
+                { type: 'public-key', alg: -257 },
+              ],
+              authenticatorSelection: { authenticatorAttachment: requested, residentKey: 'preferred', userVerification: 'required' },
+              timeout: 120000,
+              extensions: { prf: { eval: { first: salt } } },
+            },
+          });
+          r.created = true;
+          r.attachment = cred.authenticatorAttachment || null;
+          const ce = cred.getClientExtensionResults() || {};
+          r.createPrfEnabled = ce.prf && typeof ce.prf.enabled === 'boolean' ? ce.prf.enabled : null;
+          const assert = async () => {
+            const a = await navigator.credentials.get({
+              publicKey: {
+                challenge: randomBytes(32),
+                rpId: location.hostname,
+                allowCredentials: [{ type: 'public-key', id: cred.rawId }],
+                userVerification: 'required',
+                timeout: 120000,
+                extensions: { prf: { eval: { first: salt } } },
+              },
+            });
+            const e = a.getClientExtensionResults() || {};
+            const flags = new Uint8Array(a.response.authenticatorData)[32];
+            return { prf: e.prf && e.prf.results && e.prf.results.first ? new Uint8Array(e.prf.results.first) : null, uv: Boolean(flags & 4) };
+          };
+          step = 'get-1';
+          const g1 = await assert();
+          step = 'get-2';
+          const g2 = await assert();
+          r.userVerified = g1.uv && g2.uv;
+          r.getPrfReturned = Boolean(g1.prf);
+          r.prfLength = g1.prf ? g1.prf.length : 0;
+          r.prfStable = Boolean(g1.prf && g2.prf && g1.prf.length === g2.prf.length && g1.prf.every((v, i) => v === g2.prf[i]));
+          // ناتج PRF يبقى في هذه الدالة فقط، ولا يُرسل
+          g1.prf && g1.prf.fill(0);
+          g2.prf && g2.prf.fill(0);
+        }
+      } catch (err) {
+        r.errorName = (err && err.name) || 'Error';
+        r.errorStep = step;
+      }
+      const data = await api('/api/passkeys/probe/report', r);
+      const p = data.report;
+      const box = $('#probeReport');
+      box.hidden = false;
+      box.textContent = [
+        p.verdictAr,
+        '',
+        'المتصفح يدعم WebAuthn: ' + (p.webauthn ? 'نعم' : 'لا'),
+        'مصادق مدمج (وجه/بصمة/رمز): ' + (p.platformAuthenticator === null ? '—' : p.platformAuthenticator ? 'نعم' : 'لا'),
+        'المتصفح يعلن PRF: ' + (p.clientPrfCapability === null ? 'لا يُعرف' : p.clientPrfCapability ? 'نعم' : 'لا'),
+        'أُنشئ Passkey: ' + (p.created ? 'نعم' + (p.attachment ? ' (' + p.attachment + ')' : '') : 'لا'),
+        'PRF عند الإنشاء: ' + (p.createPrfEnabled === null ? 'لم يُذكر' : p.createPrfEnabled ? 'مفعّل' : 'غير مفعّل'),
+        'PRF عند التحقق: ' + (p.getPrfReturned ? 'أعاد ' + p.prfLength + ' بايت، ' + (p.prfStable ? 'ثابت في المرتين' : 'يتغيّر!') : 'لم يُعِد شيئاً'),
+        'تحقق منك (UV): ' + (p.userVerified ? 'نعم' : 'لا'),
+        p.errorName ? 'خطأ: ' + p.errorName + ' في خطوة ' + p.errorStep : '',
+      ]
+        .filter((x) => x !== null)
+        .join('\n');
+      await loadProbeReports();
+    });
   }
 
   function openPortalDialog(category, item) {
@@ -2042,6 +2194,7 @@
     },
     'clear-chat': (b) => clearChat(b.dataset.mode),
     'portal-new': (b) => openPortalDialog(b.dataset.category),
+    'passkey-probe': (b) => runPasskeyProbe(b),
     'open-conversations': (b) => openConversations(b.dataset.mode),
     'sync-refresh': () => loadSync(),
     'sync-now': (b) => syncAction(b, '/api/sync/now'),

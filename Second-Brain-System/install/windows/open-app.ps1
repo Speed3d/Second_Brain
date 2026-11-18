@@ -11,7 +11,8 @@ if (-not (Test-SBServer $port)) {
   Start-Process -FilePath 'wscript.exe' -ArgumentList ('"{0}"' -f (Join-Path $PSScriptRoot 'start-hidden.vbs')) -WindowStyle Hidden
   for ($i = 0; $i -lt 120 -and -not (Test-SBServer $port); $i++) { Start-Sleep -Milliseconds 500 }
 }
-$url = "http://127.0.0.1:$port/"
+# 3.2.0: الواجهة على localhost لأن Passkeys (WebAuthn) ترفض العنوان الرقمي 127.0.0.1 معرّفاً للموقع
+$url = "http://localhost:$port/"
 
 function Find-Browser {
   $candidates = @()

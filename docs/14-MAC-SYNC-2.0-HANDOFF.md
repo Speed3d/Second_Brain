@@ -1,5 +1,7 @@
 # 14 — تسليم الماك: ترحيل المزامنة إلى 2.0 وتشخيص «التعارض»
 
+> **⬅️ العمل الحالي (3.2.0، `2026-11-18`) في [`docs/15-PASSKEYS-MEASUREMENT-HANDOFF.md`](15-PASSKEYS-MEASUREMENT-HANDOFF.md): قياس دعم Passkeys على الماك و Windows. ابدأ منه.** هذا الملف سجلّ الجولات السابقة (المرحلة 1 والخزنة العائلية).
+
 > **لمن هذا الملف؟** للقائد، ولجلسة Claude Code على الماك التي لا تملك سياق جلسة Windows.
 > **يا Claude على الماك:** اقرأ هذا الملف كاملاً أولاً، ثم:
 > 1. [`CONSTITUTION-AND-RULES.md`](../CONSTITUTION-AND-RULES.md).

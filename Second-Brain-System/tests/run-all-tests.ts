@@ -31,6 +31,7 @@ import { runMultiWriterSyncTests } from './16-multi-writer-sync.test.ts';
 import { runRuntimeSafetyTests } from './17-runtime-safety.test.ts';
 import { runFamilyVaultTests } from './18-family-vault.test.ts';
 import { runFamilyPortalTests } from './19-family-portal.test.ts';
+import { runPasskeyProbeTests } from './20-passkey-probe.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -136,6 +137,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '19. اختبارات بوابة العائلة (جهات الاتصال والتعليمات، والفواتير المتكررة، وسجل خطوات الطوارئ بالمفتاح العائلي، والمزامنة، والنسخ وتمرين الاستعادة، والمساعد العائلي، والمسارات)',
       file: 'tests/19-family-portal.test.ts',
       runner: runFamilyPortalTests,
+    },
+    {
+      name: '20. اختبارات قياس دعم Passkeys و PRF (التصنيف، والتقرير بلا أسرار، والمسارات، والمشغّلات على localhost)',
+      file: 'tests/20-passkey-probe.test.ts',
+      runner: runPasskeyProbeTests,
     },
   ];
 

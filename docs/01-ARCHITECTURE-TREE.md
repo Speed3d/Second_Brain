@@ -86,6 +86,8 @@
     │   │   │   ├── 📄 assistant-engine.ts      # بناء السياق (بلا محتوى الخزنة) ووضعا القائد والعائلة + خلاصة المشروع
     │   │   │   ├── 📄 provider-tester.ts       # زر اختبار الاتصال لكل مزوّد مع سبب الفشل والحل المقترح
     │   │   │   └── 📁 providers\               # claude-cli (Claude عبر الاشتراك) / claude / gemini / ollama / local + provider-registry (التراجع) + stream-parsers
+    │   │   ├── 📁 auth\
+    │   │   │   └── 📄 passkey-probe.ts         # قياس دعم Passkeys و PRF: تصنيف الجهاز وتقارير بلا أسرار (تمهيد المرحلة 2.2)
     │   │   ├── 📁 family-emergency\
     │   │   │   ├── 📄 emergency-kit-service.ts # كتيب الطوارئ (في الذاكرة فقط)
     │   │   │   ├── 📄 backup-service.ts        # النسخ بالصيغة 3 (حمولة كاملة وحمولة عائلية) والاستعادة إلى مجلد جديد
@@ -112,7 +114,7 @@
     │   │       ├── 📄 desktop-server.ts        # الموجّه على 127.0.0.1 + طبقات الحماية + تشغيل المراقب
     │   │       ├── 📄 http-utils.ts            # الرد، حد الطلب، الكوكيز، Host/CSRF، رؤوس الأمان
     │   │       ├── 📄 session-manager.ts       # جلسة الخزنة، القفل التلقائي، تأخير المحاولات
-    │   │       ├── 📁 routes\                  # state، vault، project، memory، assistant، emergency، portal (بوابة العائلة)، maintenance، conversation، voice، sync
+    │   │       ├── 📁 routes\                  # state، vault، project، memory، assistant، emergency، portal (بوابة العائلة)، auth (قياس Passkeys)، maintenance، conversation، voice، sync
     │   │       └── 📁 public\                  # index.html، styles.css، app.js، hologram.js (CSP صارمة)
     │   │
     │   ├── 📁 shared\                          # [SHARED] لا يعتمد على أي طبقة أخرى
@@ -149,7 +151,8 @@
         ├── 📄 16-multi-writer-sync.test.ts     # المزامنة متعددة الكتابة بمحاكاة 3 أجهزة (15 سيناريو)
         ├── 📄 17-runtime-safety.test.ts        # حمايات التشغيل: الكود القديم في الذاكرة (ISS-032)، والحذف الجماعي (ISS-028)، وشرط الظهور (ISS-033)
         ├── 📄 18-family-vault.test.ts          # الخزنة العائلية v3: الترقية، والعلامة، والمحادثات، والمزامنة بين جهازين، والنسخ القديمة، والمسارات
-        └── 📄 19-family-portal.test.ts         # بوابة العائلة: المحتوى، والسجل بالمفتاح العائلي، والمزامنة، والنسخ وتمرين الاستعادة، والمساعد، والمسارات
+        ├── 📄 19-family-portal.test.ts         # بوابة العائلة: المحتوى، والسجل بالمفتاح العائلي، والمزامنة، والنسخ وتمرين الاستعادة، والمساعد، والمسارات
+        └── 📄 20-passkey-probe.test.ts         # قياس Passkeys: التصنيف، والتقرير بلا أسرار، والمسارات، والمشغّلات على localhost
 ```
 
 ---
