@@ -459,6 +459,23 @@
               </form>
             </div>
           </div>
+          <div class="card" data-commander-only data-shown-when="0" id="portalCard" hidden>
+            <h2>👪 بوابة العائلة</h2>
+            <p class="small muted">ما تكتبه هنا يدخل الخزنة العائلية مباشرة، فتراه العائلة بمفتاح الطوارئ في «❤️ وضع العائلة»، ويعرفه المساعد العائلي.</p>
+            <h3>📞 جهات الاتصال المهمة</h3>
+            <div class="list compact" id="portalContacts"></div>
+            <h3>🧭 تعليمات التعامل مع المطورين والشركات</h3>
+            <div class="list compact" id="portalInstructions"></div>
+            <div class="form-actions">
+              <button type="button" class="btn btn-primary btn-sm" data-action="portal-new" data-category="contact">➕ جهة اتصال</button>
+              <button type="button" class="btn btn-ghost btn-sm" data-action="portal-new" data-category="family_instruction">➕ تعليمة</button>
+            </div>
+            <details>
+              <summary class="small">📝 سجل خطوات الطوارئ (<span id="portalLogCount">0</span>)</summary>
+              <p class="small muted">كل ما يحدث في وضع العائلة يُسجَّل هنا تلقائياً (فتح الخزنة وقفلها، وأسئلة المساعد، وحذف المحادثات)، ومعه ملاحظات العائلة. السجل مشفّر بالمفتاح العائلي ولا يُعدَّل.</p>
+              <div class="list compact" id="portalLog"></div>
+            </details>
+          </div>
           <div class="card" data-commander-only>
             <h2>🔑 تغيير كلمة المرور</h2>
             <form data-form="change-password" class="stack">
@@ -580,8 +597,32 @@
         <div class="card-grid" id="familyProjects"></div>
       </section>
 
+      <div id="familyPortalSteps" hidden>
+        <section class="family-step" aria-labelledby="fsContacts">
+          <h2 id="fsContacts"><span class="step-no">3</span> 📞 بمن تتصلين</h2>
+          <div class="card-grid" id="familyContacts"></div>
+        </section>
+        <section class="family-step" aria-labelledby="fsInstr">
+          <h2 id="fsInstr"><span class="step-no">4</span> 🧭 تعليمات التعامل مع المطورين والشركات</h2>
+          <div class="stack" id="familyInstructions"></div>
+        </section>
+        <section class="family-step" aria-labelledby="fsBills">
+          <h2 id="fsBills"><span class="step-no">5</span> 🧾 الفواتير المتكررة</h2>
+          <div class="list compact" id="familyBills"></div>
+        </section>
+        <section class="family-step" aria-labelledby="fsLog">
+          <h2 id="fsLog"><span class="step-no">6</span> 📝 سجل ما فعلتِه</h2>
+          <p>اكتبي هنا كل خطوة قمتِ بها (اتصال، أو دفع فاتورة، أو تواصل مع مبرمج)، حتى يبقى لكِ وللعائلة مرجع واضح. البرنامج يسجّل أيضاً فتح الخزنة وأسئلة المساعد تلقائياً.</p>
+          <form data-form="family-log-note" class="stack">
+            <label>ما الذي فعلتِه؟<textarea name="detailAr" rows="2" maxlength="1000" required></textarea></label>
+            <div class="form-actions"><button type="submit" class="btn btn-family btn-lg">📝 سجّلي الخطوة</button></div>
+          </form>
+          <div class="list compact" id="familyLog"></div>
+        </section>
+      </div>
+
       <section class="family-step" aria-labelledby="fs3">
-        <h2 id="fs3"><span class="step-no">3</span> اسألي المساعد</h2>
+        <h2 id="fs3"><span class="step-no">7</span> اسألي المساعد</h2>
         <div class="preset-row">
           <button type="button" class="btn btn-ghost" data-action="preset" data-q="ما هي الفواتير المهمة التي يجب دفعها؟">🧾 الفواتير المهمة</button>
           <button type="button" class="btn btn-ghost" data-action="preset" data-q="كيف أتعامل مع مبرمج بأمان؟">👨‍💻 التعامل مع مبرمج</button>
@@ -642,6 +683,24 @@
       <label>ملاحظة لك<textarea name="notesForCommanderAr" rows="2" maxlength="2000"></textarea></label>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary" value="save">🔒 تشفير وحفظ</button>
+        <button type="button" class="btn btn-ghost" data-action="close-dialog">إلغاء</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- نافذة عنصر في بوابة العائلة (3.1.0) -->
+  <dialog id="portalDialog" aria-labelledby="portalDialogTitle">
+    <form data-form="portal-item" class="stack" method="dialog">
+      <h2 id="portalDialogTitle">جهة اتصال</h2>
+      <input type="hidden" name="id" />
+      <input type="hidden" name="category" />
+      <label><span data-portal-label="title">الاسم</span><input name="title" maxlength="200" required /></label>
+      <label data-portal-only="contact">الهاتف أو البريد<input name="contact" dir="ltr" maxlength="300" /></label>
+      <label>رابط (اختياري)<input name="url" dir="ltr" maxlength="500" /></label>
+      <label><span data-portal-label="text">متى تتصل به العائلة؟ ولماذا؟</span><textarea name="textAr" rows="5" maxlength="8000"></textarea></label>
+      <p class="small muted">👪 يُحفظ في الخزنة العائلية: تراه العائلة بمفتاح الطوارئ. لا تكتب هنا كلمات مرور؛ مكانها أسرار الخزنة.</p>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">💾 حفظ</button>
         <button type="button" class="btn btn-ghost" data-action="close-dialog">إلغاء</button>
       </div>
     </form>

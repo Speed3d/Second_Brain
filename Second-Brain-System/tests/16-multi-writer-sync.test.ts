@@ -414,13 +414,13 @@ export async function runMultiWriterSyncTests(): Promise<string[]> {
   const backup = createEncryptedSystemBackup(drillVault, { extraOutputDir: '' });
   const drill = runRestoreDrill(backup.backupFilePath, TEST_MASTER_PASSWORD, { liveRootDir: config.paths.rootDir, reportsDir: path.join(base, 'drills') });
   assert.equal(drill.ok, true, JSON.stringify(drill.checks));
-  assert.equal(drill.checks.length, 6, 'الفحوص الست كلها');
+  assert.equal(drill.checks.length, 7, 'الفحوص السبع كلها (3.1.0: ومعها سجل خطوات الطوارئ)');
   assert.match(drill.checks.find((c) => c.nameAr === 'سلامة المحادثات')!.detailAr, /1 من 1 محادثة/, 'المحادثات صارت داخل النسخة وتُفتح');
   assert.ok(fs.readdirSync(path.join(base, 'drills')).length === 1, 'التقرير محفوظ');
   assert.ok(!read(path.join(base, 'drills', fs.readdirSync(path.join(base, 'drills'))[0])).includes(TEST_MASTER_PASSWORD), 'التقرير بلا أسرار');
   const badDrill = runRestoreDrill(backup.backupFilePath, 'wrong-password-123');
   assert.equal(badDrill.ok, false, 'كلمة مرور خاطئة ← التمرين يفشل بوضوح');
-  passed.push('اختبار تمرين الاستعادة (الفحوص الست، المحادثات داخل النسخة، تقرير بلا أسرار، فشل واضح بكلمة مرور خاطئة) بنجاح.');
+  passed.push('اختبار تمرين الاستعادة (الفحوص السبع، المحادثات داخل النسخة، تقرير بلا أسرار، فشل واضح بكلمة مرور خاطئة) بنجاح.');
 
   // 15.5 ISS-030: التمرين يجد النسخ في كل الأماكن، ومنها مجلد Backups على Drive بلا إعداد، ويُنبّه للنسخة القديمة
   const localBackups = path.join(base, 'bk-local');

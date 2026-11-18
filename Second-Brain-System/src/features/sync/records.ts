@@ -9,6 +9,7 @@
  *               - memory:<id>      سجل واحد من الذاكرة المشتركة
  *               - project:<id>     مشروع واحد من قائمة المشاريع
  *               - conv:<ملف>       محادثة مشفرة واحدة
+ *               - flog:<ملف>       خطوة واحدة من سجل خطوات الطوارئ (3.1.0، مختومة بالمفتاح العائلي)
  *               - obs:<مسار>       ملف واحد من Obsidian
  *               كل سجل محتواه بايتات، وبصمته SHA-256. التطبيق على الجهاز يتم كمعاملة: إن فشل أي سجل
  *               تُعاد السجلات التي تغيّرت إلى ما كانت عليه.
@@ -24,6 +25,7 @@ import { moveToTrash } from './sync-store.ts';
 import type { SealedData, SharedAIMemoryEntry, VaultSecretItem } from '../../shared/types.ts';
 import { adoptFamilyKeys, mergeVaultKeys, persistVault, readVaultFile, vaultKeysOf, type UnlockedVault, type VaultFile, type VaultKeysRecord } from '../vault/vault-manager.ts';
 import { resealFamilyConversations } from '../conversations/conversation-store.ts';
+import { FAMILY_LOG_FILE, resealFamilyLog } from '../family-emergency/family-portal.ts';
 import { logSystemInfo } from '../../core/logger.ts';
 import type { SyncContext } from './sync-context.ts';
 
@@ -97,6 +99,10 @@ function conversationsDir(ctx: SyncContext): string {
   return path.join(ctx.dataDir, 'conversations');
 }
 
+function familyLogDir(ctx: SyncContext): string {
+  return path.join(ctx.dataDir, 'family-log');
+}
+
 /**
  * Hint بالعربي: دالة جمع كل سجلات هذا الجهاز الآن. الأسرار تُقرأ من الخزنة المفتوحة (لا من الملف)،
  *               لأن الجلسة المفتوحة هي المصدر الحي الذي تحفظ عليه الواجهة.
@@ -120,6 +126,13 @@ export function readLocalRecords(ctx: SyncContext, vault: UnlockedVault): Record
   if (fs.existsSync(convDir)) {
     for (const name of fs.readdirSync(convDir)) {
       if (CONVERSATION_FILE.test(name)) map.set(`conv:${name}`, fs.readFileSync(path.join(convDir, name)));
+    }
+  }
+  // 3.1.0: سجل خطوات الطوارئ (تكتبه جلسة العائلة محلياً، ويُنشر حين يفتح القائد الخزنة على هذا الجهاز)
+  const logDir = familyLogDir(ctx);
+  if (fs.existsSync(logDir)) {
+    for (const name of fs.readdirSync(logDir)) {
+      if (FAMILY_LOG_FILE.test(name)) map.set(`flog:${name}`, fs.readFileSync(path.join(logDir, name)));
     }
   }
   // ISS-025: المفتاح دائماً بصيغة NFC. الملف ذو الاسم المركّب يتقدّم إن وُجد اسمان للملف نفسه
@@ -225,7 +238,8 @@ function writeRecords(ctx: SyncContext, vault: UnlockedVault, writes: RecordWrit
     if (keys.family) {
       const { upgraded, previousFamilyKey } = adoptFamilyKeys(vault, keys);
       const moved = resealFamilyConversations(vault, conversationsDir(ctx), previousFamilyKey);
-      if (upgraded || previousFamilyKey) logSystemInfo('Sync', `${upgraded ? 'رُقّيت الخزنة هنا إلى الخزنة العائلية (v3) بمفاتيح وصلت بالمزامنة' : 'اعتُمد مفتاح عائلي جديد وصل بالمزامنة'}، ونُقلت ${moved} محادثة عائلية.`);
+      const logMoved = resealFamilyLog(vault, previousFamilyKey, familyLogDir(ctx));
+      if (upgraded || previousFamilyKey) logSystemInfo('Sync', `${upgraded ? 'رُقّيت الخزنة هنا إلى الخزنة العائلية (v3) بمفاتيح وصلت بالمزامنة' : 'اعتُمد مفتاح عائلي جديد وصل بالمزامنة'}، ونُقلت ${moved} محادثة عائلية و${logMoved} خطوة من سجل الطوارئ.`);
     } else {
       writeFileAtomic(ctx.vaultFile, JSON.stringify({ ...file, commanderWrap: keys.commanderWrap, emergencyWrap: keys.emergencyWrap }, null, 2), 5);
     }
@@ -275,6 +289,14 @@ function writeRecords(ctx: SyncContext, vault: UnlockedVault, writes: RecordWrit
     else writeFileAtomic(file, w.content);
   }
 
+  for (const w of byKind.get('flog') ?? []) {
+    const name = recordId(w.key);
+    if (!FAMILY_LOG_FILE.test(name)) throw new Error(`اسم خطوة غير صالح في سجل المزامنة: ${name}`);
+    const file = path.join(familyLogDir(ctx), name);
+    if (w.content === null) removePathSync(file, { force: true });
+    else writeFileAtomic(file, w.content);
+  }
+
   for (const w of byKind.get('obs') ?? []) {
     const rel = recordId(w.key);
     // ISS-025: سجل باسم غير موحّد (NFD، من 2.0.0/2.0.1 على الماك) لا يُطبَّق على القرص أبداً:
@@ -286,7 +308,7 @@ function writeRecords(ctx: SyncContext, vault: UnlockedVault, writes: RecordWrit
   }
 
   for (const kind of byKind.keys()) {
-    if (!['secret', 'vaultkeys', 'branding', 'memory', 'project', 'conv', 'obs'].includes(kind)) {
+    if (!['secret', 'vaultkeys', 'branding', 'memory', 'project', 'conv', 'flog', 'obs'].includes(kind)) {
       throw new Error(`نوع سجل غير معروف: ${kind}`);
     }
   }

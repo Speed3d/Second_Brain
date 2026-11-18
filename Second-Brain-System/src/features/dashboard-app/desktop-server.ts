@@ -37,6 +37,7 @@ import { getConversationRoutes } from './routes/conversation-routes.ts';
 import { getVoiceRoutes } from './routes/voice-routes.ts';
 import { getSyncRoutes } from './routes/sync-routes.ts';
 import { getVaultRoutes } from './routes/vault-routes.ts';
+import { getPortalRoutes } from './routes/portal-routes.ts';
 import { getStateRoutes } from './routes/state-routes.ts';
 import { getVaultSession, peekActiveVault } from './session-manager.ts';
 
@@ -77,6 +78,7 @@ export function buildRouteTable(): RouteDefinition[] {
     ...getMemoryRoutes(),
     ...getAssistantRoutes(),
     ...getEmergencyRoutes(),
+    ...getPortalRoutes(),
     ...getMaintenanceRoutes(),
     ...getConversationRoutes(),
     ...getVoiceRoutes(),

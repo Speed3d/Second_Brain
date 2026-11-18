@@ -199,6 +199,24 @@ export function runRestoreDrill(
       detailAr: convRels.length ? `${convOk} من ${convRels.length} محادثة تُفتح سليمة${convBad.length ? `، وتعذّر فتح: ${convBad.slice(0, 5).join('، ')}` : ''}.` : 'لا محادثات في هذه النسخة (النسخ قبل 2.0 لم تكن تضمها — ISS-020).',
     });
 
+    // 2.ب) سجل خطوات الطوارئ (3.1.0): كل خطوة مختومة بالمفتاح العائلي
+    const logRels = rels.filter((r) => /(^|\/)data\/family-log\/flog-[0-9]{13}-[a-f0-9]{8}\.enc\.json$/.test(r));
+    if (!logRels.length) checks.push({ nameAr: 'سجل خطوات الطوارئ', ok: true, detailAr: 'لا خطوات طوارئ مسجّلة في هذه النسخة.' });
+    else {
+      let logOk = 0;
+      for (const rel of logRels) {
+        try {
+          const file = JSON.parse(fs.readFileSync(path.join(target, rel), 'utf8')) as { sealed: SealedData };
+          if (!familyKey) throw new Error('no key');
+          openWithKey(file.sealed, familyKey);
+          logOk += 1;
+        } catch {
+          // يُعدّ أدناه
+        }
+      }
+      checks.push({ nameAr: 'سجل خطوات الطوارئ', ok: logOk === logRels.length, detailAr: `${logOk} من ${logRels.length} خطوة تُفتح بالمفتاح العائلي.` });
+    }
+
     // 3) الذاكرة
     const memRel = rels.find((r) => r.endsWith('data/ai-memory-store.json'));
     let memoryIds: string[] = [];

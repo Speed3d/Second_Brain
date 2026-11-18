@@ -268,6 +268,7 @@ function previewContent(key: string, base64: string | null): ConflictPreview | n
     }
   }
   if (kind === 'conv') return { text: '(محادثة مشفّرة)', sizeBytes: buf.length };
+  if (kind === 'flog') return { text: '(خطوة مشفّرة من سجل الطوارئ)', sizeBytes: buf.length };
   const text = buf.toString('utf8');
   const printable = !/[\u0000-\u0008\u000e-\u001f]/.test(text.slice(0, 2000));
   return { text: printable ? text.slice(0, 4000) : '(ملف ثنائي)', sizeBytes: buf.length };
@@ -345,6 +346,7 @@ export function listSyncTrash(vault: UnlockedVault): Array<{ id: string; key: st
       }
     } else if (recordKind(t.key) === 'obs') label = `Obsidian: ${t.key.slice(4)}`;
     else if (recordKind(t.key) === 'conv') label = 'محادثة';
+    else if (recordKind(t.key) === 'flog') label = 'خطوة من سجل الطوارئ';
     else if (recordKind(t.key) === 'project') label = `مشروع: ${t.key.slice(8)}`;
     else if (recordKind(t.key) === 'memory') label = `ذاكرة: ${t.key.slice(7)}`;
     return { id: t.id, key: t.key, deletedAt: t.deletedAt, deletedBy: t.deletedBy, label };

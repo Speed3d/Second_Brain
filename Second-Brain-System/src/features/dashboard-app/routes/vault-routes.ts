@@ -26,6 +26,7 @@ import { describeFamilyVault, resolveOldCopiesLocations, suggestFamilySecrets } 
 import { listOldFullAccessCopies, removeOldFullAccessCopies } from '../../family-emergency/old-copies.ts';
 import { createEncryptedSystemBackup } from '../../family-emergency/backup-service.ts';
 import { resealFamilyConversations } from '../../conversations/conversation-store.ts';
+import { appendFamilyLog, isPortalCategory } from '../../family-emergency/family-portal.ts';
 import { buildSessionCookie, HttpError, readString, sendJson, type RouteDefinition } from '../http-utils.ts';
 import {
   closeVaultSession,
@@ -144,6 +145,8 @@ export function getVaultRoutes(): RouteDefinition[] {
           }
         }
         const token = openVaultSession(vault);
+        // 3.1.0: سجل خطوات الطوارئ: فتح الخزنة العائلية
+        if (vault.unlockedBy !== 'commander') appendFamilyLog(vault, { action: 'family_unlock' });
         sendJson(
           res,
           200,
@@ -157,7 +160,9 @@ export function getVaultRoutes(): RouteDefinition[] {
       path: '/api/vault/lock',
       handler: ({ res }) => {
         // نشر آخر التغييرات قبل إغلاق الخزنة (إن كان هذا الجهاز حامل الكتابة)
-        syncTick(peekActiveVault());
+        const active = peekActiveVault();
+        syncTick(active);
+        if (active && active.unlockedBy !== 'commander') appendFamilyLog(active, { action: 'family_lock' });
         closeVaultSession();
         sendJson(res, 200, { ok: true }, { 'Set-Cookie': buildSessionCookie(null) });
       },
@@ -180,6 +185,7 @@ export function getVaultRoutes(): RouteDefinition[] {
         const id = readString(body, 'id', 120) || `SEC-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
         const existing = vault.secrets.find((s) => s.id === id);
         if (existing?.category === 'critical_file') throw new HttpError(400, 'لا يمكن تعديل الملفات الحساسة من هنا.');
+        if (existing && isPortalCategory(existing.category)) throw new HttpError(400, 'هذا عنصر في بوابة العائلة؛ عدّله من بطاقة «👪 بوابة العائلة».');
         const category = readString(body, 'category', 40) as VaultSecretItem['category'];
         if (!ALLOWED_CATEGORIES.includes(category)) throw new HttpError(400, 'تصنيف السر غير صحيح.');
         const title = readString(body, 'title', 200).trim();
@@ -234,6 +240,8 @@ export function getVaultRoutes(): RouteDefinition[] {
         const oldCopies = info.vaultFormat === 3 ? listOldFullAccessCopies(resolveOldCopiesLocations(vault.vaultFilePath)) : [];
         sendJson(res, 200, {
           ...info,
+          // 3.1.0: العدد هنا للأسرار وحدها (جهات الاتصال والتعليمات لها بطاقة البوابة)
+          familyCount: info.familyCount === null ? null : vault.secrets.filter((s) => s.familyVisible === true && s.category !== 'critical_file' && !isPortalCategory(s.category)).length,
           suggestions: suggestFamilySecrets(vault.secrets),
           oldCopies: oldCopies.map((c) => ({ fileName: path.basename(c.filePath), kind: c.kind, labelAr: c.labelAr, sizeBytes: c.sizeBytes, modifiedAt: c.modifiedAt })),
         });

@@ -30,6 +30,7 @@ import { runSyncTests } from './15-sync.test.ts';
 import { runMultiWriterSyncTests } from './16-multi-writer-sync.test.ts';
 import { runRuntimeSafetyTests } from './17-runtime-safety.test.ts';
 import { runFamilyVaultTests } from './18-family-vault.test.ts';
+import { runFamilyPortalTests } from './19-family-portal.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -130,6 +131,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '18. اختبارات الخزنة العائلية v3 (الترقية، مفتاح الطوارئ للعائلة وحدها، العلامة، المحادثات، المزامنة بين جهازين، النسخ القديمة، المسارات)',
       file: 'tests/18-family-vault.test.ts',
       runner: runFamilyVaultTests,
+    },
+    {
+      name: '19. اختبارات بوابة العائلة (جهات الاتصال والتعليمات، والفواتير المتكررة، وسجل خطوات الطوارئ بالمفتاح العائلي، والمزامنة، والنسخ وتمرين الاستعادة، والمساعد العائلي، والمسارات)',
+      file: 'tests/19-family-portal.test.ts',
+      runner: runFamilyPortalTests,
     },
   ];
 

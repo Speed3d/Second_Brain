@@ -74,7 +74,9 @@ export function isFamilyBackupEntry(rel: string): boolean {
     rel === SETTINGS_ENTRY ||
     /(^|\/)encrypted-vault\/[^/]+\.json$/.test(rel) ||
     /^Obsidian-Vault\/04-Family-Emergency-Guide\//.test(rel) ||
-    /^Obsidian-Vault\/02-Projects\/[^/]+\/06-Wife-Guide\.md$/.test(rel)
+    /^Obsidian-Vault\/02-Projects\/[^/]+\/06-Wife-Guide\.md$/.test(rel) ||
+    // 3.1.0: سجل خطوات الطوارئ (مختوم بالمفتاح العائلي أصلاً)
+    /(^|\/)data\/family-log\/flog-[0-9]{13}-[a-f0-9]{8}\.enc\.json$/.test(rel)
   );
 }
 
@@ -110,6 +112,13 @@ export function createEncryptedSystemBackup(
   if (fs.existsSync(conversationsDir)) {
     for (const name of fs.readdirSync(conversationsDir)) {
       if (/^[a-z0-9-]{8,64}\.enc\.json$/.test(name)) addFile(path.join(conversationsDir, name));
+    }
+  }
+  // 3.1.0: سجل خطوات الطوارئ
+  const familyLogDir = path.join(config.paths.rootDir, 'Second-Brain-System', 'data', 'family-log');
+  if (fs.existsSync(familyLogDir)) {
+    for (const name of fs.readdirSync(familyLogDir)) {
+      if (/^flog-[0-9]{13}-[a-f0-9]{8}\.enc\.json$/.test(name)) addFile(path.join(familyLogDir, name));
     }
   }
 

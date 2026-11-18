@@ -39,7 +39,11 @@
     recovery_code: '🛟 أكواد استرداد',
     billing: '💳 فواتير',
     critical_file: '📁 ملف حساس',
+    contact: '📞 جهة اتصال',
+    family_instruction: '🧭 تعليمة للعائلة',
   };
+  /** 3.1.0: عناصر بوابة العائلة لا تظهر في قوائم الأسرار (لها بطاقتها) */
+  const PORTAL_CATEGORIES = ['contact', 'family_instruction'];
   const PROVIDER_NAMES = { 'claude-cli': 'Claude (اشتراكك)', claude: 'Claude API', gemini: 'Gemini API', ollama: 'Ollama', local: 'المعرفة المحلية' };
   const MASK = '••••••••••';
 
@@ -304,7 +308,7 @@
   /** اسم مفهوم لنوع السجل في المزامنة */
   function syncRecordLabel(key) {
     const kind = key.split(':')[0];
-    return ({ obs: '📄 ملف Obsidian: ', secret: '🔑 سرّ في الخزنة ', memory: '🧠 سجل ذاكرة ', project: '📁 مشروع ', conv: '💬 محادثة ', branding: '🪪 الهوية', vaultkeys: '🔐 مفاتيح الخزنة' })[kind] || key;
+    return ({ obs: '📄 ملف Obsidian: ', secret: '🔑 سرّ في الخزنة ', memory: '🧠 سجل ذاكرة ', project: '📁 مشروع ', conv: '💬 محادثة ', flog: '📝 سجل الطوارئ ', branding: '🪪 الهوية', vaultkeys: '🔐 مفاتيح الخزنة' })[kind] || key;
   }
 
   function syncRecordPath(key) {
@@ -735,6 +739,104 @@
       renderSecrets();
     }
     await loadFamilyVault();
+    await loadPortal();
+  }
+
+  /**
+   * 3.1.0: بوابة العائلة: بطاقة القائد (جهات الاتصال والتعليمات والسجل) وخطوات وضع العائلة
+   */
+  async function loadPortal() {
+    const card = $('#portalCard');
+    const steps = $('#familyPortalSteps');
+    let p = null;
+    if (state.vault.unlocked) {
+      try {
+        p = await api('/api/family/portal');
+      } catch (e) {
+        p = null;
+      }
+    }
+    const ready = Boolean(p && p.vaultFormat === 3);
+    showWhen(card, ready && isCommander());
+    if (steps) steps.hidden = !ready || isCommander();
+    if (!ready) return;
+    const portalRow = (item, editable) => {
+      const children = [
+        el('strong', { text: item.title }),
+        item.contact ? el('p', { className: 'small', children: [el('span', { text: '📞 ' }), el('bdi', { className: 'mono', text: item.contact, attrs: { dir: 'ltr' } })] }) : null,
+        item.textAr ? el('p', { className: 'small pre-wrap', text: item.textAr }) : null,
+        item.url ? el('p', { className: 'small', children: [safeLink(item.url)] }) : null,
+      ];
+      if (editable) {
+        children.push(
+          el('div', {
+            className: 'toolbar',
+            children: [
+              button('✏️ تعديل', 'btn-ghost btn-sm', () => openPortalDialog(item.category, item)),
+              button('🗑️ حذف', 'btn-ghost btn-sm', () => deletePortalItem(item)),
+            ],
+          })
+        );
+      }
+      return el('div', { className: 'list-item', children: children });
+    };
+    const fill = (box, list, editable, emptyAr) => {
+      if (!box) return;
+      box.replaceChildren(...(list.length ? list.map((i) => portalRow(i, editable)) : [el('p', { className: 'muted small', text: emptyAr })]));
+    };
+    const logRow = (e) =>
+      el('div', {
+        className: 'list-item small',
+        children: [
+          el('strong', { text: e.labelAr }),
+          e.detailAr ? el('span', { text: ' — ' + e.detailAr }) : null,
+          el('span', { className: 'muted', text: ' · ' + formatDateAr(e.at) + ' · ' + e.deviceName + (e.actor === 'commander' ? ' (القائد)' : '') }),
+        ],
+      });
+    if (isCommander()) {
+      fill($('#portalContacts'), p.contacts, true, 'لا جهات اتصال بعد. أضف مثلاً: المحاسب، والمبرمج الموثوق، ودعم الاستضافة.');
+      fill($('#portalInstructions'), p.instructions, true, 'لا تعليمات بعد. أضف مثلاً: كيف تُضيف مبرمجاً كمتعاون دون إعطائه كلمة المرور.');
+      $('#portalLogCount').textContent = String(p.logTotal);
+      $('#portalLog').replaceChildren(...(p.log.length ? p.log.slice(0, 100).map(logRow) : [el('p', { className: 'muted small', text: 'لم يُسجَّل شيء بعد.' })]));
+      return;
+    }
+    fill($('#familyContacts'), p.contacts, false, 'لم تُضَف جهات اتصال بعد.');
+    fill($('#familyInstructions'), p.instructions, false, 'لم تُضَف تعليمات بعد.');
+    $('#familyBills').replaceChildren(
+      ...(p.bills.length
+        ? p.bills.map((b) => el('div', { className: 'list-item', children: [el('strong', { text: (b.source === 'project' ? '📱 ' : '💳 ') + b.title }), b.detailAr ? el('p', { className: 'small pre-wrap', text: b.detailAr }) : null, b.url ? el('p', { className: 'small', children: [safeLink(b.url)] }) : null] }))
+        : [el('p', { className: 'muted small', text: 'لا فواتير مسجلة.' })])
+    );
+    $('#familyLog').replaceChildren(...p.log.slice(0, 50).map(logRow));
+  }
+
+  function openPortalDialog(category, item) {
+    const dialog = $('#portalDialog');
+    const form = $('[data-form="portal-item"]');
+    form.reset();
+    const contact = category === 'contact';
+    form.elements.category.value = category;
+    form.elements.id.value = item ? item.id : '';
+    form.elements.title.value = item ? item.title : '';
+    form.elements.contact.value = item ? item.contact : '';
+    form.elements.url.value = item ? item.url : '';
+    form.elements.textAr.value = item ? item.textAr : '';
+    $('#portalDialogTitle').textContent = (item ? '✏️ تعديل: ' : contact ? '➕ جهة اتصال' : '➕ تعليمة للعائلة') + (item ? item.title : '');
+    $('[data-portal-label="title"]', form).textContent = contact ? 'الاسم (ومن هو)' : 'عنوان التعليمة';
+    $('[data-portal-label="text"]', form).textContent = contact ? 'متى تتصل به العائلة؟ ولماذا؟' : 'التعليمة خطوة بخطوة';
+    $('[data-portal-only="contact"]', form).hidden = !contact;
+    form.elements.textAr.required = !contact;
+    dialog.showModal();
+    form.elements.title.focus();
+  }
+
+  async function deletePortalItem(item) {
+    if (!window.confirm('حذف "' + item.title + '" من بوابة العائلة؟')) return;
+    await busy(null, async () => {
+      const data = await api('/api/family/portal/item/delete', { id: item.id });
+      toast(data.messageAr, 'ok');
+      await loadPortal();
+    });
   }
 
   /**
@@ -845,6 +947,7 @@
     const term = familyView ? '' : ($('#secretSearch').value || '').trim().toLowerCase();
     const category = familyView ? '' : $('#secretFilter').value;
     const items = state.secrets.filter((s) => {
+      if (PORTAL_CATEGORIES.indexOf(s.category) >= 0) return false;
       if (familyView && s.category === 'api_key') return false;
       if (category && s.category !== category) return false;
       if (!term) return true;
@@ -1787,6 +1890,22 @@
         toast('🔓 فُتحت الخزنة.', 'ok');
       });
     },
+    async 'portal-item'(form, btn) {
+      await busy(btn, async () => {
+        const data = await api('/api/family/portal/item', formData(form));
+        $('#portalDialog').close();
+        toast(data.messageAr, 'ok');
+        await refreshVault();
+      });
+    },
+    async 'family-log-note'(form, btn) {
+      await busy(btn, async () => {
+        const data = await api('/api/family/log', formData(form));
+        form.reset();
+        toast(data.messageAr, 'ok');
+        await loadPortal();
+      });
+    },
     async secret(form, btn) {
       await busy(btn, async () => {
         const data = await api('/api/vault/secrets', formData(form));
@@ -1922,6 +2041,7 @@
       store.set('sound', on);
     },
     'clear-chat': (b) => clearChat(b.dataset.mode),
+    'portal-new': (b) => openPortalDialog(b.dataset.category),
     'open-conversations': (b) => openConversations(b.dataset.mode),
     'sync-refresh': () => loadSync(),
     'sync-now': (b) => syncAction(b, '/api/sync/now'),

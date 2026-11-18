@@ -53,7 +53,7 @@ import {
  */
 export const CHANGE_FORMAT = 3;
 /** أقل إصدار يفهم ما ينشره هذا الإصدار بأمان؛ يُكتب في manifest.json، والأجهزة الأقدم تتوقف (من 2.2.0 فصاعداً) */
-export const MIN_SYNC_APP_VERSION = '3.0.0';
+export const MIN_SYNC_APP_VERSION = '3.1.0';
 /** ISS-028: حدّ الأمان: حذف هذا العدد أو أكثر دفعة واحدة لا يُنشر ولا يُطبَّق بلا تأكيد القائد */
 export const MASS_DELETE_THRESHOLD = 10;
 /** مجلد فيه هذا العدد أو أكثر اختفى كله دفعة واحدة = حذف جماعي */

@@ -40,7 +40,7 @@ const FAMILY_HINTS: Array<{ re: RegExp; reasonAr: string }> = [
  */
 export function suggestFamilySecrets(secrets: VaultSecretItem[]): FamilySuggestion[] {
   return secrets
-    .filter((s) => s.category !== 'critical_file')
+    .filter((s) => s.category !== 'critical_file' && s.category !== 'contact' && s.category !== 'family_instruction')
     .map((s) => {
       const text = `${s.title} ${s.url ?? ''} ${s.usernameOrEmail ?? ''} ${s.notesForWifeAr ?? ''}`;
       let suggested = false;

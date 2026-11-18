@@ -15,6 +15,7 @@ import {
   listConversations,
   type ConversationMode,
 } from '../../conversations/conversation-store.ts';
+import { appendFamilyLog } from '../../family-emergency/family-portal.ts';
 import { HttpError, sendJson, type RouteDefinition } from '../http-utils.ts';
 
 const CONVERSATION_PATH = /^\/api\/conversations\/([a-z0-9-]{8,64})$/;
@@ -61,6 +62,7 @@ export function getConversationRoutes(): RouteDefinition[] {
       requiresSession: true,
       handler: ({ res, params, session }) => {
         if (!deleteConversation(session!.vault, params[0])) throw new HttpError(404, 'المحادثة غير موجودة.');
+        if (session!.vault.unlockedBy !== 'commander') appendFamilyLog(session!.vault, { action: 'conversation_deleted', detailAr: 'محادثة واحدة' });
         sendJson(res, 200, { ok: true, messageAr: '🗑️ حُذفت المحادثة نهائياً.' });
       },
     },
@@ -70,6 +72,7 @@ export function getConversationRoutes(): RouteDefinition[] {
       requiresSession: true,
       handler: ({ res, body, session }) => {
         const count = deleteAllConversations(session!.vault, readMode(body.mode, true)!);
+        if (session!.vault.unlockedBy !== 'commander' && count) appendFamilyLog(session!.vault, { action: 'conversation_deleted', detailAr: `${count} محادثة` });
         sendJson(res, 200, { ok: true, deleted: count, messageAr: `🗑️ حُذفت ${count} محادثة نهائياً.` });
       },
     },

@@ -17,6 +17,8 @@ import { askSecondBrainAssistant } from '../../assistant/assistant-engine.ts';
 import { testProviderConnection, TESTABLE_PROVIDERS } from '../../assistant/provider-tester.ts';
 import { buildProviders, PROVIDER_KEY_SECRET_IDS, resolveProviderKeys } from '../../assistant/providers/provider-registry.ts';
 import { appendConversationTurn } from '../../conversations/conversation-store.ts';
+import { appendFamilyLog } from '../../family-emergency/family-portal.ts';
+import { redactSecrets } from '../../../shared/secret-redaction.ts';
 import { checkWriteAccess } from '../../sync/sync-context.ts';
 import { deleteVaultSecret, upsertVaultSecret } from '../../vault/vault-manager.ts';
 import { HttpError, readString, sendJson, type RouteContext, type RouteDefinition } from '../http-utils.ts';
@@ -46,6 +48,11 @@ export function saveAssistantTurn(
   reply: { answerAr: string; providerUsed: AIProviderId; model: string }
 ): string | null {
   if (!session) return null;
+  // 3.1.0: سجل خطوات الطوارئ: سؤال العائلة للمساعد (أول 120 حرفاً، بعد تنقية الأسرار)
+  if (session.vault.unlockedBy !== 'commander') {
+    const excerpt = redactSecrets(input.question).text.replace(/\s+/g, ' ').slice(0, 120);
+    appendFamilyLog(session.vault, { action: 'assistant_question', detailAr: excerpt + (input.question.length > 120 ? '…' : '') });
+  }
   // وضع القراءة (المرحلة ج): المحادثات مشتركة بين الأجهزة، فلا تُحفظ إلا على حامل صلاحية الكتابة
   if (!checkWriteAccess().allowed) return null;
   try {

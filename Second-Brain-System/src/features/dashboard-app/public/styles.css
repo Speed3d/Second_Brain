@@ -58,6 +58,7 @@ code, kbd, .mono { font-family: var(--mono); direction: ltr; unicode-bidi: isola
 kbd { border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; font-size: 0.85em; }
 .muted { color: var(--muted); }
 .small { font-size: 0.86rem; }
+.pre-wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 [dir='ltr'], .ltr { text-align: left; }
 
