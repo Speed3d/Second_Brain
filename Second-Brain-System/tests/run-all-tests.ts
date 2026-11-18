@@ -36,6 +36,7 @@ import { runPasskeysTests } from './21-passkeys.test.ts';
 import { runQrCodeTests } from './22-qr-code.test.ts';
 import { runTwoFactorTests } from './23-two-factor.test.ts';
 import { runPromptInjectionTests } from './24-prompt-injection.test.ts';
+import { runLogRedactionTests } from './25-log-redaction.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -166,6 +167,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '24. اختبارات الحماية من التعليمات المدسوسة (التنقية، ووسوم البيانات غير الموثوقة في وضعي القائد والعائلة وملخص المشروع، والعزل بلا أدوات)',
       file: 'tests/24-prompt-injection.test.ts',
       runner: runPromptInjectionTests,
+    },
+    {
+      name: '25. اختبارات تنقية السجلات وتدويرها (أسرار متعمّدة في runtime.log، والتدوير 5MB × 3، ومخرجات الطرفية ورسائل الأعطال)',
+      file: 'tests/25-log-redaction.test.ts',
+      runner: runLogRedactionTests,
     },
   ];
 

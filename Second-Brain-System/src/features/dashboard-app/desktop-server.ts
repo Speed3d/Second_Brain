@@ -10,12 +10,13 @@
  */
 
 import * as http from 'node:http';
+import * as path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { loadSystemConfig, loadSystemConfigWithWarnings } from '../../core/config-manager.ts';
 import { startProjectWatcher } from '../project-indexer/project-watcher.ts';
 import { warmUpVoice } from '../voice/tts-service.ts';
 import { syncTick } from '../sync/sync-service.ts';
-import { logSystemError, logSystemInfo } from '../../core/logger.ts';
+import { installConsoleRedaction, logSystemError, logSystemInfo, rotateLogIfLarge } from '../../core/logger.ts';
 import { getRuntimeVersionStatus, requestServerRestart } from '../../core/runtime-version.ts';
 import {
   applySecurityHeaders,
@@ -178,7 +179,10 @@ export function startSecondBrainDesktopServer(port: number = loadSystemConfig().
 
 // تشغيل الخادم إذا تم استدعاء الملف مباشرة
 if (process.argv[1] && process.argv[1].endsWith('desktop-server.ts')) {
+  // 3.7.0: مخرجات الطرفية (server.log) تُنقّى من الأسرار، و server.log يُدوَّر بالنسخ ثم التفريغ (launchd يبقيه مفتوحاً على الماك)
+  installConsoleRedaction();
   const { config, warnings } = loadSystemConfigWithWarnings();
+  rotateLogIfLarge(path.join(config.paths.rootDir, 'Second-Brain-System', 'data', 'logs', 'server.log'), { copyTruncate: true });
   startSecondBrainDesktopServer(config.serverPort)
     .then(() => {
       logSystemInfo('DesktopServer', `تم تشغيل واجهة سطح المكتب على الرابط: http://localhost:${config.serverPort}`);
