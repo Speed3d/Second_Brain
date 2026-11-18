@@ -2661,7 +2661,10 @@
     },
     'back-to-projects': () => setView('projects'),
     'test-provider': (b) => testProvider(b),
-    'refresh-providers-guide': () => loadProvidersGuide(),
+    'refresh-providers-guide': () => {
+      loadProvidersGuide();
+      loadMcpTools();
+    },
     'dev-reset': async (b) => {
       const m = state.maintenance;
       if (!m) return;
