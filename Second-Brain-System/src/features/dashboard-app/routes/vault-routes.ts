@@ -28,6 +28,8 @@ import { createEncryptedSystemBackup } from '../../family-emergency/backup-servi
 import { resealFamilyConversations } from '../../conversations/conversation-store.ts';
 import { appendFamilyLog, isPortalCategory } from '../../family-emergency/family-portal.ts';
 import { removeAllLocalPasskeys } from '../../auth/passkey-store.ts';
+import { isTwoFactorEnabled, isTwoFactorItem, verifySecondFactor } from '../../auth/two-factor.ts';
+import { wipeUnlockedVault } from '../../vault/vault-manager.ts';
 import { buildSessionCookie, HttpError, readString, sendJson, type RouteDefinition } from '../http-utils.ts';
 import {
   closeVaultSession,
@@ -129,11 +131,27 @@ export function getVaultRoutes(): RouteDefinition[] {
         if (!key) throw new HttpError(400, 'يرجى إدخال كلمة المرور أو مفتاح الطوارئ.');
         if (!vaultExists()) throw new HttpError(404, 'لا توجد خزنة بعد. أنشئ الخزنة أولاً.');
         let vault;
+        let twoFactorNoteAr: string | null = null;
         try {
           vault = unlockVault(key);
         } catch {
           recordUnlockFailure();
           throw new HttpError(401, 'كلمة المرور الرئيسية أو مفتاح الطوارئ غير صحيح!');
+        }
+        // 3.5.0: المصادقة الثنائية (قرار القائد): تُطلب مع كلمة المرور فقط، لا مع مفتاح الطوارئ ولا الـ Passkey
+        if (isTwoFactorEnabled(vault)) {
+          const second = readString(body, 'twoFactorCode', 40).trim();
+          if (!second) {
+            wipeUnlockedVault(vault);
+            throw new HttpError(401, 'اكتب رمز المصادقة الثنائية (6 أرقام من التطبيق) أو رمزاً احتياطياً.', { twoFactorRequired: true });
+          }
+          const check = verifySecondFactor(vault, second);
+          if (!check.ok) {
+            wipeUnlockedVault(vault);
+            recordUnlockFailure();
+            throw new HttpError(401, 'رمز المصادقة الثنائية غير صحيح أو استُخدم من قبل.', { twoFactorRequired: true });
+          }
+          if (check.method === 'backup') twoFactorNoteAr = `🔑 استُخدم رمز احتياطي. بقي ${check.backupLeft} رمزاً${check.backupLeft! <= 3 ? '؛ أنشئ رموزاً جديدة قريباً' : ''}.`;
         }
         recordUnlockSuccess();
         // المزامنة: استيراد أي إصدار أحدث من الأجهزة الأخرى قبل إنشاء الجلسة، ثم فتح الخزنة من الملف الجديد
@@ -151,7 +169,7 @@ export function getVaultRoutes(): RouteDefinition[] {
         sendJson(
           res,
           200,
-          { ok: true, unlockedBy: vault.unlockedBy, secretsCount: vault.secrets.length, syncMessageAr: sync.messageAr ?? null },
+          { ok: true, unlockedBy: vault.unlockedBy, secretsCount: vault.secrets.length, syncMessageAr: sync.messageAr ?? null, twoFactorNoteAr },
           { 'Set-Cookie': buildSessionCookie(token) }
         );
       },
@@ -173,7 +191,7 @@ export function getVaultRoutes(): RouteDefinition[] {
       path: '/api/vault/secrets',
       requiresSession: true,
       handler: ({ res, session }) => {
-        sendJson(res, 200, { unlockedBy: session!.vault.unlockedBy, secrets: session!.vault.secrets.map(toClientSecret) });
+        sendJson(res, 200, { unlockedBy: session!.vault.unlockedBy, secrets: session!.vault.secrets.filter((s) => !isTwoFactorItem(s)).map(toClientSecret) });
       },
     },
     {
@@ -187,6 +205,7 @@ export function getVaultRoutes(): RouteDefinition[] {
         const existing = vault.secrets.find((s) => s.id === id);
         if (existing?.category === 'critical_file') throw new HttpError(400, 'لا يمكن تعديل الملفات الحساسة من هنا.');
         if (existing && isPortalCategory(existing.category)) throw new HttpError(400, 'هذا عنصر في بوابة العائلة؛ عدّله من بطاقة «👪 بوابة العائلة».');
+        if ((existing && isTwoFactorItem(existing)) || isTwoFactorItem({ id, category: 'password' })) throw new HttpError(400, 'هذا عنصر نظام (المصادقة الثنائية)، ولا يُعدَّل من هنا.');
         const category = readString(body, 'category', 40) as VaultSecretItem['category'];
         if (!ALLOWED_CATEGORIES.includes(category)) throw new HttpError(400, 'تصنيف السر غير صحيح.');
         const title = readString(body, 'title', 200).trim();
@@ -214,7 +233,9 @@ export function getVaultRoutes(): RouteDefinition[] {
       requiresSession: true,
       commanderOnly: true,
       handler: ({ res, body, session }) => {
-        const removed = deleteVaultSecret(session!.vault, readString(body, 'id', 120));
+        const delId = readString(body, 'id', 120);
+        if (isTwoFactorItem({ id: delId, category: 'password' })) throw new HttpError(400, 'لتعطيل المصادقة الثنائية استخدم بطاقتها في قسم الخزنة.');
+        const removed = deleteVaultSecret(session!.vault, delId);
         if (!removed) throw new HttpError(404, 'العنصر غير موجود.');
         sendJson(res, 200, { ok: true });
       },

@@ -742,6 +742,36 @@
     await loadPortal();
     await loadProbeReports();
     await loadPasskeys();
+    await loadTwoFactor();
+  }
+
+  // ===================== 3.5.0: المصادقة الثنائية =====================
+  async function loadTwoFactor() {
+    const card = $('#twoFactorCard');
+    if (!card || !isCommander()) return;
+    let st;
+    try {
+      st = await api('/api/2fa/status');
+    } catch (e) {
+      return;
+    }
+    $('#twoFactorStatus').textContent = st.enabled
+      ? '✅ مفعّلة منذ ' + formatDateAr(st.enabledAt) + '. الرموز الاحتياطية الباقية: ' + st.backupLeft + ' من 10.' + (st.backupLeft <= 3 ? ' ⚠️ أنشئ رموزاً جديدة.' : '')
+      : '⚪ غير مفعّلة.';
+    $('#twoFactorBegin').hidden = st.enabled || !$('#twoFactorSetup').hidden;
+    $('#twoFactorManage').hidden = !st.enabled;
+    if (st.enabled) $('#twoFactorSetup').hidden = true;
+  }
+
+  function showBackupCodes(data) {
+    const box = $('#twoFactorCodes');
+    box.hidden = false;
+    box.replaceChildren(
+      el('p', { children: [el('strong', { text: '🔑 الرموز الاحتياطية (تُعرض مرة واحدة):' })] }),
+      el('p', { className: 'mono', text: data.codes.join('   '), attrs: { dir: 'ltr' } }),
+      el('p', { children: [button('🖨️ افتح ورقة الطباعة', 'btn-primary btn-sm', () => window.open(data.printUrl, '_blank', 'noopener'))] }),
+      el('p', { className: 'small muted', text: 'ورقة الطباعة تُفتح مرة واحدة خلال دقيقتين. احفظها منفصلة عن كتيب العائلة وعن كلمة المرور.' })
+    );
   }
 
   // ===================== 3.3.0: الدخول بالبصمة أو رمز الجهاز (Passkeys بامتداد PRF) =====================
@@ -2192,8 +2222,27 @@
     },
     async unlock(form, btn) {
       await busy(btn, async () => {
-        const r = await api('/api/vault/unlock', formData(form));
+        let r;
+        try {
+          r = await api('/api/vault/unlock', formData(form));
+        } catch (err) {
+          // 3.5.0: المصادقة الثنائية: يظهر حقل الرمز، وتبقى كلمة المرور مكتوبة
+          if (err.data && err.data.twoFactorRequired) {
+            const firstAsk = $('#twoFactorField').hidden || !form.elements.twoFactorCode.value;
+            $('#twoFactorField').hidden = false;
+            form.elements.twoFactorCode.value = '';
+            form.elements.twoFactorCode.focus();
+            // الطلب الأول للرمز خطوة عادية لا خطأ
+            if (firstAsk) {
+              toast('🔐 ' + err.message, 'ok', 8000);
+              return;
+            }
+          }
+          throw err;
+        }
         form.reset();
+        $('#twoFactorField').hidden = true;
+        if (r.twoFactorNoteAr) toast(r.twoFactorNoteAr, 'warn', 12000);
         await refreshVault();
         refreshProviders();
         toast('🔓 فُتحت الخزنة.', 'ok');
@@ -2210,6 +2259,42 @@
         form.reset();
         await refreshVault();
         toast('🔓 فُتحت الخزنة.', 'ok');
+      });
+    },
+    async '2fa-begin'(form, btn) {
+      await busy(btn, async () => {
+        const d = await api('/api/2fa/setup/begin', formData(form));
+        form.reset();
+        $('#twoFactorSecret').textContent = d.secretBase32;
+        $('#twoFactorQr').src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(d.qrSvg);
+        $('#twoFactorSetup').hidden = false;
+        $('#twoFactorBegin').hidden = true;
+        $('[data-form="2fa-finish"]').elements.code.focus();
+      });
+    },
+    async '2fa-finish'(form, btn) {
+      await busy(btn, async () => {
+        const d = await api('/api/2fa/setup/finish', formData(form));
+        form.reset();
+        $('#twoFactorSetup').hidden = true;
+        $('#twoFactorSecret').textContent = '';
+        $('#twoFactorQr').removeAttribute('src');
+        toast(d.messageAr, 'ok', 10000);
+        showBackupCodes(d);
+        await loadTwoFactor();
+      });
+    },
+    async '2fa-codes'(form, btn) {
+      const disable = Boolean(btn && btn.dataset.twofactorDisable === '1');
+      if (disable && !window.confirm('تعطيل المصادقة الثنائية على كل الأجهزة؟ ستفتح الخزنة بكلمة المرور وحدها.')) return;
+      if (!disable && !window.confirm('إنشاء رموز احتياطية جديدة يُبطل القديمة كلها. متابعة؟')) return;
+      await busy(btn, async () => {
+        const d = await api(disable ? '/api/2fa/disable' : '/api/2fa/backup-codes', formData(form));
+        form.reset();
+        toast(d.messageAr, 'ok', 10000);
+        if (disable) $('#twoFactorCodes').hidden = true;
+        else showBackupCodes(d);
+        await loadTwoFactor();
       });
     },
     async 'passkey-register'(form, btn) {

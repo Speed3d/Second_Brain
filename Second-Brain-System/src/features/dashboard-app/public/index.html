@@ -355,6 +355,7 @@
           <h2>الخزنة مقفلة</h2>
           <form data-form="unlock" class="stack">
             <label>كلمة المرور الرئيسية<input type="password" name="key" autocomplete="current-password" required /></label>
+            <label id="twoFactorField" hidden>🔐 رمز المصادقة الثنائية (6 أرقام من التطبيق) أو رمز احتياطي<input name="twoFactorCode" dir="ltr" inputmode="numeric" autocomplete="one-time-code" maxlength="20" /></label>
             <button type="submit" class="btn btn-primary">🔓 فتح الخزنة</button>
           </form>
           <button type="button" class="btn btn-ghost" data-action="passkey-unlock" id="passkeyUnlockBtn" hidden>👆 افتح بالبصمة أو رمز الجهاز</button>
@@ -392,6 +393,38 @@
               <label>كلمة المرور الرئيسية للتأكيد<input type="password" name="masterPassword" autocomplete="current-password" required /></label>
               <div class="span-2 form-actions"><button type="submit" class="btn btn-primary">➕ سجّل Passkey على هذا الجهاز</button></div>
             </form>
+          </div>
+
+          <div class="card" data-commander-only id="twoFactorCard">
+            <h2>🔐 المصادقة الثنائية (Google Authenticator)</h2>
+            <p class="small" id="twoFactorStatus"></p>
+            <p class="small muted">عند تفعيلها يُطلب رمز من 6 أرقام من تطبيق المصادقة عند فتح الخزنة <strong>بكلمة المرور</strong> فقط (لا مع البصمة ولا مع مفتاح الطوارئ). تحميك إن عرف أحد كلمة المرور على جهاز جديد. <strong>ملاحظة صادقة:</strong> هي بوابة في البرنامج لا تشفير؛ الحماية الحقيقية تبقى كلمة المرور والتشفير.</p>
+            <form data-form="2fa-begin" class="form-grid" id="twoFactorBegin" hidden>
+              <label class="span-2">كلمة المرور الرئيسية للتأكيد<input type="password" name="masterPassword" autocomplete="current-password" required /></label>
+              <div class="span-2 form-actions"><button type="submit" class="btn btn-primary">🔐 فعّل المصادقة الثنائية</button></div>
+            </form>
+            <div id="twoFactorSetup" hidden>
+              <ol class="small">
+                <li>افتح Google Authenticator على الهاتف ← «+» ← «مسح رمز QR»، وامسح الباركود.</li>
+                <li>أو أدخل السر يدوياً (اختر «مستند إلى الوقت»): <bdi class="mono" dir="ltr" id="twoFactorSecret"></bdi></li>
+                <li>اكتب الرمز الحالي من التطبيق للتأكيد.</li>
+              </ol>
+              <img id="twoFactorQr" class="qr-img" alt="باركود ربط تطبيق المصادقة" />
+              <form data-form="2fa-finish" class="form-grid">
+                <label>الرمز من التطبيق<input name="code" dir="ltr" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required /></label>
+                <div class="form-actions"><button type="submit" class="btn btn-primary">✅ تأكيد وتفعيل</button></div>
+              </form>
+            </div>
+            <div id="twoFactorManage" hidden>
+              <form data-form="2fa-codes" class="form-grid">
+                <label class="span-2">كلمة المرور الرئيسية<input type="password" name="masterPassword" autocomplete="current-password" required /></label>
+                <div class="span-2 form-actions">
+                  <button type="submit" class="btn btn-ghost">🔑 رموز احتياطية جديدة</button>
+                  <button type="submit" class="btn btn-danger" data-twofactor-disable="1">🔓 عطّل المصادقة الثنائية</button>
+                </div>
+              </form>
+            </div>
+            <div class="report" id="twoFactorCodes" hidden></div>
           </div>
 
           <details class="card" data-commander-only id="passkeyProbeCard">

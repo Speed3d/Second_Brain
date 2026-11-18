@@ -157,7 +157,8 @@ export interface CriticalFileVersion {
 export interface VaultSecretItem {
   id: string;
   /** 3.1.0: contact و family_instruction عناصر «بوابة العائلة» (معلَّمة للعائلة دائماً، وقيمتها السرية قد تكون فارغة) */
-  category: 'email_account' | 'password' | 'api_key' | 'critical_file' | 'recovery_code' | 'billing' | 'contact' | 'family_instruction';
+  /** 3.5.0: two_factor عنصر نظام خاص (حالة المصادقة الثنائية، لا يظهر في القوائم) */
+  category: 'email_account' | 'password' | 'api_key' | 'critical_file' | 'recovery_code' | 'billing' | 'contact' | 'family_instruction' | 'two_factor';
   title: string;
   projectId?: string;
   usernameOrEmail?: string;

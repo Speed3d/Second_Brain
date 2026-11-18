@@ -34,6 +34,7 @@ import { runFamilyPortalTests } from './19-family-portal.test.ts';
 import { runPasskeyProbeTests } from './20-passkey-probe.test.ts';
 import { runPasskeysTests } from './21-passkeys.test.ts';
 import { runQrCodeTests } from './22-qr-code.test.ts';
+import { runTwoFactorTests } from './23-two-factor.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -154,6 +155,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '22. اختبارات مولّد باركود QR (متجهات المعيار، والسعة الرسمية، والقارئ العكسي لكل الإصدارات والأقنعة، والكتيب)',
       file: 'tests/22-qr-code.test.ts',
       runner: runQrCodeTests,
+    },
+    {
+      name: '23. اختبارات المصادقة الثنائية والرموز الاحتياطية (متجهات RFC، والحالة داخل الخزنة، والمسارات وبوابة الفتح بكلمة المرور)',
+      file: 'tests/23-two-factor.test.ts',
+      runner: runTwoFactorTests,
     },
   ];
 
