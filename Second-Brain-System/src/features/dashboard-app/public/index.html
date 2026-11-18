@@ -357,6 +357,7 @@
             <label>كلمة المرور الرئيسية<input type="password" name="key" autocomplete="current-password" required /></label>
             <button type="submit" class="btn btn-primary">🔓 فتح الخزنة</button>
           </form>
+          <button type="button" class="btn btn-ghost" data-action="passkey-unlock" id="passkeyUnlockBtn" hidden>👆 افتح بالبصمة أو رمز الجهاز</button>
         </div>
 
         <div id="vaultOpen" hidden>
@@ -376,8 +377,25 @@
           </div>
           <div class="card-grid" id="secretsList"></div>
 
-          <div class="card" data-commander-only id="passkeyProbeCard">
-            <h2>🧪 قياس دعم البصمة والوجه (Passkeys)</h2>
+          <div class="card" data-commander-only id="passkeysCard">
+            <h2>👆 الدخول بالبصمة أو رمز الجهاز (Passkeys)</h2>
+            <p class="small muted">بدل كتابة كلمة المرور الرئيسية كل مرة: Passkey بامتداد PRF يفتح الخزنة بتشفير حقيقي. على Windows اختر <strong>«مدير كلمات المرور في Google»</strong> (Windows Hello على Windows 10 بلا PRF)، وعلى الماك Touch ID.</p>
+            <ul class="small">
+              <li>الغلاف محفوظ <strong>على هذا الجهاز فقط</strong>: لا يُزامَن ولا يدخل النسخ. فكل جهاز يُسجَّل وحده.</li>
+              <li>كلمة المرور الرئيسية تبقى تعمل دائماً، وهي مطلوبة للتسجيل وللأعمال الحساسة.</li>
+              <li>تغيير كلمة المرور (على أي جهاز) يُلغي الـ Passkeys، فتسجّلها من جديد.</li>
+            </ul>
+            <p class="small warn-text" id="passkeyHostWarn" hidden></p>
+            <div class="list compact" id="passkeysList"></div>
+            <form data-form="passkey-register" class="form-grid">
+              <label>اسم يميّزه<input name="label" maxlength="80" placeholder="لابتوب Asus — مدير Google" /></label>
+              <label>كلمة المرور الرئيسية للتأكيد<input type="password" name="masterPassword" autocomplete="current-password" required /></label>
+              <div class="span-2 form-actions"><button type="submit" class="btn btn-primary">➕ سجّل Passkey على هذا الجهاز</button></div>
+            </form>
+          </div>
+
+          <details class="card" data-commander-only id="passkeyProbeCard">
+            <summary>🧪 قياس دعم البصمة والوجه (Passkeys)</summary>
             <p class="small muted">قبل أن تفتح البصمة أو الوجه الخزنة، نقيس ما يدعمه هذا الجهاز وهذا المتصفح. القياس يُنشئ Passkey تجريبياً باسم «Second Brain — قياس»، ثم يطلب التحقق منك مرتين. لا يُفتح شيء ولا يُحفظ أي سر، ويُحفظ التقرير على هذا الجهاز فقط.</p>
             <p class="small warn-text" id="probeHostWarn" hidden></p>
             <div class="form-actions">
@@ -387,7 +405,7 @@
             <div class="report" id="probeReport" hidden></div>
             <div class="list compact" id="probeReports"></div>
             <p class="small muted">بعد القياس يمكنك حذف الـ Passkey التجريبي: في Windows من «الإعدادات ← الحسابات ← مفاتيح المرور»، وعلى الماك من «كلمات السر».</p>
-          </div>
+          </details>
 
           <details class="card" data-commander-only>
             <summary>🤖 مفاتيح API (متقدم — فوترة منفصلة)</summary>

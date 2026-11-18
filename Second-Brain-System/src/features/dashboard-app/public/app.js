@@ -741,6 +741,117 @@
     await loadFamilyVault();
     await loadPortal();
     await loadProbeReports();
+    await loadPasskeys();
+  }
+
+  // ===================== 3.3.0: الدخول بالبصمة أو رمز الجهاز (Passkeys بامتداد PRF) =====================
+  function b64uToBytes(s) {
+    const b = atob(String(s).replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((String(s).length + 3) % 4));
+    const out = new Uint8Array(b.length);
+    for (let i = 0; i < b.length; i++) out[i] = b.charCodeAt(i);
+    return out;
+  }
+
+  function bytesToB64u(buf) {
+    const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+    let s = '';
+    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  /** زر الفتح يظهر فقط على localhost، والخزنة مقفلة، ويوجد Passkey صالح على هذا الجهاز */
+  async function loadPasskeys() {
+    const btn = $('#passkeyUnlockBtn');
+    let count = 0;
+    try {
+      count = (await api('/api/passkeys/status')).count;
+    } catch (e) {
+      count = 0;
+    }
+    if (btn) btn.hidden = !(count > 0 && probeHostOk() && state.vault.exists && !state.vault.unlocked && window.PublicKeyCredential);
+    const list = $('#passkeysList');
+    if (!list || !isCommander()) return;
+    const warn = $('#passkeyHostWarn');
+    const okHost = probeHostOk();
+    warn.hidden = okHost;
+    $('[data-form="passkey-register"] button[type="submit"]').disabled = !okHost;
+    if (!okHost) warn.replaceChildren(el('span', { text: '⚠️ Passkeys لا تعمل على العنوان ' + location.host + '. افتح البرنامج على ' }), safeLink('http://localhost:' + location.port + '/'));
+    let r;
+    try {
+      r = await api('/api/passkeys');
+    } catch (e) {
+      return;
+    }
+    list.replaceChildren(
+      ...(r.passkeys.length
+        ? r.passkeys.map((p) =>
+            el('div', {
+              className: 'list-item small',
+              children: [
+                el('strong', { text: '👆 ' + p.label }),
+                el('span', { className: 'muted', text: ' · سُجّل ' + formatDateAr(p.createdAt) + (p.lastUsedAt ? ' · آخر استخدام ' + formatDateAr(p.lastUsedAt) : ' · لم يُستخدم بعد') + (p.backupEligible ? ' · مُزامَن في مدير كلمات المرور' : '') }),
+                button('🗑️ إلغاء', 'btn-ghost btn-sm', () => deletePasskey(p)),
+              ],
+            })
+          )
+        : [el('p', { className: 'muted small', text: 'لا Passkey مسجّل على هذا الجهاز بعد.' })])
+    );
+  }
+
+  async function deletePasskey(p) {
+    if (!window.confirm('إلغاء «' + p.label + '» على هذا الجهاز؟ لن يفتح الخزنة بعد الآن.')) return;
+    await busy(null, async () => {
+      const data = await api('/api/passkeys/delete', { credentialId: p.credentialId });
+      toast(data.messageAr, 'ok', 9000);
+      await loadPasskeys();
+    });
+  }
+
+  function prfFirst(credential) {
+    const e = credential.getClientExtensionResults() || {};
+    return e.prf && e.prf.results && e.prf.results.first ? new Uint8Array(e.prf.results.first) : null;
+  }
+
+  async function passkeyUnlock(btn) {
+    await busy(btn, async () => {
+      const opt = await api('/api/passkeys/unlock/begin', {});
+      const evalByCredential = {};
+      opt.credentials.forEach((c) => (evalByCredential[c.id] = { first: b64uToBytes(c.prfSalt) }));
+      let a;
+      try {
+        a = await navigator.credentials.get({
+          publicKey: {
+            challenge: b64uToBytes(opt.challenge),
+            rpId: opt.rpId,
+            allowCredentials: opt.credentials.map((c) => ({ type: 'public-key', id: b64uToBytes(c.id) })),
+            userVerification: 'required',
+            timeout: 120000,
+            extensions: { prf: { evalByCredential: evalByCredential } },
+          },
+        });
+      } catch (err) {
+        throw new Error(err && err.name === 'NotAllowedError' ? 'أُلغي الطلب أو انتهى وقته.' : 'تعذّر استخدام الـ Passkey: ' + ((err && err.name) || ''));
+      }
+      const first = prfFirst(a);
+      if (!first) throw new Error('هذا الـ Passkey لم يُعطِ سرّ PRF، فلا يفتح الخزنة. افتح بكلمة المرور.');
+      const r = await api('/api/passkeys/unlock/finish', {
+        challenge: opt.challenge,
+        credentialId: bytesToB64u(a.rawId),
+        authenticatorData: bytesToB64u(a.response.authenticatorData),
+        clientDataJSON: bytesToB64u(a.response.clientDataJSON),
+        signature: bytesToB64u(a.response.signature),
+        prfOutput: bytesToB64u(first),
+      });
+      first.fill(0);
+      await refreshVault();
+      refreshProviders();
+      toast('🔓 فُتحت الخزنة بالـ Passkey.', 'ok');
+      if (r.syncMessageAr) {
+        toast(r.syncMessageAr, 'ok', 9000);
+        await loadState();
+      }
+      loadSync();
+    });
   }
 
   /**
@@ -2042,6 +2153,72 @@
         toast('🔓 فُتحت الخزنة.', 'ok');
       });
     },
+    async 'passkey-register'(form, btn) {
+      if (!probeHostOk()) return;
+      await busy(btn, async () => {
+        const f = formData(form);
+        const opt = await api('/api/passkeys/register/begin', { masterPassword: f.masterPassword, label: f.label });
+        form.reset();
+        const salt = b64uToBytes(opt.prfSalt);
+        let cred;
+        let a;
+        try {
+          cred = await navigator.credentials.create({
+            publicKey: {
+              rp: { name: 'Second Brain', id: opt.rpId },
+              user: { id: b64uToBytes(opt.userId), name: 'second-brain', displayName: 'Second Brain — الخزنة' },
+              challenge: b64uToBytes(opt.createChallenge),
+              pubKeyCredParams: [
+                { type: 'public-key', alg: -7 },
+                { type: 'public-key', alg: -257 },
+              ],
+              authenticatorSelection: { authenticatorAttachment: 'platform', residentKey: 'preferred', userVerification: 'required' },
+              attestation: 'none',
+              excludeCredentials: opt.excludeCredentialIds.map((id) => ({ type: 'public-key', id: b64uToBytes(id) })),
+              timeout: 120000,
+              extensions: { prf: { eval: { first: salt } } },
+            },
+          });
+        } catch (err) {
+          throw new Error(err && err.name === 'NotAllowedError' ? 'أُلغي التسجيل أو انتهى وقته.' : err && err.name === 'InvalidStateError' ? 'هذا الـ Passkey مسجّل على هذا الجهاز بالفعل.' : 'تعذّر إنشاء الـ Passkey: ' + ((err && err.name) || ''));
+        }
+        const ce = cred.getClientExtensionResults() || {};
+        if (ce.prf && ce.prf.enabled === false) {
+          throw new Error('المكان الذي اخترته لا يدعم PRF (مثل Windows Hello على Windows 10)، فلا يفتح الخزنة. أعد التسجيل واختر «مدير كلمات المرور في Google»، واحذف الـ Passkey الذي أُنشئ للتو من مدير كلمات المرور.');
+        }
+        try {
+          a = await navigator.credentials.get({
+            publicKey: {
+              challenge: b64uToBytes(opt.getChallenge),
+              rpId: opt.rpId,
+              allowCredentials: [{ type: 'public-key', id: cred.rawId }],
+              userVerification: 'required',
+              timeout: 120000,
+              extensions: { prf: { eval: { first: salt } } },
+            },
+          });
+        } catch (err) {
+          throw new Error('أُنشئ الـ Passkey، لكن أُلغي التحقق الثاني. احذفه من مدير كلمات المرور ثم أعد التسجيل.');
+        }
+        const first = prfFirst(a);
+        if (!first) throw new Error('الـ Passkey لم يُعطِ سرّ PRF، فلا يفتح الخزنة. احذفه من مدير كلمات المرور، وأعد التسجيل باختيار «مدير كلمات المرور في Google» أو Touch ID.');
+        const data = await api('/api/passkeys/register/finish', {
+          token: opt.token,
+          attestationObject: bytesToB64u(cred.response.attestationObject),
+          clientDataJSON: bytesToB64u(cred.response.clientDataJSON),
+          assertion: {
+            credentialId: bytesToB64u(a.rawId),
+            authenticatorData: bytesToB64u(a.response.authenticatorData),
+            clientDataJSON: bytesToB64u(a.response.clientDataJSON),
+            signature: bytesToB64u(a.response.signature),
+          },
+          prfOutput: bytesToB64u(first),
+        });
+        first.fill(0);
+        toast(data.messageAr, 'ok', 9000);
+        await loadPasskeys();
+      });
+    },
     async 'portal-item'(form, btn) {
       await busy(btn, async () => {
         const data = await api('/api/family/portal/item', formData(form));
@@ -2195,6 +2372,7 @@
     'clear-chat': (b) => clearChat(b.dataset.mode),
     'portal-new': (b) => openPortalDialog(b.dataset.category),
     'passkey-probe': (b) => runPasskeyProbe(b),
+    'passkey-unlock': (b) => passkeyUnlock(b),
     'open-conversations': (b) => openConversations(b.dataset.mode),
     'sync-refresh': () => loadSync(),
     'sync-now': (b) => syncAction(b, '/api/sync/now'),

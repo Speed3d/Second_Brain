@@ -328,6 +328,27 @@ export function unlockVault(passwordOrEmergencyKey: string, customVaultFilePath?
 }
 
 /**
+ * Hint بالعربي: دالة فتح الخزنة بمفتاح البيانات نفسه (3.3.0: بعد أن يفكّه Passkey بامتداد PRF على هذا الجهاز).
+ *               النتيجة جلسة قائد كاملة. ترمي إن لم يفتح المفتاح بيانات الخزنة.
+ */
+export function unlockVaultWithDataKey(dataKey: Buffer, customVaultFilePath?: string): UnlockedVault {
+  if (!Buffer.isBuffer(dataKey) || dataKey.length !== 32) throw new Error('مفتاح البيانات غير صالح.');
+  const vaultFilePath = resolveVaultFilePath(customVaultFilePath);
+  const file = readVaultFile(vaultFilePath);
+  const secrets = JSON.parse(openWithKey(file.data, dataKey).toString('utf-8')) as VaultSecretItem[];
+  const familyKey = isFamilyVaultFile(file) ? openWithKey(file.family.fkByCommander, dataKey) : null;
+  return { vaultFilePath, dataKey: Buffer.from(dataKey), familyKey, unlockedBy: 'commander', secrets };
+}
+
+/**
+ * Hint بالعربي: بصمة مغلّف القائد الحالي (تتغيّر مع كل تغيير لكلمة المرور الرئيسية، على أي جهاز).
+ */
+export function commanderWrapFingerprint(customVaultFilePath?: string): string {
+  const file = readVaultFile(resolveVaultFilePath(customVaultFilePath));
+  return crypto.createHash('sha256').update(JSON.stringify(file.commanderWrap)).digest('hex');
+}
+
+/**
  * Hint بالعربي: هل تملك هذه الجلسة مفتاح البيانات الرئيسي (أي يمكنها حفظ الأسرار والمزامنة والنسخ الكاملة)؟
  */
 export function hasMainDataKey(vault: UnlockedVault): boolean {

@@ -32,6 +32,7 @@ import { runRuntimeSafetyTests } from './17-runtime-safety.test.ts';
 import { runFamilyVaultTests } from './18-family-vault.test.ts';
 import { runFamilyPortalTests } from './19-family-portal.test.ts';
 import { runPasskeyProbeTests } from './20-passkey-probe.test.ts';
+import { runPasskeysTests } from './21-passkeys.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -142,6 +143,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '20. اختبارات قياس دعم Passkeys و PRF (التصنيف، والتقرير بلا أسرار، والمسارات، والمشغّلات على localhost)',
       file: 'tests/20-passkey-probe.test.ts',
       runner: runPasskeyProbeTests,
+    },
+    {
+      name: '21. اختبارات الدخول بالبصمة أو رمز الجهاز (Passkeys بامتداد PRF: CBOR، والتسجيل والفتح بمصادق برمجي ES256 و RS256، والرفض، والإبطال، والعزل، والمسارات)',
+      file: 'tests/21-passkeys.test.ts',
+      runner: runPasskeysTests,
     },
   ];
 

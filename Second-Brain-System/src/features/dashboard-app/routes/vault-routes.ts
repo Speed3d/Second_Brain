@@ -27,6 +27,7 @@ import { listOldFullAccessCopies, removeOldFullAccessCopies } from '../../family
 import { createEncryptedSystemBackup } from '../../family-emergency/backup-service.ts';
 import { resealFamilyConversations } from '../../conversations/conversation-store.ts';
 import { appendFamilyLog, isPortalCategory } from '../../family-emergency/family-portal.ts';
+import { removeAllLocalPasskeys } from '../../auth/passkey-store.ts';
 import { buildSessionCookie, HttpError, readString, sendJson, type RouteDefinition } from '../http-utils.ts';
 import {
   closeVaultSession,
@@ -225,7 +226,9 @@ export function getVaultRoutes(): RouteDefinition[] {
       commanderOnly: true,
       handler: ({ res, body, session }) => {
         changeMasterPassword(session!.vault, readString(body, 'currentPassword', 512), readString(body, 'newPassword', 512));
-        sendJson(res, 200, { ok: true, messageAr: 'تم تغيير كلمة المرور الرئيسية. مفتاح الطوارئ المطبوع ما زال صالحاً.' });
+        // 3.3.0: كلمة مرور جديدة تُبطل الـ Passkeys على هذا الجهاز (والأجهزة الأخرى تُبطلها عند وصول المغلّف الجديد)
+        const removed = removeAllLocalPasskeys();
+        sendJson(res, 200, { ok: true, messageAr: `تم تغيير كلمة المرور الرئيسية. مفتاح الطوارئ المطبوع ما زال صالحاً.${removed ? ` وأُلغي ${removed} Passkey على هذا الجهاز: سجّله من جديد.` : ''}` });
       },
     },
     {
