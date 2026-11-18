@@ -60,6 +60,8 @@ kbd { border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; 
 .small { font-size: 0.86rem; }
 .pre-wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
 .warn-text { color: var(--amber); }
+#mcpTools .list-item > span, #mcpAudit .list-item { min-width: 0; }
+#mcpTools .mono, #mcpAudit .mono { display: block; overflow-wrap: anywhere; word-break: break-all; }
 .qr-img { width: 220px; height: 220px; background: #fff; border-radius: 8px; padding: 4px; }
 .scan-video { width: 100%; max-width: 420px; aspect-ratio: 4 / 3; background: #000; border-radius: 10px; object-fit: cover; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

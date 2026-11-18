@@ -80,6 +80,7 @@
     │   │   │   └── 📄 project-watcher.ts       # المراقب الدوري وإعادة الفحص الشاملة
     │   │   ├── 📁 ai-memory\
     │   │   │   ├── 📄 shared-memory-service.ts # الذاكرة المشتركة (مع حذف الأسرار)
+    │   │   │   ├── 📄 mcp-controls.ts         # مفاتيح أدوات MCP لكل جهاز، وسجل عملياتها بلا محتوى (mcp-audit.log)
     │   │   │   ├── 📄 transcript-harvester.ts  # السحب التزايدي وربط الجلسات بالمشاريع
     │   │   │   └── 📁 connectors\              # claude-code-connector.ts، antigravity-connector.ts، connector-types.ts
     │   │   ├── 📁 assistant\
@@ -118,7 +119,7 @@
     │   │       ├── 📄 desktop-server.ts        # الموجّه على 127.0.0.1 + طبقات الحماية + تشغيل المراقب
     │   │       ├── 📄 http-utils.ts            # الرد، حد الطلب، الكوكيز، Host/CSRF، رؤوس الأمان
     │   │       ├── 📄 session-manager.ts       # جلسة الخزنة، القفل التلقائي، تأخير المحاولات
-    │   │       ├── 📁 routes\                  # state، vault، project، memory، assistant، emergency، portal (بوابة العائلة)، auth (قياس Passkeys والدخول بها)، maintenance، conversation، voice، sync
+    │   │       ├── 📁 routes\                  # state، vault، project، memory، assistant، emergency، portal (بوابة العائلة)، auth (قياس Passkeys والدخول بها)، mcp (أدوات MCP وسجلها)، maintenance، conversation، voice، sync
     │   │       └── 📁 public\                  # index.html، styles.css، app.js، hologram.js (CSP صارمة)
     │   │
     │   ├── 📁 shared\                          # [SHARED] لا يعتمد على أي طبقة أخرى
@@ -163,7 +164,8 @@
         ├── 📄 22-qr-code.test.ts               # مولّد QR: متجهات المعيار، والسعة الرسمية، وقارئ عكسي مستقل، والكتيب
         ├── 📄 23-two-factor.test.ts            # المصادقة الثنائية: متجهات RFC، والحالة، والرموز الاحتياطية، وبوابة الفتح بكلمة المرور
         ├── 📄 24-prompt-injection.test.ts      # التعليمات المدسوسة: التنقية، والوسوم في كل الأوضاع، والعزل بلا أدوات
-        └── 📄 25-log-redaction.test.ts         # السجلات: أسرار متعمّدة لا تُكتب، والتدوير، ومخرجات الطرفية ورسائل الأعطال
+        ├── 📄 25-log-redaction.test.ts         # السجلات: أسرار متعمّدة لا تُكتب، والتدوير، ومخرجات الطرفية ورسائل الأعطال
+        └── 📄 26-mcp-controls.test.ts          # أدوات MCP: المفاتيح، والسجل بلا محتوى، وعملية خادم حقيقية عبر stdio، والمسارات
 ```
 
 ---

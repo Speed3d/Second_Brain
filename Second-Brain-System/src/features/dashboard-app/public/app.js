@@ -189,7 +189,10 @@
     if (view === 'vault' && state.vault.unlocked) loadSecrets();
     if (view === 'emergency') loadBackups();
     if (view === 'settings') requireSettingsAuth();
-    if (view === 'connect') loadProvidersGuide();
+    if (view === 'connect') {
+      loadProvidersGuide();
+      loadMcpTools();
+    }
     if (view === 'sync') loadSync();
   }
 
@@ -1160,6 +1163,57 @@
       }
       await new Promise((r) => setTimeout(r, 250));
     }
+  }
+
+  /**
+   * 3.8.0: أدوات MCP (تفعيل وتعطيل لكل أداة) وسجل عملياتها
+   */
+  const MCP_RESULT_AR = { ok: '✅ نجحت', error: '⚠️ خطأ', disabled: '⛔ معطّلة', invalid: '❓ معاملات غير صالحة', unknown_tool: '❓ أداة غير معروفة' };
+
+  async function loadMcpTools() {
+    const box = $('#mcpTools');
+    if (!box || !isCommander()) return;
+    let r;
+    try {
+      r = await api('/api/mcp/tools');
+    } catch (e) {
+      return;
+    }
+    box.replaceChildren(
+      ...r.tools.map((t) => {
+        const input = el('input', { attrs: Object.assign({ type: 'checkbox' }, t.enabled ? { checked: 'checked' } : {}) });
+        input.addEventListener('change', async () => {
+          input.disabled = true;
+          try {
+            const d = await api('/api/mcp/tools', { name: t.name, enabled: input.checked });
+            toast(d.messageAr, 'ok');
+          } catch (err) {
+            input.checked = !input.checked;
+            toast('❌ ' + err.message, 'error');
+          } finally {
+            input.disabled = false;
+          }
+        });
+        return el('label', {
+          className: 'check list-item',
+          children: [input, el('span', { children: [el('strong', { text: t.title }), el('bdi', { className: 'mono muted small', text: ' ' + t.name, attrs: { dir: 'ltr' } }), t.writes ? el('span', { className: 'badge warn', text: 'تكتب في الذاكرة' }) : null] })],
+        });
+      })
+    );
+    $('#mcpAudit').replaceChildren(
+      ...(r.audit.length
+        ? r.audit.slice(0, 50).map((a) =>
+            el('div', {
+              className: 'list-item small',
+              children: [
+                el('strong', { text: MCP_RESULT_AR[a.result] || a.result }),
+                el('bdi', { className: 'mono', text: ' ' + a.tool, attrs: { dir: 'ltr' } }),
+                el('span', { className: 'muted', text: ' · ' + formatDateAr(a.at) + ' · ' + a.client + (a.clientVersion ? ' ' + a.clientVersion : '') + (a.projectId ? ' · مشروع: ' + a.projectId : '') + ' · ' + a.durationMs + 'ms' }),
+              ],
+            })
+          )
+        : [el('p', { className: 'muted small', text: 'لا عمليات مسجّلة بعد.' })])
+    );
   }
 
   function openPortalDialog(category, item) {

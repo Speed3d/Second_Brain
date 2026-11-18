@@ -8,6 +8,7 @@
  *               - يتفاوض على إصدار البروتوكول، ويدعم ping.
  *               - أخطاء JSON-RPC صحيحة (-32700 / -32600 / -32601 / -32602)، وأخطاء الأدوات تُعاد بـ isError.
  *               - لا يطبع أي شيء على stdout غير رسائل البروتوكول، ولا يصل إلى الخزنة إطلاقاً.
+ *               - 3.8.0: مفتاح تشغيل لكل أداة (المعطّلة لا تظهر وتُرفض)، وسجل عمليات بلا محتوى (mcp-controls.ts).
  * ============================================================================
  */
 
@@ -20,12 +21,23 @@ import { loadSystemConfig, readAppVersion } from '../core/config-manager.ts';
 import { querySharedAIMemory, recordSharedAIMemory } from '../features/ai-memory/shared-memory-service.ts';
 import { scanAndAnalyzeProject } from '../features/project-indexer/project-scanner.ts';
 import { checkWriteAccess } from '../features/sync/sync-context.ts';
+import { appendMcpAudit, isMcpToolEnabled, type McpAuditResult } from '../features/ai-memory/mcp-controls.ts';
 
 /** إصدارات البروتوكول المدعومة (الأحدث أولاً) */
 export const SUPPORTED_MCP_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 /** إصدار الخادم = إصدار البرنامج (package.json) حتى يعرف Claude Code و Antigravity أي نسخة يتصلان بها */
 const SERVER_VERSION = readAppVersion();
 const SOURCE_AI_VALUES = ['antigravity-gemini', 'claude-code', 'second-brain-assistant', 'manual'] as const;
+
+/** البرنامج المتصل بهذه العملية (من رسالة initialize)، لسجل العمليات */
+let connectedClient: { name: string; version: string } = { name: '', version: '' };
+
+/**
+ * Hint بالعربي: للاختبارات فقط: تصفير البرنامج المتصل.
+ */
+export function resetMcpClientForTests(): void {
+  connectedClient = { name: '', version: '' };
+}
 
 /**
  * Hint بالعربي: خطأ في معاملات الأداة يُعاد للعميل كخطأ JSON-RPC رقم -32602.
@@ -255,6 +267,8 @@ export function handleMcpJsonRpcRequest(request: unknown): Record<string, unknow
 
   switch (method) {
     case 'initialize': {
+      const info = (params?.clientInfo ?? {}) as { name?: unknown; version?: unknown };
+      connectedClient = { name: typeof info.name === 'string' ? info.name : '', version: typeof info.version === 'string' ? info.version : '' };
       const requested = String(params?.protocolVersion ?? '');
       const protocolVersion = SUPPORTED_MCP_VERSIONS.includes(requested) ? requested : SUPPORTED_MCP_VERSIONS[0];
       return ok({
@@ -268,7 +282,7 @@ export function handleMcpJsonRpcRequest(request: unknown): Record<string, unknow
     case 'ping':
       return ok({});
     case 'tools/list':
-      return ok({ tools: buildMcpTools().map(({ name, title, description, inputSchema }) => ({ name, title, description, inputSchema })) });
+      return ok({ tools: buildMcpTools().filter((t) => isMcpToolEnabled(t.name)).map(({ name, title, description, inputSchema }) => ({ name, title, description, inputSchema })) });
     case 'resources/list':
       return ok({ resources: [] });
     case 'resources/templates/list':
@@ -276,17 +290,35 @@ export function handleMcpJsonRpcRequest(request: unknown): Record<string, unknow
     case 'prompts/list':
       return ok({ prompts: [] });
     case 'tools/call': {
+      const started = Date.now();
       const toolName = String(params?.name ?? '');
-      const tool = buildMcpTools().find((t) => t.name === toolName);
-      if (!tool) return jsonRpcError(id, -32602, `أداة غير معروفة: ${toolName}`);
       const args = params?.arguments;
+      const projectId = args && typeof args === 'object' && !Array.isArray(args) ? (args as ToolArgs).projectId : undefined;
+      const audit = (result: McpAuditResult): void =>
+        appendMcpAudit({ client: connectedClient.name, clientVersion: connectedClient.version, tool: toolName, projectId, result, durationMs: Date.now() - started });
+      const tool = buildMcpTools().find((t) => t.name === toolName);
+      if (!tool) {
+        audit('unknown_tool');
+        return jsonRpcError(id, -32602, `أداة غير معروفة: ${toolName}`);
+      }
+      if (!isMcpToolEnabled(toolName)) {
+        audit('disabled');
+        return ok({ content: [{ type: 'text', text: `الأداة ${toolName} معطّلة على هذا الجهاز من إعدادات Second Brain (صفحة «🔌 الربط»).` }], isError: true });
+      }
       if (args !== undefined && (typeof args !== 'object' || args === null || Array.isArray(args))) {
+        audit('invalid');
         return jsonRpcError(id, -32602, 'المعامل arguments يجب أن يكون كائناً.');
       }
       try {
-        return ok({ content: [{ type: 'text', text: tool.run((args as ToolArgs) ?? {}) }] });
+        const text = tool.run((args as ToolArgs) ?? {});
+        audit('ok');
+        return ok({ content: [{ type: 'text', text }] });
       } catch (err) {
-        if (err instanceof McpInvalidParamsError) return jsonRpcError(id, -32602, err.message);
+        if (err instanceof McpInvalidParamsError) {
+          audit('invalid');
+          return jsonRpcError(id, -32602, err.message);
+        }
+        audit('error');
         return ok({ content: [{ type: 'text', text: `خطأ أثناء تنفيذ الأداة: ${err instanceof Error ? err.message : String(err)}` }], isError: true });
       }
     }

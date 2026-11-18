@@ -37,6 +37,7 @@ import { runQrCodeTests } from './22-qr-code.test.ts';
 import { runTwoFactorTests } from './23-two-factor.test.ts';
 import { runPromptInjectionTests } from './24-prompt-injection.test.ts';
 import { runLogRedactionTests } from './25-log-redaction.test.ts';
+import { runMcpControlsTests } from './26-mcp-controls.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -172,6 +173,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '25. اختبارات تنقية السجلات وتدويرها (أسرار متعمّدة في runtime.log، والتدوير 5MB × 3، ومخرجات الطرفية ورسائل الأعطال)',
       file: 'tests/25-log-redaction.test.ts',
       runner: runLogRedactionTests,
+    },
+    {
+      name: '26. اختبارات أدوات MCP وسجل عملياتها (مفتاح لكل أداة، وسجل بلا محتوى، وعملية خادم حقيقية عبر stdio، والمسارات)',
+      file: 'tests/26-mcp-controls.test.ts',
+      runner: runMcpControlsTests,
     },
   ];
 
