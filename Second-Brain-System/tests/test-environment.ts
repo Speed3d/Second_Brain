@@ -108,6 +108,9 @@ export function setupIsolatedTestEnvironment(): IsolatedTestEnvironment {
   const configPath = path.join(rootDir, 'config', 'branding.json');
   writeFixtureFile(configPath, JSON.stringify(testConfig, null, 2));
 
+  // بيئة متداخلة (tests/28) تعيد مفتاح البيئة الخارجية عند الإغلاق، فلا تنكسر الحزم التي بعدها
+  const previousCachedKey = cachedTestEmergencyKey;
+  cachedTestEmergencyKey = null;
   const previousEnv = process.env.SECOND_BRAIN_CONFIG_PATH;
   process.env.SECOND_BRAIN_CONFIG_PATH = configPath;
   // لا تشغّل الاختبارات Claude Code الحقيقي أبداً (لا استهلاك لحصة الاشتراك ولا إرسال بيانات)؛ تستخدم محاكياً وهمياً عند الحاجة
@@ -121,7 +124,7 @@ export function setupIsolatedTestEnvironment(): IsolatedTestEnvironment {
     rootDir,
     fixtureProject,
     restore: () => {
-      cachedTestEmergencyKey = null;
+      cachedTestEmergencyKey = previousCachedKey;
       if (previousEnv === undefined) delete process.env.SECOND_BRAIN_CONFIG_PATH;
       else process.env.SECOND_BRAIN_CONFIG_PATH = previousEnv;
       if (previousClaudeCli === undefined) delete process.env.SECOND_BRAIN_CLAUDE_CLI;

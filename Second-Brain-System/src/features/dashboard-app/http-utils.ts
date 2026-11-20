@@ -69,6 +69,7 @@ export interface RouteDefinition {
   method: 'GET' | 'POST';
   path: string | RegExp;
   requiresSession?: boolean;
+  /** للقائد فقط: يتطلب جلسة قائد مفتوحة (بلا جلسة ← 401، وجلسة العائلة ← 403). منذ 3.9.1 (ISS-045) يتضمّن requiresSession */
   commanderOnly?: boolean;
   handler: (ctx: RouteContext) => Promise<void> | void;
 }

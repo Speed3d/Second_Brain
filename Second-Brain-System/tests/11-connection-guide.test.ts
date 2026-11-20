@@ -64,15 +64,21 @@ export async function runConnectionGuideTests(): Promise<string[]> {
     passedChecks.push('اختبار Claude و Gemini بلا مفاتيح: رسالة واضحة توجّه إلى الخزنة، دون أي اتصال بالإنترنت بنجاح.');
 
     // 3. المسار عبر الخادم
-    const viaServer = await postJson(port, '/api/assistant/test', { provider: 'claude' });
+    // ISS-045 (3.9.1): بلا جلسة يُرفض (كان يُقبل لأن «للقائد فقط» كان يُتخطّى بلا جلسة)
+    assert.equal((await postJson(port, '/api/assistant/test', { provider: 'claude' })).status, 401, 'بلا خزنة مفتوحة: مرفوض');
+    const commander = await postJson(port, '/api/vault/unlock', { key: ensureTestVault().masterPassword });
+    assert.equal(commander.status, 200, commander.body);
+    const commanderCookie = String(commander.headers['set-cookie'] ?? '').split(';')[0];
+    const viaServer = await postJson(port, '/api/assistant/test', { provider: 'claude' }, commanderCookie);
     assert.equal(viaServer.status, 200);
     assert.equal(JSON.parse(viaServer.body).ok, false);
-    assert.equal((await postJson(port, '/api/assistant/test', { provider: 'local' })).status, 400, 'المزوّد غير القابل للاختبار مرفوض');
-    assert.equal((await postJson(port, '/api/assistant/test', { provider: 'evil' })).status, 400);
+    assert.equal((await postJson(port, '/api/assistant/test', { provider: 'local' }, commanderCookie)).status, 400, 'المزوّد غير القابل للاختبار مرفوض');
+    assert.equal((await postJson(port, '/api/assistant/test', { provider: 'evil' }, commanderCookie)).status, 400);
+    resetSessionStateForTests();
     const emergency = await postJson(port, '/api/vault/unlock', { key: emergencyKey });
     const cookie = String(emergency.headers['set-cookie'] ?? '').split(';')[0];
     assert.equal((await postJson(port, '/api/assistant/test', { provider: 'ollama' }, cookie)).status, 403, 'وضع الطوارئ لا يختبر المزوّدين');
-    passedChecks.push('اختبار مسار /api/assistant/test (رفض المزوّد غير المعروف ووضع الطوارئ) بنجاح.');
+    passedChecks.push('اختبار مسار /api/assistant/test (رفض بلا خزنة مفتوحة ISS-045، ورفض المزوّد غير المعروف ووضع الطوارئ) بنجاح.');
   } finally {
     updateSystemSettings({ aiConfig: originalAi });
     envKeys.forEach((k) => {

@@ -27,7 +27,7 @@ import { startSecondBrainDesktopServer } from '../src/features/dashboard-app/des
 import { resetSessionStateForTests } from '../src/features/dashboard-app/session-manager.ts';
 import { postJson } from './06-security.test.ts';
 import { startFakeAiServer } from './07-integration.test.ts';
-import { writeFixtureFile } from './test-environment.ts';
+import { ensureTestVault, writeFixtureFile } from './test-environment.ts';
 
 /** محاكي Claude Code: يقلّد "auth status" ومخرجات stream-json، ويسجّل ما استلمه للتحقق منه */
 const FAKE_CLAUDE_SCRIPT = `
@@ -189,7 +189,10 @@ export async function runClaudeSubscriptionTests(): Promise<string[]> {
 
     // 6. عبر الخادم
     setMode('ok');
-    const viaServer = await postJson(port, '/api/assistant/test', { provider: 'claude-cli' });
+    // ISS-045 (3.9.1): اختبار المزوّد يتطلب جلسة القائد
+    const unlocked = await postJson(port, '/api/vault/unlock', { key: ensureTestVault().masterPassword });
+    assert.equal(unlocked.status, 200, unlocked.body);
+    const viaServer = await postJson(port, '/api/assistant/test', { provider: 'claude-cli' }, String(unlocked.headers['set-cookie'] ?? '').split(';')[0]);
     assert.equal(viaServer.status, 200);
     const body = JSON.parse(viaServer.body);
     assert.equal(body.ok, true, body.reasonAr);

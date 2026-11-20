@@ -38,6 +38,7 @@ import { runTwoFactorTests } from './23-two-factor.test.ts';
 import { runPromptInjectionTests } from './24-prompt-injection.test.ts';
 import { runLogRedactionTests } from './25-log-redaction.test.ts';
 import { runRedactionPatternTests } from './27-redaction-patterns.test.ts';
+import { runPhase2SecurityTests } from './28-phase2-security.test.ts';
 import { runMcpControlsTests } from './26-mcp-controls.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
@@ -184,6 +185,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '27. اختبارات أنماط التنقيح الجديدة وحالات الفشل الصعبة (Cloudflare وسلاسل الاتصال و .env، وسرّ مقسوم على سطرين أو داخل JSON أو كتلة كود، والحذف الخاطئ، وصياغة الأعداد)',
       file: 'tests/27-redaction-patterns.test.ts',
       runner: runRedactionPatternTests,
+    },
+    {
+      name: '28. الاختبارات الجامعة للمرحلة 2 (جدول الصلاحيات المثبّت وكل مسار محمي عبر HTTP، وحدود المفاتيح على كل ملف مشفّر، ولا نص صريح لأي سرّ في القرص)',
+      file: 'tests/28-phase2-security.test.ts',
+      runner: runPhase2SecurityTests,
     },
   ];
 

@@ -146,7 +146,8 @@ export function createSecondBrainDesktopServer(): http.Server {
       const token = parseCookies(req.headers.cookie)[SESSION_COOKIE_NAME];
       const session = getVaultSession(token);
       const { route, params } = matched;
-      if (route.requiresSession && !session) {
+      // ISS-045: «للقائد فقط» يعني جلسة قائد. بلا جلسة كان الشرط التالي يُتخطّى، فيصبح المسار مفتوحاً لأي برنامج محلي
+      if ((route.requiresSession || route.commanderOnly) && !session) {
         throw new HttpError(401, 'الخزنة مقفلة. افتح الخزنة أولاً.', { locked: true });
       }
       if (route.commanderOnly && session && session.vault.unlockedBy !== 'commander') {
