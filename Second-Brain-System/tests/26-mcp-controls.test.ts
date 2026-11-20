@@ -8,6 +8,8 @@
  *                 غير صالحة، وأداة غير معروفة)، والمدة — **بلا أي محتوى**، والمشروع منقّى من الأسرار.
  *               - عملية خادم MCP حقيقية عبر stdio (كما يشغّلها Claude Code): الردود سليمة، والسجل يُكتب.
  *               - المسارات: للقائد فقط، وأسماء الأدوات والقيم مُتحقَّق منها.
+ *               - 3.8.2 (ISS-043): الخادم يعلن listChanged ويرسل notifications/tools/list_changed عند التعطيل والإعادة،
+ *                 فتصل الأداة المعادة إلى المحادثة المفتوحة (داخل العملية، وفي عملية حقيقية عبر stdio).
  * ============================================================================
  */
 
@@ -19,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { appendMcpAudit, isMcpToolEnabled, readDisabledMcpTools, readMcpAudit, resolveMcpAuditFile, setMcpToolEnabled } from '../src/features/ai-memory/mcp-controls.ts';
 import { startSecondBrainDesktopServer } from '../src/features/dashboard-app/desktop-server.ts';
 import { resetSessionStateForTests } from '../src/features/dashboard-app/session-manager.ts';
-import { handleMcpJsonRpcRequest, resetMcpClientForTests } from '../src/tools/mcp-memory-server.ts';
+import { handleMcpJsonRpcRequest, resetMcpClientForTests, startMcpToolListWatcher } from '../src/tools/mcp-memory-server.ts';
 import { postJson, rawRequest } from './06-security.test.ts';
 import { ensureTestVault } from './test-environment.ts';
 
@@ -96,6 +98,69 @@ export async function runMcpControlsTests(): Promise<string[]> {
   assert.equal(procAudit[0].client, 'antigravity');
   assert.equal(procAudit[0].result, 'ok');
   passedChecks.push('اختبار عملية خادم MCP حقيقية عبر stdio (ردّان صحيحان فقط على stdout، والسجل يحفظ البرنامج المتصل والنتيجة) بنجاح.');
+
+  // ===================== 3ب. إشعار تغيّر قائمة الأدوات (ISS-043) =====================
+  const waitFor = async (cond: () => boolean, ms: number, what: string): Promise<void> => {
+    const until = Date.now() + ms;
+    while (!cond()) {
+      if (Date.now() > until) throw new Error(`انتهى الانتظار: ${what}`);
+      await new Promise((r) => setTimeout(r, 20));
+    }
+  };
+  const init = handleMcpJsonRpcRequest({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', clientInfo: { name: 'claude-code', version: '9.9.9' } } }) as { result: { capabilities: { tools: { listChanged: boolean } } } };
+  assert.equal(init.result.capabilities.tools.listChanged, true, 'الخادم يعلن أنه يُبلغ بتغيّر القائمة');
+  const sent: Array<Record<string, unknown>> = [];
+  const stop = startMcpToolListWatcher((m) => sent.push(m), 20);
+  try {
+    await new Promise((r) => setTimeout(r, 120));
+    assert.equal(sent.length, 0, 'لا إشعار بلا تغيير');
+    setMcpToolEnabled('second_brain_search_memory', false);
+    await waitFor(() => sent.length === 1, 2000, 'إشعار التعطيل');
+    setMcpToolEnabled('second_brain_search_memory', true);
+    await waitFor(() => sent.length === 2, 2000, 'إشعار الإعادة');
+    assert.ok(sent.every((m) => m.method === 'notifications/tools/list_changed' && m.jsonrpc === '2.0' && !('id' in m)), 'إشعار JSON-RPC بلا id');
+  } finally {
+    stop();
+  }
+
+  const live = spawn(process.execPath, [MCP_SERVER], { env: { ...process.env, SECOND_BRAIN_MCP_WATCH_MS: '50' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const lines: Array<{ id?: number; method?: string; result?: { tools?: Array<{ name: string }> } }> = [];
+  let buf = '';
+  live.stdout.on('data', (d: Buffer) => {
+    buf += d.toString('utf8');
+    let i: number;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      if (line) lines.push(JSON.parse(line));
+    }
+  });
+  const send = (m: unknown): void => void live.stdin.write(JSON.stringify(m) + '\n');
+  const notices = (): number => lines.filter((l) => l.method === 'notifications/tools/list_changed').length;
+  const toolsReply = (id: number): string[] | undefined => lines.find((l) => l.id === id)?.result?.tools?.map((t) => t.name);
+  try {
+    send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', clientInfo: { name: 'claude-code', version: '9.9.9' } } });
+    send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+    send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+    await waitFor(() => toolsReply(2) !== undefined, 5000, 'القائمة الأولى');
+    assert.equal(toolsReply(2)!.length, 6);
+    setMcpToolEnabled('second_brain_search_memory', false);
+    await waitFor(() => notices() === 1, 5000, 'إشعار التعطيل من العملية');
+    send({ jsonrpc: '2.0', id: 3, method: 'tools/list' });
+    await waitFor(() => toolsReply(3) !== undefined, 5000, 'القائمة بعد التعطيل');
+    assert.ok(!toolsReply(3)!.includes('second_brain_search_memory'));
+    setMcpToolEnabled('second_brain_search_memory', true);
+    await waitFor(() => notices() === 2, 5000, 'إشعار الإعادة من العملية');
+    send({ jsonrpc: '2.0', id: 4, method: 'tools/list' });
+    await waitFor(() => toolsReply(4) !== undefined, 5000, 'القائمة بعد الإعادة');
+    assert.ok(toolsReply(4)!.includes('second_brain_search_memory'), 'الأداة المعادة تظهر في الجلسة نفسها بلا محادثة جديدة');
+  } finally {
+    setMcpToolEnabled('second_brain_search_memory', true);
+    live.stdin.end();
+    const liveCode = await new Promise<number | null>((resolve) => live.on('close', resolve));
+    assert.equal(liveCode, 0, 'العملية تنتهي طبيعياً عند إغلاق الإدخال رغم المراقب');
+  }
+  passedChecks.push('اختبار إشعار تغيّر قائمة الأدوات (ISS-043: الخادم يعلن listChanged، ولا إشعار بلا تغيير، وإشعار عند التعطيل وعند الإعادة، وفي عملية حقيقية تعود الأداة في الجلسة نفسها، والعملية تنتهي طبيعياً) بنجاح.');
 
   // ===================== 4. المسارات =====================
   resetSessionStateForTests();

@@ -9,6 +9,8 @@
  *               - أخطاء JSON-RPC صحيحة (-32700 / -32600 / -32601 / -32602)، وأخطاء الأدوات تُعاد بـ isError.
  *               - لا يطبع أي شيء على stdout غير رسائل البروتوكول، ولا يصل إلى الخزنة إطلاقاً.
  *               - 3.8.0: مفتاح تشغيل لكل أداة (المعطّلة لا تظهر وتُرفض)، وسجل عمليات بلا محتوى (mcp-controls.ts).
+ *               - 3.8.2 (ISS-043): يُعلن listChanged ويرسل notifications/tools/list_changed عند تغيّر الأدوات المعطّلة،
+ *                 فتظهر الأداة المعادة في المحادثة المفتوحة بلا محادثة جديدة.
  * ============================================================================
  */
 
@@ -21,7 +23,7 @@ import { loadSystemConfig, readAppVersion } from '../core/config-manager.ts';
 import { querySharedAIMemory, recordSharedAIMemory } from '../features/ai-memory/shared-memory-service.ts';
 import { scanAndAnalyzeProject } from '../features/project-indexer/project-scanner.ts';
 import { checkWriteAccess } from '../features/sync/sync-context.ts';
-import { appendMcpAudit, isMcpToolEnabled, type McpAuditResult } from '../features/ai-memory/mcp-controls.ts';
+import { appendMcpAudit, isMcpToolEnabled, readDisabledMcpTools, type McpAuditResult } from '../features/ai-memory/mcp-controls.ts';
 
 /** إصدارات البروتوكول المدعومة (الأحدث أولاً) */
 export const SUPPORTED_MCP_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
@@ -273,7 +275,7 @@ export function handleMcpJsonRpcRequest(request: unknown): Record<string, unknow
       const protocolVersion = SUPPORTED_MCP_VERSIONS.includes(requested) ? requested : SUPPORTED_MCP_VERSIONS[0];
       return ok({
         protocolVersion,
-        capabilities: { tools: { listChanged: false } },
+        capabilities: { tools: { listChanged: true } },
         serverInfo: { name: 'second-brain-mcp', title: 'Second Brain', version: SERVER_VERSION },
         instructions:
           'ذاكرة Second Brain المشتركة: ابدأ بـ second_brain_get_commander_profile ثم second_brain_get_project_context للمشروع الحالي، وسجّل ملخص عملك وقراراتك في النهاية بـ second_brain_record_shared_memory.',
@@ -327,6 +329,37 @@ export function handleMcpJsonRpcRequest(request: unknown): Record<string, unknow
   }
 }
 
+/** الفاصل الافتراضي لفحص تغيّر الأدوات المعطّلة (ISS-043) */
+export const MCP_TOOL_WATCH_INTERVAL_MS = 2000;
+
+/**
+ * Hint بالعربي: بصمة الأدوات المعطّلة الآن (نص ثابت الترتيب) للمقارنة.
+ */
+export function disabledToolsFingerprint(): string {
+  return [...readDisabledMcpTools()].sort().join('\n');
+}
+
+/**
+ * Hint بالعربي: مراقب تغيّر الأدوات المعطّلة (ISS-043). يفحص الإعداد كل فترة، وعند أي تغيّر يرسل
+ *               notifications/tools/list_changed فيعيد البرنامج طلب tools/list. لا يمنع إنهاء العملية (unref).
+ *               المخرجات: دالة إيقاف.
+ */
+export function startMcpToolListWatcher(send: (message: Record<string, unknown>) => void, intervalMs: number = MCP_TOOL_WATCH_INTERVAL_MS): () => void {
+  let last = disabledToolsFingerprint();
+  const timer = setInterval(() => {
+    const now = disabledToolsFingerprint();
+    if (now === last) return;
+    last = now;
+    try {
+      send({ jsonrpc: '2.0', method: 'notifications/tools/list_changed' });
+    } catch {
+      // القناة أُغلقت: لا شيء نفعله
+    }
+  }, intervalMs);
+  timer.unref?.();
+  return () => clearInterval(timer);
+}
+
 /**
  * Hint بالعربي: دالة معالجة سطر نصي واحد قادم عبر stdio. المخرجات: نص الرد أو null إذا لا يُرسل رد.
  */
@@ -348,6 +381,8 @@ if (process.argv[1] && process.argv[1].endsWith('mcp-memory-server.ts')) {
   console.log = (...args: unknown[]) => console.error(...args);
   console.info = console.log;
   const rl = readline.createInterface({ input: process.stdin, terminal: false });
+  const watchMs = Number(process.env.SECOND_BRAIN_MCP_WATCH_MS) || MCP_TOOL_WATCH_INTERVAL_MS;
+  const stopWatcher = startMcpToolListWatcher((message) => process.stdout.write(JSON.stringify(message) + '\n'), watchMs);
   rl.on('line', (line) => {
     const reply = processMcpLine(line);
     if (reply) process.stdout.write(reply + '\n');
@@ -355,6 +390,7 @@ if (process.argv[1] && process.argv[1].endsWith('mcp-memory-server.ts')) {
   // عند إغلاق الإدخال لا نستدعي process.exit: نترك البرنامج ينتهي طبيعياً بعد إرسال كل الردود
   // (على Windows قد تُقطع الكتابة غير المكتملة إلى القناة إذا أُنهي البرنامج فوراً).
   rl.on('close', () => {
+    stopWatcher();
     process.stdin.unref?.();
   });
 }
