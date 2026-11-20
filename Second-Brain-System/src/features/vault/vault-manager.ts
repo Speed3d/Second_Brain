@@ -13,6 +13,7 @@
  * ============================================================================
  */
 
+import { AR_COUNT, countAr } from '../../shared/arabic-count.ts';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -497,7 +498,7 @@ export function migrateVaultToFamilyV3(vault: UnlockedVault, masterPassword: str
   };
   writeFileAtomic(vault.vaultFilePath, JSON.stringify(upgraded, null, 2), VAULT_FILE_BACKUPS);
   vault.familyKey = familyKey;
-  logSystemInfo('VaultManager', `تمت الترقية إلى الخزنة العائلية v3 (${section.count} سرّاً للعائلة)، وأُبطل مفتاح الطوارئ القديم.`);
+  logSystemInfo('VaultManager', `تمت الترقية إلى الخزنة العائلية v3 (${countAr(section.count, AR_COUNT.secret)} للعائلة)، وأُبطل مفتاح الطوارئ القديم.`);
   return { emergencyRecoveryKey, familyCount: section.count };
 }
 

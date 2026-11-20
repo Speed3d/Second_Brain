@@ -17,6 +17,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { openWithKey } from '../core/crypto-engine.ts';
 import { logSystemInfo } from '../core/logger.ts';
+import { AR_COUNT, countAr } from '../shared/arabic-count.ts';
 import { listFilesRecursive, removePathSync, writeFileAtomic } from '../shared/file-helpers.ts';
 import type { SealedData } from '../shared/types.ts';
 import { listEncryptedBackups, openEncryptedBackup, restoreEncryptedBackup } from '../features/family-emergency/backup-service.ts';
@@ -172,7 +173,7 @@ export function runRestoreDrill(
         const vault = unlockVault(passwordOrKey, path.join(target, vaultRel));
         dataKey = vault.dataKey.length === 32 ? vault.dataKey : null;
         familyKey = vault.familyKey ?? null;
-        checks.push({ nameAr: 'فتح الخزنة', ok: true, detailAr: familyScope ? `فُتحت الخزنة العائلية المستعادة (${vault.secrets.length} سرّاً للعائلة).` : `فُتحت الخزنة المستعادة (${vault.secrets.length} سرّاً).` });
+        checks.push({ nameAr: 'فتح الخزنة', ok: true, detailAr: familyScope ? `فُتحت الخزنة العائلية المستعادة (${countAr(vault.secrets.length, AR_COUNT.secret)} للعائلة).` : `فُتحت الخزنة المستعادة (${countAr(vault.secrets.length, AR_COUNT.secret)}).` });
       } catch (err) {
         checks.push({ nameAr: 'فتح الخزنة', ok: false, detailAr: `تعذّر فتح الخزنة المستعادة: ${err instanceof Error ? err.message : String(err)}` });
       }
@@ -226,7 +227,7 @@ export function runRestoreDrill(
         const arr = JSON.parse(fs.readFileSync(path.join(target, memRel), 'utf8')) as Array<{ id?: string }>;
         memoryIds = arr.map((e) => String(e.id ?? '')).filter(Boolean);
         const dupes = memoryIds.length - new Set(memoryIds).size;
-        checks.push({ nameAr: 'اكتمال الذاكرة', ok: dupes === 0, detailAr: `${memoryIds.length} سجلاً${dupes ? `، منها ${dupes} مكرر` : ''}.` });
+        checks.push({ nameAr: 'اكتمال الذاكرة', ok: dupes === 0, detailAr: `${countAr(memoryIds.length, AR_COUNT.record)}${dupes ? `، منها ${dupes} مكرر` : ''}.` });
       } catch (err) {
         checks.push({ nameAr: 'اكتمال الذاكرة', ok: false, detailAr: `ملف الذاكرة تالف: ${err instanceof Error ? err.message : String(err)}` });
       }
@@ -240,7 +241,7 @@ export function runRestoreDrill(
         const settings = JSON.parse(fs.readFileSync(path.join(target, settingsRel), 'utf8')) as { watchedProjects?: Array<{ id?: string; name?: string }> };
         const projects = settings.watchedProjects ?? [];
         const broken = projects.filter((p) => !p.id || !p.name).length;
-        checks.push({ nameAr: 'المشاريع', ok: broken === 0, detailAr: `${projects.length} مشروعاً${broken ? `، منها ${broken} ناقص البيانات` : ''}.` });
+        checks.push({ nameAr: 'المشاريع', ok: broken === 0, detailAr: `${countAr(projects.length, AR_COUNT.project)}${broken ? `، منها ${broken} ناقص البيانات` : ''}.` });
       } catch (err) {
         checks.push({ nameAr: 'المشاريع', ok: false, detailAr: `ملف الإعدادات تالف: ${err instanceof Error ? err.message : String(err)}` });
       }
@@ -253,11 +254,11 @@ export function runRestoreDrill(
     const dupNote = fileCheck.unicodeDuplicates.length
       ? ` وفي النسخة ${fileCheck.unicodeDuplicates.length} ملفاً مكرراً بصيغتي يونيكود (من قبل 2.0.2، ISS-025)؛ يُعدّ الملف سليماً إن طابق إحدى نسختيه.`
       : '';
-    checks.push({ nameAr: 'سلامة ملفات Obsidian', ok: obsBad === 0, detailAr: `${obsTotal - obsBad} من ${obsTotal} ملفاً مطابقاً للنسخة.${dupNote}` });
+    checks.push({ nameAr: 'سلامة ملفات Obsidian', ok: obsBad === 0, detailAr: `${obsTotal - obsBad} من ${countAr(obsTotal, AR_COUNT.file)} مطابقة للنسخة.${dupNote}` });
     checks.push({
       nameAr: 'عدم فقدان أي ملف',
       ok: fileCheck.missing.length === 0,
-      detailAr: fileCheck.missing.length ? `${fileCheck.missing.length} ملفاً لم يُستعد: ${fileCheck.missing.slice(0, 5).join('، ')}.` : `كل الملفات (${fileCheck.groups.length} اسماً موحّداً من ${rels.length} مدخلاً) استُعيدت.`,
+      detailAr: fileCheck.missing.length ? `${countAr(fileCheck.missing.length, AR_COUNT.file)} لم تُستعد: ${fileCheck.missing.slice(0, 5).join('، ')}.` : `كل الملفات استُعيدت (${countAr(fileCheck.groups.length, AR_COUNT.name)} بعد توحيد صيغ الأسماء، من ${countAr(rels.length, AR_COUNT.entry)}).`,
     });
 
     // مقارنة إعلامية مع الجهاز الحالي

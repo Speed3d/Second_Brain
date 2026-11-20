@@ -14,6 +14,7 @@
  * ============================================================================
  */
 
+import { AR_COUNT, countAr } from '../../shared/arabic-count.ts';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { openWithKey, sealWithKey, unwrapDataKey } from '../../core/crypto-engine.ts';
@@ -272,7 +273,7 @@ export function migrateFromLegacy(ctx: SyncContext, vault: UnlockedVault, now: n
   }
   writeSyncIndex(ctx, index);
   lockLegacyClients(ctx, now);
-  logSystemInfo('Sync', `رُحّل هذا الجهاز إلى المزامنة متعددة الكتابة (2.0) من الإصدار القديم ${legacyVersion || 'لا شيء'}، بـ ${Object.keys(index.records).length} سجلاً في الأساس.`);
+  logSystemInfo('Sync', `رُحّل هذا الجهاز إلى المزامنة متعددة الكتابة (2.0) من الإصدار القديم ${legacyVersion || 'لا شيء'}، بـ ${countAr(Object.keys(index.records).length, AR_COUNT.record)} في الأساس.`);
   return index;
 }
 
@@ -796,7 +797,7 @@ export function bootstrapFromSnapshotV2(ctx: SyncContext, masterPassword: string
   for (const [dev, cursor] of Object.entries(snap.covers)) if (dev !== myDir) index.cursors[dev] = cursor;
   applyRecordWrites(ctx, vault, writes);
   writeSyncIndex(ctx, index);
-  logSystemInfo('Sync', `أُقلع هذا الجهاز من النسخة الكاملة ${newest} (${writes.length} سجلاً).`);
+  logSystemInfo('Sync', `أُقلع هذا الجهاز من النسخة الكاملة ${newest} (${countAr(writes.length, AR_COUNT.record)}).`);
   return { vault, records: writes.length, snapshot: newest };
 }
 

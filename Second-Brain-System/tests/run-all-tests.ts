@@ -37,6 +37,7 @@ import { runQrCodeTests } from './22-qr-code.test.ts';
 import { runTwoFactorTests } from './23-two-factor.test.ts';
 import { runPromptInjectionTests } from './24-prompt-injection.test.ts';
 import { runLogRedactionTests } from './25-log-redaction.test.ts';
+import { runRedactionPatternTests } from './27-redaction-patterns.test.ts';
 import { runMcpControlsTests } from './26-mcp-controls.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
@@ -178,6 +179,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '26. اختبارات أدوات MCP وسجل عملياتها (مفتاح لكل أداة، وسجل بلا محتوى، وعملية خادم حقيقية عبر stdio، والمسارات)',
       file: 'tests/26-mcp-controls.test.ts',
       runner: runMcpControlsTests,
+    },
+    {
+      name: '27. اختبارات أنماط التنقيح الجديدة وحالات الفشل الصعبة (Cloudflare وسلاسل الاتصال و .env، وسرّ مقسوم على سطرين أو داخل JSON أو كتلة كود، والحذف الخاطئ، وصياغة الأعداد)',
+      file: 'tests/27-redaction-patterns.test.ts',
+      runner: runRedactionPatternTests,
     },
   ];
 

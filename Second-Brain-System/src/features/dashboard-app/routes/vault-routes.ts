@@ -7,6 +7,7 @@
  * ============================================================================
  */
 
+import { AR_COUNT, countAr } from '../../../shared/arabic-count.ts';
 import * as crypto from 'node:crypto';
 import type { VaultSecretItem } from '../../../shared/types.ts';
 import * as path from 'node:path';
@@ -308,7 +309,7 @@ export function getVaultRoutes(): RouteDefinition[] {
           familyCount: result.familyCount,
           resealedConversations: resealed,
           oldCopiesCount: oldCount,
-          messageAr: `👪 تمت الترقية إلى الخزنة العائلية: ${result.familyCount} سرّاً للعائلة، ونُقلت ${resealed} محادثة عائلية. ${backupAr} اطبع الكتيب الجديد الآن وأتلف الورقة القديمة.`,
+          messageAr: `👪 تمت الترقية إلى الخزنة العائلية: ${countAr(result.familyCount, AR_COUNT.secret)} للعائلة، ونُقلت ${resealed} محادثة عائلية. ${backupAr} اطبع الكتيب الجديد الآن وأتلف الورقة القديمة.`,
         });
       },
     },
