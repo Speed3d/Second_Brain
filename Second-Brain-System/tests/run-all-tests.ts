@@ -40,6 +40,7 @@ import { runLogRedactionTests } from './25-log-redaction.test.ts';
 import { runRedactionPatternTests } from './27-redaction-patterns.test.ts';
 import { runPhase2SecurityTests } from './28-phase2-security.test.ts';
 import { runMcpControlsTests } from './26-mcp-controls.test.ts';
+import { runSecurityReviewLeadsTests } from './29-security-review-leads.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -190,6 +191,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '28. الاختبارات الجامعة للمرحلة 2 (جدول الصلاحيات المثبّت وكل مسار محمي عبر HTTP، وحدود المفاتيح على كل ملف مشفّر، ولا نص صريح لأي سرّ في القرص)',
       file: 'tests/28-phase2-security.test.ts',
       runner: runPhase2SecurityTests,
+    },
+    {
+      name: '29. اختبارات خيوط المراجعة الأمنية المستقلة (ISS-046..ISS-053: كل خيط يُعاد إنتاجه في البيئة المعزولة ثم يبقى اختبار انحدار)',
+      file: 'tests/29-security-review-leads.test.ts',
+      runner: runSecurityReviewLeadsTests,
     },
   ];
 

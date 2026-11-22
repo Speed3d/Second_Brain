@@ -29,8 +29,8 @@ import { createEncryptedSystemBackup } from '../../family-emergency/backup-servi
 import { resealFamilyConversations } from '../../conversations/conversation-store.ts';
 import { appendFamilyLog, isPortalCategory } from '../../family-emergency/family-portal.ts';
 import { removeAllLocalPasskeys } from '../../auth/passkey-store.ts';
-import { isTwoFactorEnabled, isTwoFactorItem, verifySecondFactor } from '../../auth/two-factor.ts';
-import { wipeUnlockedVault } from '../../vault/vault-manager.ts';
+import { isTwoFactorItem } from '../../auth/two-factor.ts';
+import { enforceSecondFactor } from './second-factor-gate.ts';
 import { buildSessionCookie, HttpError, readString, sendJson, type RouteDefinition } from '../http-utils.ts';
 import {
   closeVaultSession,
@@ -140,20 +140,8 @@ export function getVaultRoutes(): RouteDefinition[] {
           throw new HttpError(401, 'كلمة المرور الرئيسية أو مفتاح الطوارئ غير صحيح!');
         }
         // 3.5.0: المصادقة الثنائية (قرار القائد): تُطلب مع كلمة المرور فقط، لا مع مفتاح الطوارئ ولا الـ Passkey
-        if (isTwoFactorEnabled(vault)) {
-          const second = readString(body, 'twoFactorCode', 40).trim();
-          if (!second) {
-            wipeUnlockedVault(vault);
-            throw new HttpError(401, 'اكتب رمز المصادقة الثنائية (6 أرقام من التطبيق) أو رمزاً احتياطياً.', { twoFactorRequired: true });
-          }
-          const check = verifySecondFactor(vault, second);
-          if (!check.ok) {
-            wipeUnlockedVault(vault);
-            recordUnlockFailure();
-            throw new HttpError(401, 'رمز المصادقة الثنائية غير صحيح أو استُخدم من قبل.', { twoFactorRequired: true });
-          }
-          if (check.method === 'backup') twoFactorNoteAr = `🔑 استُخدم رمز احتياطي. بقي ${check.backupLeft} رمزاً${check.backupLeft! <= 3 ? '؛ أنشئ رموزاً جديدة قريباً' : ''}.`;
-        }
+        // 3.9.3 (ISS-047): البوابة مشتركة مع /api/settings/auth
+        twoFactorNoteAr = enforceSecondFactor(vault, body);
         recordUnlockSuccess();
         // المزامنة: استيراد أي إصدار أحدث من الأجهزة الأخرى قبل إنشاء الجلسة، ثم فتح الخزنة من الملف الجديد
         const sync = syncOnUnlock(vault);

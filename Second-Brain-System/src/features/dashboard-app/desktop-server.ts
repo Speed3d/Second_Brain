@@ -18,6 +18,7 @@ import { warmUpVoice } from '../voice/tts-service.ts';
 import { syncTick } from '../sync/sync-service.ts';
 import { installConsoleRedaction, logSystemError, logSystemInfo, rotateLogIfLarge } from '../../core/logger.ts';
 import { getRuntimeVersionStatus, requestServerRestart } from '../../core/runtime-version.ts';
+import { getFolderPermissionStatus, runStartupFolderPermissionCheck } from '../../core/folder-permissions.ts';
 import {
   applySecurityHeaders,
   HttpError,
@@ -60,7 +61,10 @@ export function buildRouteTable(): RouteDefinition[] {
         const config = loadSystemConfig();
         // ISS-032: version هو إصدار الكود الذي يعمل فعلاً، لا ما على القرص
         const v = getRuntimeVersionStatus();
-        sendJson(res, 200, { status: 'ok', appName: config.appName, version: v.runningVersion, diskVersion: v.diskVersion, restartRequired: v.restartRequired, startedAt: v.startedAt });
+        // ISS-046: تحذير صلاحيات المجلد (فُحص مرة عند بدء الخادم)
+        const perm = getFolderPermissionStatus();
+        const folderPermissions = perm && perm.open ? { open: true, detailAr: perm.detailAr } : null;
+        sendJson(res, 200, { status: 'ok', appName: config.appName, version: v.runningVersion, diskVersion: v.diskVersion, restartRequired: v.restartRequired, startedAt: v.startedAt, folderPermissions });
       },
     },
     {
@@ -192,6 +196,12 @@ if (process.argv[1] && process.argv[1].endsWith('desktop-server.ts')) {
       console.log(`\n🛡️  ${config.appTitleAr}`);
       console.log(`🚀 الواجهة تعمل الآن على: http://localhost:${config.serverPort} (متاحة لهذا الجهاز فقط)`);
       for (const w of warnings) console.log(`⚠️  ${w}`);
+      // ISS-046: هل يكتب في مجلد البرنامج حساب غير صاحبه؟ (قراءة فقط، والنتيجة تظهر شريطاً في الواجهة)
+      const perm = runStartupFolderPermissionCheck(config.paths.rootDir);
+      if (perm.open) {
+        console.log(perm.detailAr);
+        logSystemInfo('DesktopServer', `صلاحيات مجلد البرنامج مفتوحة: ${perm.broadWriters.join(', ')}`);
+      }
       const watcher = startProjectWatcher(peekActiveVault);
       if (watcher.intervalMinutes) console.log(`👁️  المراقب الدوري يعمل كل ${watcher.intervalMinutes} دقيقة.`);
       // تحميل الصوت العربي عالي الجودة (XTTS) في الخلفية، فيكون جاهزاً لأول رد

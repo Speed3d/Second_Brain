@@ -30,6 +30,7 @@ import {
   type VaultSession,
 } from '../session-manager.ts';
 import { assertUnlockAllowed } from './vault-routes.ts';
+import { enforceSecondFactor } from './second-factor-gate.ts';
 
 const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
@@ -241,16 +242,21 @@ export function getStateRoutes(): RouteDefinition[] {
           recordUnlockFailure();
           throw new HttpError(401, 'كلمة المرور الرئيسية غير صحيحة.');
         }
-        recordUnlockSuccess();
         let active = session;
         const headers: Record<string, string> = {};
+        let twoFactorNoteAr: string | null = null;
         if (!active || active.vault.unlockedBy !== 'commander') {
-          const token = openVaultSession(unlockVault(password));
+          // ISS-047: فتح جلسة قائد جديدة يمرّ من بوابة الرمز الثاني نفسها التي في /api/vault/unlock.
+          // أما إعادة التأكيد داخل جلسة قائد قائمة (فُتحت بالعاملين أصلاً) فكلمة المرور وحدها كافية.
+          const vault = unlockVault(password);
+          twoFactorNoteAr = enforceSecondFactor(vault, body);
+          const token = openVaultSession(vault);
           headers['Set-Cookie'] = buildSessionCookie(token);
           active = getVaultSession(token);
         }
+        recordUnlockSuccess();
         grantSettingsAuth(active!);
-        sendJson(res, 200, { ok: true, settingsAuthSeconds: SETTINGS_AUTH_MS / 1000 }, headers);
+        sendJson(res, 200, { ok: true, settingsAuthSeconds: SETTINGS_AUTH_MS / 1000, twoFactorNoteAr }, headers);
       },
     },
     {
@@ -310,7 +316,7 @@ export function getStateRoutes(): RouteDefinition[] {
           claudeCliPath = validateSettingString(ai.claudeCliPath ?? '', 'claudeCliPath', { max: 500, allowEmpty: true });
           if (claudeCliPath) {
             if (!path.isAbsolute(claudeCliPath)) throw new HttpError(400, 'مسار Claude Code يجب أن يكون مساراً كاملاً.');
-            if (process.platform === 'win32' && !/\.exe$/i.test(claudeCliPath)) throw new HttpError(400, 'مسار Claude Code على Windows يجب أن ينتهي بـ claude.exe.');
+            if (path.basename(claudeCliPath).toLowerCase() !== (process.platform === 'win32' ? 'claude.exe' : 'claude')) throw new HttpError(400, process.platform === 'win32' ? 'مسار Claude Code على Windows يجب أن ينتهي بـ claude.exe.' : 'مسار Claude Code يجب أن ينتهي بـ claude.');
             if (!fs.existsSync(claudeCliPath)) throw new HttpError(400, 'لا يوجد ملف في مسار Claude Code المحدد.');
           }
         }

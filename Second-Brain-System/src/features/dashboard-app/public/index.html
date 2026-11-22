@@ -61,6 +61,9 @@
         <span id="restartText"></span>
         <button type="button" class="btn btn-primary btn-sm" data-action="restart-server">🔄 أعد تشغيل الخادم</button>
       </div>
+      <div class="readonly-banner" id="permBanner" role="alert" hidden>
+        <span id="permText"></span>
+      </div>
       <div class="readonly-banner" id="syncAlertBanner" role="status" hidden>
         <span id="syncAlertText"></span>
         <button type="button" class="btn btn-ghost btn-sm" data-action="view" data-view="sync">🔄 المزامنة</button>
@@ -835,6 +838,7 @@
       <h2 id="authDialogTitle">🔒 الإعدادات محمية</h2>
       <p class="small muted">أدخل كلمة المرور الرئيسية لفتح الإعدادات. مفتاح الطوارئ لا يفتحها، وتُقفل عند مغادرة القسم.</p>
       <label>كلمة المرور الرئيسية<input type="password" name="password" autocomplete="current-password" required /></label>
+      <label id="settingsTwoFactorField" hidden>🔐 رمز المصادقة الثنائية (6 أرقام من التطبيق) أو رمز احتياطي<input name="twoFactorCode" dir="ltr" inputmode="numeric" autocomplete="one-time-code" maxlength="20" /></label>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">فتح الإعدادات</button>
         <button type="button" class="btn btn-ghost" data-action="cancel-settings-auth">إلغاء</button>

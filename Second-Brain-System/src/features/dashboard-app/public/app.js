@@ -404,6 +404,12 @@
         $('#restartText').textContent = '⏸️ حُدّث البرنامج على القرص إلى ' + h.diskVersion + '، والخادم ما زال يعمل بالإصدار ' + h.version + '. المزامنة متوقفة حتى تعيد تشغيل الخادم.';
       }
     }
+    // 3.9.3 (ISS-046): مجلد البرنامج قابل للتعديل من حسابات أخرى
+    const perm = $('#permBanner');
+    if (perm) {
+      perm.hidden = !(h.folderPermissions && h.folderPermissions.open);
+      if (!perm.hidden) $('#permText').textContent = h.folderPermissions.detailAr;
+    }
     return h;
   }
 
@@ -449,6 +455,7 @@
   function openSettingsAuth() {
     const dialog = $('#authDialog');
     $('[data-form="settings-auth"]').reset();
+    $('#settingsTwoFactorField').hidden = true;
     if (!dialog.open) dialog.showModal();
     $('[data-form="settings-auth"]').elements.password.focus();
   }
@@ -2549,8 +2556,26 @@
     },
     async 'settings-auth'(form, btn) {
       await busy(btn, async () => {
-        await api('/api/settings/auth', formData(form));
+        let r;
+        try {
+          r = await api('/api/settings/auth', formData(form));
+        } catch (err) {
+          // 3.9.3 (ISS-047): فتح جلسة قائد جديدة من هنا يطلب الرمز الثاني كما في شاشة الفتح
+          if (err.data && err.data.twoFactorRequired) {
+            const firstAsk = $('#settingsTwoFactorField').hidden || !form.elements.twoFactorCode.value;
+            $('#settingsTwoFactorField').hidden = false;
+            form.elements.twoFactorCode.value = '';
+            form.elements.twoFactorCode.focus();
+            if (firstAsk) {
+              toast('🔐 ' + err.message, 'ok', 8000);
+              return;
+            }
+          }
+          throw err;
+        }
         form.reset();
+        $('#settingsTwoFactorField').hidden = true;
+        if (r && r.twoFactorNoteAr) toast(r.twoFactorNoteAr, 'warn', 12000);
         $('#authDialog').close();
         await refreshVault();
         await loadSettings();

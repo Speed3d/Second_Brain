@@ -145,6 +145,38 @@ export function resolveConfiguredPath(value: unknown, fallback: string, rootDir:
 }
 
 /**
+ * Hint بالعربي: دالة فحص مسار Claude Code عند تحميل الإعدادات (ISS-046): الملف قد يُعدَّل خارج الواجهة،
+ *               فلا يكفي فحصه في مسار الحفظ. المقبول: مسار كامل لبرنامج اسمه claude (claude.exe على Windows).
+ *               غير ذلك يُتجاهل (فارغ = البحث التلقائي) مع تحذير.
+ */
+export function loadClaudeCliPath(value: unknown, warnings: string[]): string {
+  if (typeof value !== 'string' || !value.trim()) return '';
+  const v = value.trim().slice(0, 500);
+  const expected = process.platform === 'win32' ? 'claude.exe' : 'claude';
+  if (!path.isAbsolute(v) || path.basename(v).toLowerCase() !== expected) {
+    warnings.push(`تم تجاهل مسار Claude Code في الإعدادات لأنه ليس مساراً كاملاً لـ ${expected}.`);
+    return '';
+  }
+  return v;
+}
+
+/**
+ * Hint بالعربي: دالة فحص عنوان Ollama عند تحميل الإعدادات (ISS-046): http على هذا الجهاز فقط،
+ *               حتى لا تُرسل الأسئلة إلى خادم خارجي إن عُدّل الملف خارج الواجهة. غير ذلك ← الافتراضي مع تحذير.
+ */
+export function loadLocalEndpoint(value: unknown, fallback: string, warnings: string[]): string {
+  if (typeof value !== 'string' || !value.trim()) return fallback;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) return `${url.protocol}//${url.host}`;
+  } catch {
+    // يُعامل كعنوان غير صالح
+  }
+  warnings.push('تم تجاهل عنوان Ollama في الإعدادات لأنه ليس على هذا الجهاز، واستُخدم العنوان الافتراضي.');
+  return fallback;
+}
+
+/**
  * Hint بالعربي: دالة دمج الإعدادات المقروءة مع الافتراضية والتحقق من صحة كل حقل،
  *               فالقيمة غير الصالحة تُستبدل بالافتراضية بدل أن تعطّل البرنامج.
  *               المخرجات: الإعدادات النهائية + قائمة تحذيرات بالعربية.
@@ -234,9 +266,9 @@ export function normalizeSystemConfig(raw: Record<string, unknown>): { config: S
       claudeModel: str(ai.claudeModel, defaults.aiConfig.claudeModel),
       claudeEffort: effort,
       claudeCliModel: /^[a-z0-9][a-z0-9.\-]{0,79}$/i.test(String(ai.claudeCliModel ?? '')) ? String(ai.claudeCliModel) : defaults.aiConfig.claudeCliModel,
-      claudeCliPath: typeof ai.claudeCliPath === 'string' ? ai.claudeCliPath.trim().slice(0, 500) : '',
+      claudeCliPath: loadClaudeCliPath(ai.claudeCliPath, warnings),
       apiKeysEnabled: ai.apiKeysEnabled === true,
-      ollamaEndpoint: str(ai.ollamaEndpoint, defaults.aiConfig.ollamaEndpoint),
+      ollamaEndpoint: loadLocalEndpoint(ai.ollamaEndpoint, defaults.aiConfig.ollamaEndpoint, warnings),
       ollamaModel: str(ai.ollamaModel, defaults.aiConfig.ollamaModel),
       requestTimeoutMs: Number.isFinite(timeout) && timeout >= 5000 ? timeout : defaults.aiConfig.requestTimeoutMs,
       voiceEnabled: bool(ai.voiceEnabled, defaults.aiConfig.voiceEnabled),
