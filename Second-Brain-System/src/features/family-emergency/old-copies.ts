@@ -9,6 +9,7 @@
  *               - النسخ السابقة لملف الخزنة (vault.aes256.json.bak-N) بالصيغة 2.
  *               - نسخ المزامنة الكاملة (snapshots-v2) والنسخ القديمة بصيغة 1.9 (snapshots) على Drive.
  *               نسخ «قبل الاستيراد» المحلية مختومة بمفتاح البيانات وحده، فلا يفتحها مفتاح الطوارئ، ولا تُعرض.
+ *               3.9.4 (ISS-048): وبعد تدوير مفتاح الطوارئ تُعرض أيضاً نسخ الصيغة 3 التي تحمل الغلاف العائلي السابق.
  * ============================================================================
  */
 
@@ -35,17 +36,36 @@ export interface OldCopiesLocations {
 }
 
 const KIND_LABEL: Record<OldFullAccessCopy['kind'], string> = {
-  backup: 'نسخة طوارئ قديمة (الصيغة 2)',
+  backup: 'نسخة طوارئ قديمة',
   'vault-backup': 'نسخة سابقة من ملف الخزنة',
   'sync-snapshot': 'نسخة مزامنة كاملة قديمة على Drive',
   'legacy-snapshot': 'نسخة مزامنة بصيغة 1.9 على Drive',
 };
 
-function hasOldEmergencyWrap(filePath: string): boolean {
+/**
+ * Hint بالعربي: غلاف الطوارئ العائلي (fkByEmergency) في أي صيغة: ملف الخزنة v3 (family)، ونسخة الطوارئ v3
+ *               (family)، وسجل مفاتيح المزامنة (vaultKeys.family).
+ */
+function familyEmergencyWrapOf(json: Record<string, unknown>): string | null {
+  const direct = json.family as Record<string, unknown> | undefined;
+  const viaKeys = (json.vaultKeys as Record<string, unknown> | undefined)?.family as Record<string, unknown> | undefined;
+  const wrap = direct?.fkByEmergency ?? viaKeys?.fkByEmergency;
+  return wrap && typeof wrap === 'object' ? JSON.stringify(wrap) : null;
+}
+
+/**
+ * Hint بالعربي: هل يفتح مفتاح طوارئ قديم هذه النسخة؟
+ *               - غلاف الطوارئ بالصيغة 2 (emergencyWrap): يفتح مفتاح البيانات كله.
+ *               - 3.9.4 (ISS-048): غلاف عائلي (fkByEmergency) غير الغلاف الحالي: نسخة من قبل تدوير مفتاح الطوارئ،
+ *                 يفتحها المفتاح السابق (ببياناتها العائلية القديمة فقط، لأن المفتاح العائلي تغيّر مع التدوير).
+ */
+function hasOldEmergencyWrap(filePath: string, currentFamilyWrap: string | null): boolean {
   const json = readJsonFileSafe<Record<string, unknown> | null>(filePath, null);
   if (!json) return false;
   const keys = (json.vaultKeys ?? json) as Record<string, unknown>;
-  return Boolean(keys && typeof keys === 'object' && keys.emergencyWrap);
+  if (keys && typeof keys === 'object' && keys.emergencyWrap) return true;
+  const wrap = familyEmergencyWrapOf(json);
+  return Boolean(wrap && currentFamilyWrap && wrap !== currentFamilyWrap);
 }
 
 function entry(filePath: string, kind: OldFullAccessCopy['kind']): OldFullAccessCopy {
@@ -68,11 +88,13 @@ function listJson(dir: string, test: (name: string) => boolean): string[] {
 export function listOldFullAccessCopies(loc: OldCopiesLocations): OldFullAccessCopy[] {
   const out: OldFullAccessCopy[] = [];
   const seen = new Set<string>();
+  const current = readJsonFileSafe<Record<string, unknown> | null>(loc.vaultFilePath, null);
+  const currentFamilyWrap = current ? familyEmergencyWrapOf(current) : null;
   const push = (p: string, kind: OldFullAccessCopy['kind']): void => {
     const key = path.resolve(p).toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
-    if (hasOldEmergencyWrap(p)) out.push(entry(p, kind));
+    if (hasOldEmergencyWrap(p, currentFamilyWrap)) out.push(entry(p, kind));
   };
   const vaultDir = path.dirname(loc.vaultFilePath);
   const vaultBase = path.basename(loc.vaultFilePath);

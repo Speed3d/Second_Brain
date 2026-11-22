@@ -443,23 +443,46 @@ export function changeMasterPassword(vault: UnlockedVault, currentPassword: stri
 
 /**
  * Hint بالعربي: دالة تدوير مفتاح الطوارئ (عند فقدان الوثيقة المطبوعة مثلاً): تولّد مفتاحاً جديداً
- *               وتُبطل القديم. تتطلب كلمة المرور الرئيسية. في v3 يُعاد لفّ المفتاح العائلي فقط.
+ *               وتُبطل القديم. تتطلب كلمة المرور الرئيسية.
+ *               3.9.4 (ISS-048): في v3 يُولَّد **مفتاح عائلي جديد** أيضاً ويُعاد ختم القسم العائلي به. كان FK نفسه
+ *               يُعاد لفّه، فالمفتاح القديم مع أي نسخة قديمة (.bak-N، نسخة طوارئ، لقطة مزامنة) يفكّ FK ويفتح
+ *               الخزنة العائلية الحالية وكل ما يُكتب بعدها. المخرجات: المفتاح الجديد، و FK السابق ليُنقل إليه
+ *               ما خُتم به خارج ملف الخزنة (المحادثات العائلية وسجل الطوارئ). الأجهزة الأخرى تعتمد FK الجديد
+ *               بالمزامنة (adoptFamilyKeys) وتنقل محادثاتها بنفسها.
  */
-export function rotateEmergencyKey(vault: UnlockedVault, masterPassword: string): string {
+export function rotateEmergencyKey(vault: UnlockedVault, masterPassword: string): { emergencyRecoveryKey: string; previousFamilyKey: Buffer | null } {
   const file = readVaultFile(vault.vaultFilePath);
   try {
-    unwrapDataKey(file.commanderWrap, masterPassword);
+    unwrapDataKey(file.commanderWrap, masterPassword).fill(0);
   } catch {
     throw new Error('كلمة المرور الرئيسية غير صحيحة.');
   }
   const newKey = generateEmergencyRecoveryKey();
   const updatedAt = formatTimestampIso();
-  const updated: VaultFile = isFamilyVaultFile(file)
-    ? { ...file, family: { ...file.family, fkByEmergency: wrapDataKey(resolveFamilyKey(vault, file)!, newKey) }, updatedAt }
-    : { ...file, emergencyWrap: wrapDataKey(vault.dataKey, newKey), updatedAt };
+  if (!isFamilyVaultFile(file)) {
+    const updated: VaultFile = { ...file, emergencyWrap: wrapDataKey(vault.dataKey, newKey), updatedAt };
+    writeFileAtomic(vault.vaultFilePath, JSON.stringify(updated, null, 2), VAULT_FILE_BACKUPS);
+    logSystemInfo('VaultManager', 'تم تدوير مفتاح الطوارئ وإبطال المفتاح السابق.');
+    return { emergencyRecoveryKey: newKey, previousFamilyKey: null };
+  }
+  if (!hasMainDataKey(vault)) throw new Error('تدوير مفتاح الطوارئ يحتاج فتح الخزنة بكلمة المرور الرئيسية.');
+  const previousFamilyKey = Buffer.from(resolveFamilyKey(vault, file)!);
+  const familyKey = generateDataKey();
+  const updated: VaultFileV3 = {
+    ...file,
+    family: {
+      ...file.family,
+      fkByCommander: sealWithKey(familyKey, vault.dataKey),
+      fkByEmergency: wrapDataKey(familyKey, newKey),
+      ...sealFamilySection(vault.secrets, familyKey),
+    },
+    updatedAt,
+  };
   writeFileAtomic(vault.vaultFilePath, JSON.stringify(updated, null, 2), VAULT_FILE_BACKUPS);
-  logSystemInfo('VaultManager', 'تم تدوير مفتاح الطوارئ العائلي وإبطال المفتاح السابق.');
-  return newKey;
+  vault.familyKey?.fill(0);
+  vault.familyKey = familyKey;
+  logSystemInfo('VaultManager', 'تم تدوير مفتاح الطوارئ والمفتاح العائلي معاً، وأُبطل المفتاح السابق.');
+  return { emergencyRecoveryKey: newKey, previousFamilyKey };
 }
 
 /**

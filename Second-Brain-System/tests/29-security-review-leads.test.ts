@@ -21,10 +21,17 @@ import { checkFolderPermissions, findBroadWindowsWriters, getFolderPermissionSta
 import { beginTwoFactorSetup, disableTwoFactor, finishTwoFactorSetup, readTwoFactor, resetTwoFactorPendingForTests } from '../src/features/auth/two-factor.ts';
 import { startSecondBrainDesktopServer } from '../src/features/dashboard-app/desktop-server.ts';
 import { resetSessionStateForTests } from '../src/features/dashboard-app/session-manager.ts';
-import { unlockVault } from '../src/features/vault/vault-manager.ts';
+import { createVault, readVaultFile, rotateEmergencyKey, unlockVault, upsertVaultSecret, type VaultFileV3 } from '../src/features/vault/vault-manager.ts';
+import { normalizeEmergencyKey, openWithKey, unwrapDataKey } from '../src/core/crypto-engine.ts';
+import { appendConversationTurn, getConversation, resealFamilyConversations, resolveConversationsDir } from '../src/features/conversations/conversation-store.ts';
+import { appendFamilyLog, readFamilyLog, resealFamilyLog } from '../src/features/family-emergency/family-portal.ts';
+import { createEncryptedSystemBackup, openEncryptedBackup } from '../src/features/family-emergency/backup-service.ts';
+import { listOldFullAccessCopies } from '../src/features/family-emergency/old-copies.ts';
 import { base32Decode, totp } from '../src/shared/totp.ts';
 import { postJson, rawRequest } from './06-security.test.ts';
-import { ensureTestVault } from './test-environment.ts';
+import { ensureTestVault, replaceTestEmergencyKey, writeFixtureFile } from './test-environment.ts';
+import { runSyncCycle } from '../src/features/sync/multi-writer-sync.ts';
+import type { SyncContext } from '../src/features/sync/sync-context.ts';
 
 const cookieOf = (headers: Record<string, unknown>): string => String(headers['set-cookie'] ?? '').split(';')[0];
 
@@ -154,6 +161,143 @@ async function checkFolderPermissionLead(passedChecks: string[]): Promise<void> 
 }
 
 /**
+ * Hint بالعربي: ISS-048 — تدوير مفتاح الطوارئ كان يعيد لفّ المفتاح العائلي نفسه (FK). فالمفتاح القديم مع أي
+ *               نسخة قديمة (.bak-N، نسخة طوارئ، لقطة مزامنة) يفكّ FK ويفتح الخزنة العائلية الحالية وكل ما يُكتب بعدها.
+ */
+async function checkEmergencyRotationRotatesFamilyKey(passedChecks: string[]): Promise<void> {
+  const base = path.join(loadSystemConfig().paths.rootDir, 'rotate-fk-sim');
+  const vaultPath = path.join(base, 'vault', 'vault.aes256.json');
+  const logDir = path.join(base, 'family-log');
+  const backupDir = path.join(base, 'backups');
+  fs.mkdirSync(path.dirname(vaultPath), { recursive: true });
+  const PASS = 'Rotate-Family-Key-Pass-01';
+  const { vault, emergencyRecoveryKey: oldKey } = createVault(PASS, vaultPath);
+  upsertVaultSecret(vault, { id: 'FAM1', category: 'password', title: 'عائلي قبل التدوير', secretValue: 'before-rotation', notesForCommanderAr: '', notesForWifeAr: '', familyVisible: true });
+  const familyConv = appendConversationTurn(vault, { mode: 'family', question: 'سؤال عائلي قبل التدوير', answer: 'جواب' });
+  appendFamilyLog(vault, { action: 'family_unlock' }, logDir);
+  const oldBackup = createEncryptedSystemBackup(vault, { outputDir: backupDir, extraOutputDir: '' });
+  try {
+    const oldFile = readVaultFile(vaultPath) as VaultFileV3;
+    const oldFk = unwrapDataKey(oldFile.family.fkByEmergency, normalizeEmergencyKey(oldKey));
+
+    const rotated = rotateEmergencyKey(vault, PASS);
+    const newKey = rotated.emergencyRecoveryKey;
+    resealFamilyConversations(vault, undefined, rotated.previousFamilyKey);
+    resealFamilyLog(vault, rotated.previousFamilyKey, logDir);
+    upsertVaultSecret(vault, { id: 'FAM2', category: 'password', title: 'عائلي بعد التدوير', secretValue: 'after-rotation', notesForCommanderAr: '', notesForWifeAr: '', familyVisible: true });
+
+    // 1. جوهر الخيط: FK القديم (من .bak-1 أو النسخة القديمة) لا يفتح القسم العائلي الحالي
+    const current = readVaultFile(vaultPath) as VaultFileV3;
+    assert.ok(fs.existsSync(`${vaultPath}.bak-1`), 'النسخة السابقة موجودة (هي مصدر الخطر)');
+    assert.throws(() => openWithKey(current.family.data, oldFk), 'ISS-048: المفتاح العائلي القديم ما زال يفتح الخزنة العائلية الحالية');
+    assert.throws(() => unlockVault(oldKey, vaultPath), 'المفتاح القديم لا يفتح الملف الحالي');
+    // 2. العائلة بالمفتاح الجديد ترى كل شيء، والقائد كذلك
+    const wife = unlockVault(newKey, vaultPath);
+    assert.deepEqual(wife.secrets.map((s) => s.id).sort(), ['FAM1', 'FAM2']);
+    assert.equal(getConversation(wife, familyConv)?.messages[0].content, 'سؤال عائلي قبل التدوير', 'المحادثة العائلية نُقلت إلى المفتاح الجديد');
+    assert.equal(readFamilyLog(wife, logDir).entries.length, 1, 'سجل الطوارئ نُقل إلى المفتاح الجديد');
+    assert.equal(readFamilyLog(wife, logDir).unreadable, 0);
+    const commander = unlockVault(PASS, vaultPath);
+    assert.ok(commander.familyKey && !commander.familyKey.equals(oldFk), 'القائد يفكّ FK الجديد');
+    // 3. المحادثة والسجل لم يعودا يُفتحان بـ FK القديم
+    const convFile = JSON.parse(fs.readFileSync(path.join(resolveConversationsDir(), `${familyConv}.enc.json`), 'utf8'));
+    assert.throws(() => openWithKey(convFile.sealed, oldFk), 'المحادثة العائلية ما زالت بالمفتاح القديم');
+    // 4. النسخة القديمة يفتحها المفتاح القديم (بياناتها القديمة فقط)، فتُعرض في «النسخ القديمة» لتُحذف بموافقة القائد
+    assert.equal(openEncryptedBackup(oldBackup.backupFilePath, oldKey).scope, 'family');
+    const loc = { vaultFilePath: vaultPath, backupDirs: [backupDir] };
+    const old = listOldFullAccessCopies(loc);
+    assert.ok(old.some((c) => c.filePath === oldBackup.backupFilePath), 'ISS-048: نسخة v3 القديمة لا تُعرض في النسخ القديمة');
+    assert.ok(old.some((c) => c.kind === 'vault-backup'), 'ISS-048: .bak-N بمفتاح الطوارئ القديم لا يُعرض');
+    const fresh = createEncryptedSystemBackup(commander, { outputDir: backupDir, extraOutputDir: '' });
+    assert.ok(!listOldFullAccessCopies(loc).some((c) => c.filePath === fresh.backupFilePath), 'النسخة الجديدة ليست قديمة');
+
+    // 5. جهازان: التدوير على أ يصل إلى ب بالمزامنة، فيعتمد ب FK الجديد وينقل سجله العائلي إليه
+    const syncRoot = path.join(base, 'Drive', 'Second-Brain-Sync');
+    fs.mkdirSync(syncRoot, { recursive: true });
+    const seed = path.join(base, 'seed', 'vault.aes256.json');
+    fs.mkdirSync(path.dirname(seed), { recursive: true });
+    const { emergencyRecoveryKey: seedKey } = createVault(PASS, seed);
+    const A = makeSyncDevice(base, 'Asus', syncRoot, seed);
+    const B = makeSyncDevice(base, 'Mac', syncRoot, seed);
+    const vA = unlockVault(PASS, A.vaultFile);
+    const vB = unlockVault(PASS, B.vaultFile);
+    let clock = Date.now();
+    const cycle = (ctx: SyncContext, v: typeof vA) => runSyncCycle(ctx, v, { now: (clock += 1000) });
+    upsertVaultSecret(vA, { id: 'SYNC-FAM', category: 'password', title: 'عائلي متزامن', secretValue: 'x', notesForCommanderAr: '', notesForWifeAr: '', familyVisible: true });
+    cycle(A, vA);
+    cycle(B, vB);
+    const bLog = path.join(B.dataDir, 'family-log');
+    appendFamilyLog(vB, { action: 'family_unlock' }, bLog);
+    const seedFk = Buffer.from(vB.familyKey!);
+    const rotA = rotateEmergencyKey(vA, PASS);
+    cycle(A, vA);
+    cycle(B, vB);
+    assert.ok(vB.familyKey && vA.familyKey && vB.familyKey.equals(vA.familyKey), 'ب اعتمد FK الجديد');
+    assert.ok(!vB.familyKey!.equals(seedFk));
+    assert.equal(unlockVault(rotA.emergencyRecoveryKey, B.vaultFile).secrets[0]?.id, 'SYNC-FAM', 'المفتاح الجديد يفتح الخزنة العائلية على ب');
+    assert.throws(() => unlockVault(seedKey, B.vaultFile), 'والقديم يُرفض على ب');
+    assert.throws(() => openWithKey((readVaultFile(B.vaultFile) as VaultFileV3).family.data, seedFk), 'FK القديم لا يفتح القسم العائلي على ب');
+    assert.equal(readFamilyLog(unlockVault(rotA.emergencyRecoveryKey, B.vaultFile), bLog).unreadable, 0, 'سجل ب نُقل إلى FK الجديد');
+    passedChecks.push('ISS-048: تدوير مفتاح الطوارئ يولّد مفتاحاً عائلياً جديداً (FK القديم من .bak-N لا يفتح القسم العائلي الحالي ولا ما يُكتب بعده)، وتُنقل المحادثات العائلية وسجل الطوارئ إليه، والنسخ القديمة بالصيغة 3 تُعرض للحذف، والجهاز الآخر يعتمد FK الجديد بالمزامنة.');
+  } finally {
+    fs.rmSync(path.join(resolveConversationsDir(), `${familyConv}.enc.json`), { force: true });
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+
+  // 6. عبر الخادم (خزنة الاختبار المشتركة): المسار يدوّر FK وينقل المحادثة العائلية، والمفتاح القديم يُرفض
+  resetSessionStateForTests();
+  const shared = ensureTestVault();
+  const sharedOldFk = Buffer.from(unlockVault(shared.emergencyKey).familyKey!);
+  const conv = appendConversationTurn(shared.vault, { mode: 'family', question: 'سؤال عائلي عبر الخادم', answer: 'جواب' });
+  const server = await startSecondBrainDesktopServer(0);
+  const port = (server.address() as AddressInfo).port;
+  try {
+    const cookie = cookieOf((await postJson(port, '/api/vault/unlock', { key: shared.masterPassword })).headers);
+    assert.equal((await postJson(port, '/api/vault/rotate-emergency-key', { masterPassword: 'wrong-password-123' }, cookie)).status, 400, 'كلمة مرور خاطئة ← 400');
+    const res = await postJson(port, '/api/vault/rotate-emergency-key', { masterPassword: shared.masterPassword }, cookie);
+    assert.equal(res.status, 200, res.body);
+    const body = JSON.parse(res.body) as { emergencyRecoveryKey: string; oldCopiesCount: number; messageAr: string };
+    replaceTestEmergencyKey(body.emergencyRecoveryKey);
+    assert.match(body.messageAr, /نُقلت [1-9]\d* محادثة عائلية/, body.messageAr);
+    assert.ok(body.oldCopiesCount >= 1, 'نسخ .bak-N بالغلاف السابق تُعدّ');
+    assert.throws(() => unlockVault(shared.emergencyKey), 'المفتاح القديم يُرفض');
+    const wife = unlockVault(body.emergencyRecoveryKey);
+    assert.ok(!wife.familyKey!.equals(sharedOldFk), 'FK تغيّر عبر الخادم');
+    assert.equal(getConversation(wife, conv)?.messages[0].content, 'سؤال عائلي عبر الخادم');
+    passedChecks.push('ISS-048 عبر الخادم: مسار تدوير مفتاح الطوارئ يرفض كلمة المرور الخاطئة، ويدوّر المفتاح العائلي، وينقل المحادثات العائلية، ويعدّ النسخ القديمة.');
+  } finally {
+    fs.rmSync(path.join(resolveConversationsDir(), `${conv}.enc.json`), { force: true });
+    resetSessionStateForTests();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+/**
+ * Hint بالعربي: جهاز وهمي للمزامنة (نفس بنية tests/18): نسخة من الخزنة، ومجلداته داخل مجلد الاختبار.
+ */
+function makeSyncDevice(baseDir: string, name: string, syncRoot: string, vaultSource: string): SyncContext {
+  const rootDir = path.join(baseDir, name);
+  const dataDir = path.join(rootDir, 'Second-Brain-System', 'data');
+  const vaultFile = path.join(dataDir, 'encrypted-vault', 'vault.aes256.json');
+  fs.mkdirSync(path.dirname(vaultFile), { recursive: true });
+  fs.copyFileSync(vaultSource, vaultFile);
+  const ctx: SyncContext = {
+    device: { deviceId: `id-${name}`, deviceName: name, platform: 'test' },
+    syncRoot,
+    rootDir,
+    dataDir,
+    vaultFile,
+    obsidianDir: path.join(rootDir, 'Obsidian-Vault'),
+    brandingPath: path.join(rootDir, 'config', 'branding.json'),
+    settingsPath: path.join(rootDir, 'config', 'settings.json'),
+  };
+  writeFixtureFile(ctx.brandingPath, JSON.stringify({ appName: 'Second Brain' }));
+  writeFixtureFile(ctx.settingsPath, JSON.stringify({ watchedProjects: [] }));
+  fs.mkdirSync(ctx.obsidianDir, { recursive: true });
+  return ctx;
+}
+
+/**
  * Hint بالعربي: معرّف حساب المستخدم الحالي على Windows (لاختبار مجلد مغلق لصاحبه).
  */
 function currentUserSid(): string {
@@ -170,5 +314,6 @@ export async function runSecurityReviewLeadsTests(): Promise<string[]> {
   const passedChecks: string[] = [];
   await checkFolderPermissionLead(passedChecks);
   await checkSettingsAuthSecondFactor(passedChecks);
+  await checkEmergencyRotationRotatesFamilyKey(passedChecks);
   return passedChecks;
 }

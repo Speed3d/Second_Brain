@@ -166,6 +166,14 @@ export function ensureTestVault(): { vault: UnlockedVault; emergencyKey: string;
 }
 
 /**
+ * Hint بالعربي: دالة تحديث مفتاح الطوارئ المحفوظ لخزنة الاختبار المشتركة بعد تدويره عبر الخادم (tests/29)،
+ *               حتى تبقى ensureTestVault صحيحة لأي حزمة بعدها.
+ */
+export function replaceTestEmergencyKey(newKey: string): void {
+  cachedTestEmergencyKey = newKey;
+}
+
+/**
  * Hint بالعربي: دالة مساعدة لكتابة ملف تجريبي مع إنشاء مجلداته الأبوية تلقائياً.
  */
 export function writeFixtureFile(filePath: string, content: string): void {

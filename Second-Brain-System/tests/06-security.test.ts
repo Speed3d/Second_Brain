@@ -126,7 +126,7 @@ export async function runSecurityTests(): Promise<string[]> {
   assert.equal(unlockVault('Side-Vault-Pass-002', sideVaultPath).secrets.length, 1);
   assert.equal(unlockVault(side.emergencyRecoveryKey, sideVaultPath).unlockedBy, 'wife_emergency', 'تغيير كلمة المرور لا يُبطل مفتاح الطوارئ');
   assert.throws(() => changeMasterPassword(side.vault, 'wrong-current-pass', 'Side-Vault-Pass-003'));
-  const newKey = rotateEmergencyKey(side.vault, 'Side-Vault-Pass-002');
+  const newKey = rotateEmergencyKey(side.vault, 'Side-Vault-Pass-002').emergencyRecoveryKey;
   assert.throws(() => unlockVault(side.emergencyRecoveryKey, sideVaultPath), 'المفتاح القديم يجب أن يُبطل');
   assert.equal(unlockVault(newKey, sideVaultPath).unlockedBy, 'wife_emergency');
   assert.ok(fs.existsSync(`${sideVaultPath}.bak-1`), 'يجب الاحتفاظ بنسخة سابقة من ملف الخزنة');

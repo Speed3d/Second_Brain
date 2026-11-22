@@ -2522,6 +2522,8 @@
         const data = await api('/api/vault/rotate-emergency-key', formData(form));
         form.reset();
         revealEmergencyKey(data.emergencyRecoveryKey, data.messageAr);
+        // 3.9.4 (ISS-048): بطاقة الخزنة العائلية تعرض النسخ القديمة التي يفتحها المفتاح السابق
+        await refreshVault();
       });
     },
     async restore(form, btn) {

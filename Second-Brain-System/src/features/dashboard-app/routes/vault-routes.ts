@@ -27,7 +27,7 @@ import { describeFamilyVault, resolveOldCopiesLocations, suggestFamilySecrets } 
 import { listOldFullAccessCopies, removeOldFullAccessCopies } from '../../family-emergency/old-copies.ts';
 import { createEncryptedSystemBackup } from '../../family-emergency/backup-service.ts';
 import { resealFamilyConversations } from '../../conversations/conversation-store.ts';
-import { appendFamilyLog, isPortalCategory } from '../../family-emergency/family-portal.ts';
+import { appendFamilyLog, isPortalCategory, resealFamilyLog } from '../../family-emergency/family-portal.ts';
 import { removeAllLocalPasskeys } from '../../auth/passkey-store.ts';
 import { isTwoFactorItem } from '../../auth/two-factor.ts';
 import { enforceSecondFactor } from './second-factor-gate.ts';
@@ -326,11 +326,36 @@ export function getVaultRoutes(): RouteDefinition[] {
       requiresSession: true,
       commanderOnly: true,
       handler: ({ res, body, session }) => {
-        const newKey = rotateEmergencyKey(session!.vault, readString(body, 'masterPassword', 512));
+        const vault = session!.vault;
+        let rotated;
+        try {
+          rotated = rotateEmergencyKey(vault, readString(body, 'masterPassword', 512));
+        } catch (err) {
+          throw new HttpError(400, err instanceof Error ? err.message : String(err));
+        }
+        // 3.9.4 (ISS-048): المفتاح العائلي تغيّر أيضاً، فيُنقل إليه ما خُتم بالسابق خارج ملف الخزنة
+        let movedAr = '';
+        let backupAr = '';
+        let oldCount = 0;
+        if (rotated.previousFamilyKey) {
+          const conv = resealFamilyConversations(vault, undefined, rotated.previousFamilyKey);
+          const log = resealFamilyLog(vault, rotated.previousFamilyKey);
+          rotated.previousFamilyKey.fill(0);
+          movedAr = ` ونُقلت ${conv} محادثة عائلية و${log} خطوة من سجل الطوارئ إلى المفتاح العائلي الجديد.`;
+          try {
+            const backup = createEncryptedSystemBackup(vault);
+            backupAr = ` أُنشئت نسخة طوارئ جديدة (${backup.filesIncluded} ملف).`;
+          } catch (err) {
+            backupAr = ` تعذّر إنشاء نسخة طوارئ جديدة الآن (${err instanceof Error ? err.message : String(err)}). أنشئها من «💾 نسخة احتياطية الآن».`;
+          }
+          oldCount = listOldFullAccessCopies(resolveOldCopiesLocations(vault.vaultFilePath)).length;
+        }
+        syncTick(vault); // نشر المفاتيح الجديدة إلى الأجهزة الأخرى
         sendJson(res, 200, {
           ok: true,
-          emergencyRecoveryKey: newKey,
-          messageAr: 'تم إنشاء مفتاح طوارئ جديد وأُبطل القديم. اطبع كتيب الطوارئ الجديد الآن وأتلف الورقة القديمة.',
+          emergencyRecoveryKey: rotated.emergencyRecoveryKey,
+          oldCopiesCount: oldCount,
+          messageAr: `تم إنشاء مفتاح طوارئ جديد وأُبطل القديم.${movedAr}${backupAr}${oldCount ? ` ما زالت ${oldCount} نسخة قديمة يفتحها المفتاح القديم (ببياناتها القديمة)؛ احذفها من بطاقة الخزنة العائلية.` : ''} اطبع كتيب الطوارئ الجديد الآن وأتلف الورقة القديمة.`,
         });
       },
     },
