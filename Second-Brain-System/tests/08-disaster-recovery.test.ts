@@ -145,7 +145,8 @@ export async function runDisasterRecoveryTests(): Promise<string[]> {
       const secrets = (await (await fetch(`${url}/api/vault/secrets`, { headers: { Cookie: cookie } })).json()) as { secrets: Array<{ title: string; secretValue: string }> };
       assert.ok(secrets.secrets.some((s) => s.title === 'إيميل المتجر' && s.secretValue === 'shop-test-value'), 'حساب العائلة وكلمة مروره مستعادان');
       assert.ok(!secrets.secrets.some((s) => s.secretValue === 'commander-only-value'), 'سرّ القائد لا يُستعاد بمفتاح الطوارئ');
-      const state = (await (await fetch(`${url}/api/state`)).json()) as { projects: Array<{ name: string; monthlyIncome: string }> };
+      // 3.9.10 (ISS-053): المشاريع ودخلها لجلسة (هنا جلسة العائلة بمفتاح الطوارئ)
+      const state = (await (await fetch(`${url}/api/state`, { headers: { Cookie: cookie } })).json()) as { projects: Array<{ name: string; monthlyIncome: string }> };
       assert.ok(state.projects.some((p) => p.name === 'MyApp' && p.monthlyIncome === '500$'), 'المشروع ودخله مستعادان');
       assert.ok(fs.existsSync(path.join(restoredB, 'Obsidian-Vault', '04-Family-Emergency-Guide', '00-البداية.md')), 'دليل العائلة مستعاد');
       assert.ok(!fs.existsSync(path.join(restoredB, 'Obsidian-Vault', '00-Command-Center', 'note.md')), 'ملاحظات القائد لا تُستعاد بمفتاح الطوارئ');

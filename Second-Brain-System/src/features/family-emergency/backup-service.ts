@@ -81,6 +81,26 @@ export function isFamilyBackupEntry(rel: string): boolean {
 }
 
 /**
+ * Hint بالعربي: هل هذا المسار مما يضعه البرنامج في النسخ؟ (3.9.9، ISS-052) الاستعادة ترفض أي نسخة فيها غيره،
+ *               فلا تصبح «نسخة» مصنوعة باليد وسيلة لكتابة ملفات بأي اسم باسم القائد.
+ *               المسموح: Obsidian-Vault كله، وملف الخزنة، والهوية والإعدادات، والذاكرة المشتركة، والمحادثات، وسجل الطوارئ.
+ */
+export function isExpectedBackupEntry(rel: string): boolean {
+  if (!rel || rel.startsWith('/') || /^[A-Za-z]:/.test(rel) || rel.split('/').some((s) => s === '..' || s === '' || s === '.')) return false;
+  // الأنماط نفسها التي يبني بها createEncryptedSystemBackup المفاتيح (نسبية إلى rootDir، فقد تسبقها مجلدات)
+  return (
+    rel === CONFIG_ENTRY ||
+    rel === SETTINGS_ENTRY ||
+    /^Obsidian-Vault\/.+/.test(rel) ||
+    /(^|\/)data\/ai-memory-store\.json$/.test(rel) ||
+    /(^|\/)encrypted-vault\/[^/]+\.json$/.test(rel) ||
+    /(^|\/)vault\.aes256\.json$/.test(rel) ||
+    /(^|\/)data\/conversations\/[a-z0-9-]{8,64}\.enc\.json$/.test(rel) ||
+    /(^|\/)data\/family-log\/flog-[0-9]{13}-[a-f0-9]{8}\.enc\.json$/.test(rel)
+  );
+}
+
+/**
  * Hint بالعربي: دالة إنشاء نسخة احتياطية مشفرة كاملة من الخزنة المفتوحة.
  *               تشمل: Obsidian-Vault، ملف الخزنة، الإعدادات، والذاكرة المشتركة، والمحادثات المشفّرة.
  *               تحفظ في مجلد النسخ (وفي المجلد الإضافي إن وُجد) وتحذف الأقدم من حد الاحتفاظ.
@@ -271,6 +291,10 @@ export function restoreEncryptedBackup(
     const dest = path.resolve(resolvedTarget, rel);
     if (dest !== resolvedTarget && !dest.startsWith(resolvedTarget + path.sep)) {
       throw new Error(`مسار غير آمن داخل النسخة الاحتياطية: ${rel}`);
+    }
+    // 3.9.9 (ISS-052): لا يُكتب إلا ما يصنعه البرنامج نفسه في النسخ (createEncryptedSystemBackup)
+    if (!isExpectedBackupEntry(rel)) {
+      throw new Error(`ملف خارج هيكل نسخ Second Brain داخل النسخة: ${rel.slice(0, 120)}. النسخة مرفوضة كاملة.`);
     }
   }
 

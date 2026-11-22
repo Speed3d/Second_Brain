@@ -22,6 +22,7 @@ import { redactSecrets } from '../../../shared/secret-redaction.ts';
 import { checkWriteAccess } from '../../sync/sync-context.ts';
 import { deleteVaultSecret, upsertVaultSecret } from '../../vault/vault-manager.ts';
 import { HttpError, readString, sendJson, type RouteContext, type RouteDefinition } from '../http-utils.ts';
+import { isActiveVaultSession } from '../session-manager.ts';
 
 /**
  * Hint بالعربي: دالة قراءة السؤال والوضع وسجل المحادثة من جسم الطلب والتحقق منها.
@@ -48,6 +49,8 @@ export function saveAssistantTurn(
   reply: { answerAr: string; providerUsed: AIProviderId; model: string }
 ): string | null {
   if (!session) return null;
+  // 3.9.8 (ISS-051): الجلسة قُرئت قبل انتظار المزوّد؛ إن قُفلت أو استُبدلت أثناءه فلا يُكتب بها شيء
+  if (!isActiveVaultSession(session)) return null;
   // 3.1.0: سجل خطوات الطوارئ: سؤال العائلة للمساعد (أول 120 حرفاً، بعد تنقية الأسرار)
   if (session.vault.unlockedBy !== 'commander') {
     const excerpt = redactSecrets(input.question).text.replace(/\s+/g, ' ').slice(0, 120);
@@ -71,11 +74,21 @@ export function saveAssistantTurn(
 }
 
 /**
+ * Hint بالعربي: وضع القائد يحتاج جلسة قائد (ISS-053)؛ جلسة العائلة تسأل بوضع العائلة وحده.
+ *               يُفحص قبل بدء البث، فيصل الرفض رداً JSON عادياً.
+ */
+function assertAssistantModeAllowed(session: RouteContext['session'], mode: 'commander' | 'wife_emergency'): void {
+  if (mode === 'commander' && session?.vault.unlockedBy !== 'commander') {
+    throw new HttpError(403, 'وضع القائد يحتاج فتح الخزنة بكلمة المرور الرئيسية. في جلسة العائلة استعملي وضع العائلة.');
+  }
+}
+
+/**
  * Hint بالعربي: دالة سبب عدم حفظ المحادثة (لعرضه تحت الرد): الخزنة مقفلة، أو الجهاز في وضع القراءة.
  */
 export function unsavedReasonAr(session: RouteContext['session'], conversationId: string | null): string | null {
   if (conversationId) return null;
-  if (!session) return 'لم تُحفظ هذه المحادثة لأن الخزنة مقفلة. افتح الخزنة ليُحفظ ما بعدها.';
+  if (!session || !isActiveVaultSession(session)) return 'لم تُحفظ هذه المحادثة لأن الخزنة مقفلة. افتح الخزنة ليُحفظ ما بعدها.';
   const access = checkWriteAccess();
   return access.allowed ? 'تعذر حفظ المحادثة.' : `لم تُحفظ هذه المحادثة: ${access.reasonAr}`;
 }
@@ -95,8 +108,11 @@ export function getAssistantRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/assistant',
+      // 3.9.10 (ISS-053): المساعد يرسل سياق القائد إلى مزوّد ويستهلك حصته، فيحتاج جلسة
+      requiresSession: true,
       handler: async ({ res, body, session }) => {
         const input = readAssistantInput(body);
+        assertAssistantModeAllowed(session, input.mode);
         const reply = await askSecondBrainAssistant(input.question, input.mode, { history: input.history, vault: session?.vault });
         const conversationId = saveAssistantTurn(session, input, reply);
         sendJson(res, 200, { ...reply, conversationId, saved: Boolean(conversationId), saveBlockedAr: unsavedReasonAr(session, conversationId) });
@@ -105,8 +121,10 @@ export function getAssistantRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/assistant/stream',
+      requiresSession: true,
       handler: async (ctx) => {
         const input = readAssistantInput(ctx.body);
+        assertAssistantModeAllowed(ctx.session, input.mode);
         const controller = new AbortController();
         ctx.res.on('close', () => {
           if (!ctx.res.writableFinished) controller.abort();

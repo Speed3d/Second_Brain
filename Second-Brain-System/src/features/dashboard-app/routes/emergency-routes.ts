@@ -14,7 +14,26 @@ import { isValidEmergencyKey } from '../../../core/crypto-engine.ts';
 import { createEncryptedSystemBackup, listEncryptedBackups, restoreEncryptedBackup } from '../../family-emergency/backup-service.ts';
 import { generatePrintableEmergencyKit } from '../../family-emergency/emergency-kit-service.ts';
 import { recordRestoreTarget } from '../../family-emergency/old-copies.ts';
-import { verifyEmergencyKey } from '../../vault/vault-manager.ts';
+import { readVaultFile, resolveVaultFilePath, vaultExists, verifyEmergencyKey, verifyMasterPassword } from '../../vault/vault-manager.ts';
+
+/**
+ * Hint بالعربي: هل يحق لهذا المفتاح الاستعادة بلا جلسة؟ (ISS-052)
+ *               نعم إن لم تكن على الجهاز خزنة (جهاز جديد)، أو كان ملفها تالفاً لا يُقرأ (التعافي)،
+ *               أو كان المفتاح كلمة مرورها الرئيسية أو مفتاح طوارئها.
+ */
+function keyOpensLocalVault(key: string): boolean {
+  if (!vaultExists()) return true;
+  try {
+    readVaultFile(resolveVaultFilePath());
+  } catch {
+    return true;
+  }
+  try {
+    return verifyMasterPassword(key) || (isValidEmergencyKey(key) && verifyEmergencyKey(key));
+  } catch {
+    return false;
+  }
+}
 import { findBackupCandidates, runRestoreDrill } from '../../../tools/restore-drill.ts';
 import { readSyncSettings } from '../../sync/sync-context.ts';
 import { HttpError, readString, sendHtml, sendJson, type RouteDefinition } from '../http-utils.ts';
@@ -101,7 +120,7 @@ export function getEmergencyRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/emergency/restore',
-      handler: ({ res, body }) => {
+      handler: ({ res, body, session }) => {
         assertUnlockAllowed();
         const backupFile = readString(body, 'backupFile', 1000).trim();
         const key = readString(body, 'key', 512);
@@ -109,6 +128,12 @@ export function getEmergencyRoutes(): RouteDefinition[] {
         if (!backupFile || !key) throw new HttpError(400, 'يرجى تحديد ملف النسخة ومفتاح الفتح.');
         const dryRun = body.dryRun !== false;
         if (!dryRun && !targetDir) throw new HttpError(400, 'يرجى تحديد مجلد جديد للاستعادة.');
+        // 3.9.9 (ISS-052): المسار عام عمداً (جهاز جديد بلا خزنة، أو الزوجة قبل الفتح). لكن على جهاز فيه خزنة،
+        // الكتابة بلا جلسة تتطلب مفتاحاً يفتح خزنة هذا الجهاز نفسها، لا أي «نسخة» صنعها المتصل بمفتاحه هو.
+        if (!dryRun && !session && !keyOpensLocalVault(key)) {
+          recordUnlockFailure();
+          throw new HttpError(403, 'على هذا الجهاز خزنة: افتحها أولاً، أو استعمل كلمة المرور الرئيسية أو مفتاح الطوارئ الخاص بها.');
+        }
         let result;
         try {
           result = restoreEncryptedBackup(path.resolve(backupFile), key, targetDir || path.dirname(path.resolve(backupFile)), { dryRun });

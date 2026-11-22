@@ -182,8 +182,46 @@ export function getStateRoutes(): RouteDefinition[] {
     {
       method: 'GET',
       path: '/api/state',
-      handler: ({ res }) => {
+      handler: ({ res, session }) => {
         const config = loadSystemConfig();
+        // 3.9.10 (ISS-053، قرار القائد): المسار عام لأن الواجهة تحتاج هويتها قبل الفتح، لكن سياق القائد لا يُكشف بلا جلسة.
+        // بلا جلسة ← الهوية العامة فقط. جلسة العائلة ← ما تحتاجه في الطوارئ (الدخل والفواتير وملخص العائلة).
+        const publicApp = {
+          appName: config.appName,
+          appTitleAr: config.appTitleAr,
+          assistantNameAr: config.assistantNameAr,
+          familyMemberTitle: config.familyMemberTitle,
+          version: config.version,
+          voiceEnabled: config.aiConfig.voiceEnabled,
+          voiceLang: config.aiConfig.voiceLang,
+        };
+        if (!session) {
+          sendJson(res, 200, { locked: true, app: publicApp, projects: [], memories: [], memoryCount: 0 });
+          return;
+        }
+        if (session.vault.unlockedBy !== 'commander') {
+          const familyProjects = config.watchedProjects.map((p) => ({
+            id: p.id,
+            name: p.name,
+            path: '',
+            existsOnDevice: false,
+            descriptionAr: '',
+            wifeSummaryAr: p.wifeSummaryAr,
+            monthlyIncome: p.monthlyIncome,
+            billingNotes: p.billingNotes,
+            stack: [],
+            runCommand: null,
+            criticalFiles: [],
+            securedCount: 0,
+            gitBranch: null,
+            lastCommitMessage: null,
+            lastCommitDate: null,
+            uncommittedChanges: null,
+            trackedByGit: [],
+          }));
+          sendJson(res, 200, { locked: false, app: publicApp, projects: familyProjects, memories: [], memoryCount: 0 });
+          return;
+        }
         const projects = config.watchedProjects.map((p) => {
           const r = scanAndAnalyzeProject(p);
           return {
@@ -211,16 +249,8 @@ export function getStateRoutes(): RouteDefinition[] {
           .slice(0, 50)
           .map((m) => ({ id: m.id, sourceAI: m.sourceAI, projectId: m.projectId, title: m.title, summaryAr: m.summaryAr, createdAt: m.createdAt }));
         sendJson(res, 200, {
-          app: {
-            appName: config.appName,
-            appTitleAr: config.appTitleAr,
-            assistantNameAr: config.assistantNameAr,
-            commanderName: config.commanderName,
-            familyMemberTitle: config.familyMemberTitle,
-            version: config.version,
-            voiceEnabled: config.aiConfig.voiceEnabled,
-            voiceLang: config.aiConfig.voiceLang,
-          },
+          locked: false,
+          app: { ...publicApp, commanderName: config.commanderName },
           projects,
           memories,
           memoryCount: querySharedAIMemory().length,

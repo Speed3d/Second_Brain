@@ -13,6 +13,9 @@ import * as fs from 'node:fs';
 import { startSecondBrainDesktopServer } from '../src/features/dashboard-app/desktop-server.ts';
 import { scanAndGenerateCodeRegistry } from '../src/tools/code-registry-scanner.ts';
 import { handleMcpJsonRpcRequest } from '../src/tools/mcp-memory-server.ts';
+import { resetSessionStateForTests } from '../src/features/dashboard-app/session-manager.ts';
+import { postJson, rawRequest } from './06-security.test.ts';
+import { ensureTestVault } from './test-environment.ts';
 
 /**
  * Hint بالعربي: دالة تشغيل اختبارات خادم MCP، فهرس الدوال الآلي، وخادم واجهة سطح المكتب.
@@ -63,9 +66,14 @@ export async function runToolsAndDashboardTests(): Promise<string[]> {
   assert.equal((await fetch(`http://127.0.0.1:${port}/assets/index.html`)).status, 404, 'لا يُخدم إلا الملفات المسموحة');
   assert.equal((await fetch(`http://127.0.0.1:${port}/assets/..%2Fdesktop-server.ts`)).status, 404, 'لا يمكن الخروج من مجلد الواجهة');
 
-  const stateRes = await fetch(`http://127.0.0.1:${port}/api/state`);
-  const stateJson = (await stateRes.json()) as { app: { appName: string }; projects: Array<{ name: string }> };
-  assert.ok(stateJson.app.appName.length > 0 && stateJson.projects.length >= 1, 'يجب أن تعيد /api/state الهوية والمشاريع');
+  // 3.9.10 (ISS-053): بلا جلسة الهوية العامة فقط، والمشاريع بجلسة القائد
+  const lockedState = (await (await fetch(`http://127.0.0.1:${port}/api/state`)).json()) as { locked: boolean; app: { appName: string }; projects: unknown[] };
+  assert.ok(lockedState.app.appName.length > 0 && lockedState.locked === true && lockedState.projects.length === 0, 'بلا جلسة: /api/state يعيد الهوية العامة فقط');
+  const unlock = await postJson(port, '/api/vault/unlock', { key: ensureTestVault().masterPassword });
+  const cookie = String(unlock.headers['set-cookie'] ?? '').split(';')[0];
+  const stateJson = JSON.parse((await rawRequest(port, { path: '/api/state', headers: { Cookie: cookie } })).body) as { app: { appName: string }; projects: Array<{ name: string }> };
+  assert.ok(stateJson.app.appName.length > 0 && stateJson.projects.length >= 1, 'يجب أن تعيد /api/state الهوية والمشاريع لجلسة القائد');
+  resetSessionStateForTests();
 
   await new Promise<void>((resolve) => server.close(() => resolve()));
   passedChecks.push('اختبار خادم وواجهة سطح المكتب (127.0.0.1 فقط، CSP صارمة، الملفات الثابتة المسموحة فقط، بيانات الحالة، وضعا القائد والعائلة) عبر HTTP حقيقي بنجاح.');

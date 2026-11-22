@@ -11,6 +11,7 @@
 
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 /** نتيجة فحص الصلاحيات */
 export interface FolderPermissionStatus {
@@ -57,7 +58,10 @@ export function findBroadWindowsWriters(lines: string[]): string[] {
 function readWindowsAclLines(dir: string): string[] {
   const literal = dir.replace(/'/g, "''");
   const script = `(Get-Acl -LiteralPath '${literal}').Access | ForEach-Object { try { $s = $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value } catch { $s = [string]$_.IdentityReference }; $s + '|' + [int]$_.FileSystemRights + '|' + $_.AccessControlType }`;
-  const out = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf-8', timeout: 15000, windowsHide: true });
+  // المسار الكامل لـ PowerShell الخاص بـ Windows، لا أول ما يجده PATH
+  const system32 = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32');
+  const powershell = path.join(system32, 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const out = execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf-8', timeout: 15000, windowsHide: true });
   return out.split(/\r?\n/).filter(Boolean);
 }
 

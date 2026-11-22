@@ -64,8 +64,10 @@ export async function runProjectPageTests(): Promise<string[]> {
   const port = (server.address() as AddressInfo).port;
   const get = (p: string, cookie?: string) => rawRequest(port, { path: p, headers: cookie ? { Cookie: cookie } : {} });
   try {
-    // 1. التفاصيل
-    const details = await get('/api/projects/page-project');
+    // 1. التفاصيل (3.9.10، ISS-053: للقائد فقط)
+    assert.equal((await get('/api/projects/page-project')).status, 401, 'صفحة المشروع بلا جلسة مرفوضة');
+    const firstLogin = String((await postJson(port, '/api/vault/unlock', { key: TEST_MASTER_PASSWORD })).headers['set-cookie'] ?? '').split(';')[0];
+    const details = await get('/api/projects/page-project', firstLogin);
     assert.equal(details.status, 200);
     const d = JSON.parse(details.body);
     assert.equal(d.project.name, 'Page Project');
@@ -74,8 +76,9 @@ export async function runProjectPageTests(): Promise<string[]> {
     assert.ok(Array.isArray(d.changelog) && d.changelog.length >= 1);
     assert.equal(d.conversations.length, 1);
     assert.equal(d.conversations[0].title, 'جلسة تصميم الواجهة');
-    assert.equal((await get('/api/projects/no-such-project')).status, 404);
-    assert.equal((await get('/api/projects/Bad..Id')).status, 404, 'معرّف بصيغة غير صالحة لا يطابق أي مسار');
+    assert.equal((await get('/api/projects/no-such-project', firstLogin)).status, 404);
+    assert.equal((await get('/api/projects/Bad..Id', firstLogin)).status, 404, 'معرّف بصيغة غير صالحة لا يطابق أي مسار');
+    resetSessionStateForTests();
     passedChecks.push('اختبار جلب تفاصيل المشروع (التقرير، الأوامر، سجل التغييرات، قائمة المحادثات) ورفض المشاريع غير الموجودة بنجاح.');
 
     // 2. المحادثات: تتطلب جلسة القائد، وتقبل فقط الملفات المسجّلة
@@ -124,7 +127,7 @@ export async function runProjectPageTests(): Promise<string[]> {
     assert.equal(removed.status, 200);
     assert.equal(loadSystemConfig().watchedProjects.some((p) => p.id === 'page-project'), false, 'أُزيل المشروع من المراقبة');
     assert.ok(fs.existsSync(getProjectObsidianFolder(project)), 'وثائق Obsidian تبقى بعد إيقاف المراقبة');
-    assert.equal((await get('/api/projects/page-project')).status, 404);
+    assert.equal((await get('/api/projects/page-project', cookie)).status, 404);
     passedChecks.push('اختبار تعديل معلومات المشروع وخلاصته، وإيقاف مراقبته مع بقاء وثائقه، وأن الفتح والتعديل والإيقاف للقائد فقط بنجاح.');
   } finally {
     updateSystemSettings({ aiConfig: originalAi });

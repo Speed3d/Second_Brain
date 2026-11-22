@@ -477,6 +477,7 @@
     try {
       const data = await api('/api/state');
       state.app = data.app;
+      state.locked = data.locked === true;
       renderAutoSpeakToggles();
       state.projects = data.projects;
       state.memories = data.memories;
@@ -507,6 +508,10 @@
   function renderProjects() {
     const list = $('#projectsList');
     list.replaceChildren();
+    if (state.locked) {
+      list.appendChild(el('div', { className: 'empty-state', text: '🔒 افتح الخزنة لعرض المشاريع (بياناتها لا تُعرض والخزنة مقفلة).' }));
+      return;
+    }
     if (!state.projects.length) {
       list.appendChild(el('div', { className: 'empty-state', text: 'لا توجد مشاريع بعد. اضغط "مشروع جديد" لإضافة أول مشروع.' }));
       return;
@@ -693,6 +698,10 @@
   function renderFamilyProjects() {
     const box = $('#familyProjects');
     box.replaceChildren();
+    if (state.locked) {
+      box.appendChild(el('p', { text: '🔒 افتحي الخزنة بمفتاح الطوارئ (الخطوة 1)، فتظهر هنا المشاريع والدخل والفواتير.' }));
+      return;
+    }
     if (!state.projects.length) {
       box.appendChild(el('p', { text: 'لا توجد مشاريع مسجلة بعد.' }));
       return;
@@ -736,11 +745,15 @@
 
   // ===================== الخزنة =====================
   async function refreshVault() {
+    const before = state.vault.unlocked ? state.vault.unlockedBy : null;
     try {
       state.vault = await api('/api/vault/status');
     } catch (e) {
       return;
     }
+    // 3.9.10 (ISS-053): بيانات المشاريع والذاكرة تتبع الجلسة، فتُعاد قراءتها عند الفتح والقفل
+    const after = state.vault.unlocked ? state.vault.unlockedBy : null;
+    if (before !== after) loadState();
     state.autoLockAt = state.vault.unlocked ? Date.now() + (state.vault.secondsUntilAutoLock || 0) * 1000 : null;
     renderVaultChrome();
     if (state.vault.unlocked) await loadSecrets();
@@ -1492,6 +1505,10 @@
     list.replaceChildren();
     const term = ($('#memorySearch').value || '').trim().toLowerCase();
     const items = state.memories.filter((m) => !term || [m.title, m.summaryAr, m.projectId].join(' ').toLowerCase().indexOf(term) >= 0);
+    if (state.locked) {
+      list.appendChild(el('div', { className: 'empty-state', text: '🔒 افتح الخزنة لعرض الذاكرة المشتركة.' }));
+      return;
+    }
     if (!items.length) {
       list.appendChild(el('div', { className: 'empty-state', text: term ? 'لا توجد نتائج.' : 'لا توجد سجلات ذاكرة بعد. ستظهر هنا عندما تحفظ أدوات الذكاء قراراتها عبر خادم الذاكرة.' }));
       return;

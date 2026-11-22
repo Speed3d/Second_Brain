@@ -100,6 +100,14 @@ export function peekActiveVault(): UnlockedVault | null {
 }
 
 /**
+ * Hint بالعربي: هل ما زالت هذه الجلسة هي الجلسة المفتوحة؟ (ISS-051): طلب طويل (المساعد) يقرأ الجلسة قبل
+ *               الانتظار، فيجب أن يتأكد بعده أنها لم تُقفل ولم تُستبدل قبل أن يكتب بها شيئاً.
+ */
+export function isActiveVaultSession(session: VaultSession | null | undefined): boolean {
+  return Boolean(session && activeSession === session && Date.now() - session.lastActivityAt <= getAutoLockMs());
+}
+
+/**
  * Hint بالعربي: دالة قفل الخزنة فوراً ومسح مفتاح البيانات من الذاكرة.
  */
 export function closeVaultSession(): void {

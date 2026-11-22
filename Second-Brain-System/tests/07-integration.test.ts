@@ -360,12 +360,17 @@ export async function runIntegrationTests(): Promise<string[]> {
   const server = await startSecondBrainDesktopServer(0);
   const port = (server.address() as AddressInfo).port;
   try {
-    const streamRes = await postJson(port, '/api/assistant/stream', { question: 'ما الفواتير المهمة؟', mode: 'wife_emergency', history: [{ role: 'assistant', content: 'تُحذف لأنها أول رسالة' }] });
+    // 3.9.10 (ISS-053): المساعد يحتاج جلسة؛ وضع العائلة بجلسة مفتاح الطوارئ
+    const famCookie = String((await postJson(port, '/api/vault/unlock', { key: ensureTestVault().emergencyKey })).headers['set-cookie'] ?? '').split(';')[0];
+    const streamRes = await postJson(port, '/api/assistant/stream', { question: 'ما الفواتير المهمة؟', mode: 'wife_emergency', history: [{ role: 'assistant', content: 'تُحذف لأنها أول رسالة' }] }, famCookie);
     assert.equal(streamRes.status, 200);
     assert.ok(String(streamRes.headers['content-type']).startsWith('text/event-stream'));
     assert.ok(streamRes.body.includes('event: delta') && streamRes.body.includes('event: done'));
     const done = streamRes.body.split('\n\n').find((b) => b.startsWith('event: done'))!;
-    assert.equal(JSON.parse(done.split('data: ')[1]).providerUsed, 'local');
+    const doneData = JSON.parse(done.split('data: ')[1]) as { providerUsed: string; conversationId: string | null };
+    assert.equal(doneData.providerUsed, 'local');
+    // المحادثة العائلية التي حُفظت هنا لا تبقى للحزم التالية (tests/13 يعدّ محادثاته)
+    if (doneData.conversationId) assert.equal((await postJson(port, `/api/conversations/${doneData.conversationId}/delete`, {}, famCookie)).status, 200);
     const providersRes = await fetch(`http://127.0.0.1:${port}/api/assistant/providers`);
     const providers = (await providersRes.json()) as { providers: Array<{ id: string; available: boolean }> };
     assert.deepEqual(providers.providers.map((p) => [p.id, p.available]), [['local', true]]);

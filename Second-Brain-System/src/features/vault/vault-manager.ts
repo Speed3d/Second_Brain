@@ -724,6 +724,10 @@ export function restoreCriticalFileFromVault(
  */
 export function wipeUnlockedVault(vault: UnlockedVault): void {
   vault.dataKey.fill(0);
+  // 3.9.8 (ISS-051): كان المفتاح يُملأ أصفاراً ويبقى طوله 32، فكل فحص بالطول (hasMainDataKey، keyFor)
+  // يقبله، فيُختم ما يُحفظ بعد القفل (طلب مساعد كان ينتظر المزوّد) بمفتاح أصفار يفتحه أي أحد.
+  // مفتاح فارغ (طوله 0) يُفشل كل استعمال فوراً.
+  vault.dataKey = Buffer.alloc(0);
   vault.familyKey?.fill(0);
   vault.familyKey = null;
   vault.secrets = [];

@@ -199,7 +199,8 @@ export async function runSecurityTests(): Promise<string[]> {
       415
     );
     // جسم أكبر من 1MB ← 413
-    assert.equal((await postJson(port, '/api/assistant', { question: 'x'.repeat(1024 * 1024 + 10) })).status, 413);
+    // (3.9.10: المساعد يحتاج جلسة فيُرفض قبل قراءة الجسم، فالفحص على مسار عام)
+    assert.equal((await postJson(port, '/api/vault/unlock', { key: 'x'.repeat(1024 * 1024 + 10) })).status, 413);
     passedChecks.push('اختبار رفض الخادم لـ Host الغريب، والطلبات بلا جلسة، وطلبات المواقع الأخرى (CSRF)، والمحتوى غير JSON، والطلبات الضخمة بنجاح.');
 
     // تحديد المحاولات: بعد 3 محاولات خاطئة يُرفض الطلب التالي مؤقتاً (429)

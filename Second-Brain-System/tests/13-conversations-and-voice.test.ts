@@ -122,8 +122,9 @@ export async function runConversationsAndVoiceTests(): Promise<string[]> {
     assert.equal(listed.conversations[0].messageCount, 4);
     const opened = JSON.parse((await rawRequest(port, { path: `/api/conversations/${done.conversationId}`, headers: { Cookie: cookie } })).body);
     assert.equal(opened.messages[2].content, 'متابعة');
+    // 3.9.10 (ISS-053): بلا خزنة مفتوحة لا يجيب المساعد أصلاً، فلا يُحفظ شيء
     const locked = await postJson(port, '/api/assistant/stream', { question: 'بلا خزنة', mode: 'commander' });
-    assert.equal(JSON.parse(/event: done\ndata: (.*)/.exec(locked.body)![1]).saved, false, 'بلا خزنة مفتوحة لا يُحفظ شيء');
+    assert.equal(locked.status, 401, 'بلا خزنة مفتوحة لا يجيب المساعد ولا يُحفظ شيء');
     assert.equal((await rawRequest(port, { path: '/api/conversations' })).status, 401);
     assert.equal((await postJson(port, `/api/conversations/${done.conversationId}/delete`, {}, cookie)).status, 200);
     assert.equal((await rawRequest(port, { path: `/api/conversations/${done.conversationId}`, headers: { Cookie: cookie } })).status, 404);

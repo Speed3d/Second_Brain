@@ -40,14 +40,14 @@ import { ensureTestVault, setupIsolatedTestEnvironment, writeFixtureFile } from 
  * - الواجهة والحالة والصحة، وفتح الخزنة وإنشاؤها وقفلها، والفتح بالـ Passkey.
  * - محمية بكلمة المرور داخلها: الإعدادات والصيانة (assertSettingsAuth)، والاستعادة والتمرين (المفتاح في الطلب).
  * - صفحات الطباعة لمرة واحدة برمز عشوائي 48 حرفاً.
- * - المساعد وفحص المشاريع والصوت يعملون بلا خزنة بلا أسرار (بيانات المشاريع العامة فقط).
+ * - الصوت يعمل بلا خزنة (ينطق نصاً يرسله المتصل، بلا بيانات).
+ * - 3.9.10 (ISS-053): /api/state عام لكنه بلا جلسة لا يعيد إلا الهوية العامة؛ والمساعد وصفحة المشروع وإعادة الفحص صارت تحتاج جلسة.
  */
 const PUBLIC_ROUTES = [
   'GET /', 'GET RE:assets', 'GET /api/state', 'GET /api/health',
   'POST /api/settings/auth', 'POST /api/settings/lock', 'GET /api/settings', 'POST /api/settings',
   'GET /api/vault/status', 'POST /api/vault/setup', 'POST /api/vault/unlock', 'POST /api/vault/lock',
-  'POST /api/projects/rescan', 'GET RE:project',
-  'POST /api/assistant', 'POST /api/assistant/stream', 'GET /api/assistant/providers',
+  'GET /api/assistant/providers',
   'GET RE:emergency-kit-print', 'GET /api/emergency/backups', 'POST /api/emergency/restore', 'POST /api/emergency/restore-drill',
   'GET /api/passkeys/status', 'POST /api/passkeys/unlock/begin', 'POST /api/passkeys/unlock/finish', 'GET RE:two-factor-print',
   'GET /api/maintenance', 'POST /api/maintenance/reset', 'POST /api/maintenance/restore-last', 'POST /api/maintenance/empty-trash', 'POST /api/maintenance/finalize',
@@ -58,6 +58,8 @@ const PUBLIC_ROUTES = [
 const FAMILY_ROUTES = [
   'GET /api/vault/secrets', 'POST /api/emergency/backup', 'GET /api/family/portal', 'POST /api/family/log',
   'GET /api/conversations', 'GET RE:conversation', 'POST RE:conversation-delete', 'POST /api/conversations/delete-all',
+  // 3.9.10 (ISS-053): المساعد بوضع العائلة (وضع القائد يُرفض داخل المعالج بجلسة العائلة)
+  'POST /api/assistant', 'POST /api/assistant/stream',
 ];
 
 /** أسماء ثابتة للمسارات ذات التعبير النمطي (حتى يبقى الجدول مقروءاً) */

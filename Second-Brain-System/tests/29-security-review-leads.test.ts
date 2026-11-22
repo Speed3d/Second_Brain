@@ -20,9 +20,10 @@ import { loadSystemConfig, normalizeSystemConfig } from '../src/core/config-mana
 import { checkFolderPermissions, findBroadWindowsWriters, getFolderPermissionStatus, resetFolderPermissionStatusForTests, runStartupFolderPermissionCheck } from '../src/core/folder-permissions.ts';
 import { beginTwoFactorSetup, disableTwoFactor, finishTwoFactorSetup, readTwoFactor, resetTwoFactorPendingForTests } from '../src/features/auth/two-factor.ts';
 import { startSecondBrainDesktopServer } from '../src/features/dashboard-app/desktop-server.ts';
-import { resetSessionStateForTests } from '../src/features/dashboard-app/session-manager.ts';
-import { changeMasterPassword, createLegacyV2VaultForTests, createVault, migrateVaultToFamilyV3, readVaultFile, rotateEmergencyKey, unlockVault, upsertVaultSecret, vaultKeysOf, type VaultFileV3 } from '../src/features/vault/vault-manager.ts';
-import { normalizeEmergencyKey, openWithKey, unwrapDataKey } from '../src/core/crypto-engine.ts';
+import { closeVaultSession, getVaultSession, openVaultSession, resetSessionStateForTests } from '../src/features/dashboard-app/session-manager.ts';
+import { saveAssistantTurn } from '../src/features/dashboard-app/routes/assistant-routes.ts';
+import { changeMasterPassword, createLegacyV2VaultForTests, createVault, hasMainDataKey,migrateVaultToFamilyV3, readVaultFile, rotateEmergencyKey, unlockVault, upsertVaultSecret, vaultKeysOf, type VaultFileV3 } from '../src/features/vault/vault-manager.ts';
+import { generateDataKey, generateEmergencyRecoveryKey, normalizeEmergencyKey, openWithKey, sealWithKey, unwrapDataKey, wrapDataKey } from '../src/core/crypto-engine.ts';
 import { appendConversationTurn, getConversation, resealFamilyConversations, resolveConversationsDir } from '../src/features/conversations/conversation-store.ts';
 import { appendFamilyLog, readFamilyLog, resealFamilyLog } from '../src/features/family-emergency/family-portal.ts';
 import { createEncryptedSystemBackup, openEncryptedBackup, restoreEncryptedBackup } from '../src/features/family-emergency/backup-service.ts';
@@ -108,11 +109,12 @@ async function checkFolderPermissionLead(passedChecks: string[]): Promise<void> 
   try {
     if (process.platform === 'win32') {
       // مجلد الاختبار المؤقت داخل ملف المستخدم: موروث لصاحبه و SYSTEM و Administrators فقط
-      execFileSync('icacls', [dir, '/inheritance:r', '/grant:r', `*${currentUserSid()}:(OI)(CI)F`, '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F'], { stdio: 'ignore' });
+      const icacls = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'icacls.exe');
+      execFileSync(icacls, [dir, '/inheritance:r', '/grant:r', `*${currentUserSid()}:(OI)(CI)F`, '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F'], { stdio: 'ignore' });
       const closed = checkFolderPermissions(dir);
       assert.equal(closed.checked, true, closed.detailAr);
       assert.equal(closed.open, false, `مجلد مغلق كُشف مفتوحاً: ${closed.broadWriters.join(',')}`);
-      execFileSync('icacls', [dir, '/grant', '*S-1-5-11:(OI)(CI)M'], { stdio: 'ignore' });
+      execFileSync(icacls, [dir, '/grant', '*S-1-5-11:(OI)(CI)M'], { stdio: 'ignore' });
     } else {
       fs.chmodSync(dir, 0o700);
       assert.equal(checkFolderPermissions(dir).open, false);
@@ -400,6 +402,182 @@ async function checkConcurrentVaultKeysMerge(passedChecks: string[]): Promise<vo
 }
 
 /**
+ * Hint بالعربي: ISS-051 — طلب المساعد يقرأ الجلسة قبل انتظار المزوّد. إن قُفلت الخزنة أثناء الانتظار، كان المسح
+ *               يملأ المفتاح أصفاراً ويبقي طوله 32، فيحفظ الحفظ اللاحق محادثة مختومة بمفتاح أصفار يفتحها أي أحد.
+ */
+async function checkStaleSessionDoesNotSealWithZeroKey(passedChecks: string[]): Promise<void> {
+  resetSessionStateForTests();
+  const shared = ensureTestVault();
+  const token = openVaultSession(unlockVault(shared.masterPassword));
+  const session = getVaultSession(token)!;
+  const dir = resolveConversationsDir();
+  fs.mkdirSync(dir, { recursive: true });
+  const before = new Set(fs.readdirSync(dir));
+  // القفل أثناء انتظار ردّ المزوّد
+  closeVaultSession();
+  assert.equal(hasMainDataKey(session.vault), false, 'ISS-051: الجلسة المقفولة ما زالت تُعدّ جلسة قائد');
+  const id = saveAssistantTurn(session, { question: 'سؤال أثناء القفل', mode: 'commander', history: [], conversationId: undefined }, { answerAr: 'جواب', providerUsed: 'local', model: 'test' });
+  const created = fs.readdirSync(dir).filter((n) => !before.has(n));
+  for (const n of created) {
+    const f = JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8'));
+    let zeroOpens = false;
+    try {
+      openWithKey(f.sealed, Buffer.alloc(32));
+      zeroOpens = true;
+    } catch {
+      // جيد
+    }
+    fs.rmSync(path.join(dir, n), { force: true });
+    assert.equal(zeroOpens, false, 'ISS-051: محادثة حُفظت مختومة بمفتاح أصفار بعد القفل');
+  }
+  assert.equal(id, null, 'ISS-051: الحفظ بعد القفل يجب أن يُرفض');
+  assert.equal(created.length, 0, 'ISS-051: لا ملف محادثة بعد القفل');
+  assert.throws(() => appendConversationTurn(session.vault, { mode: 'commander', question: 'x', answer: 'y' }), 'الحفظ المباشر بخزنة ممسوحة يرمي');
+  // جلسة جديدة بعد القفل لا تعيد إحياء القديمة
+  const token2 = openVaultSession(unlockVault(shared.masterPassword));
+  const fresh = getVaultSession(token2)!;
+  assert.equal(saveAssistantTurn(session, { question: 'q', mode: 'commander', history: [], conversationId: undefined }, { answerAr: 'a', providerUsed: 'local', model: 'test' }), null, 'الجلسة القديمة لا تحفظ بعد فتح جلسة جديدة');
+  const ok = saveAssistantTurn(fresh, { question: 'سؤال بجلسة سليمة', mode: 'commander', history: [], conversationId: undefined }, { answerAr: 'جواب', providerUsed: 'local', model: 'test' });
+  assert.ok(ok, 'الجلسة السليمة تحفظ');
+  fs.rmSync(path.join(dir, `${ok}.enc.json`), { force: true });
+  resetSessionStateForTests();
+  passedChecks.push('ISS-051: القفل أثناء انتظار المساعد لا يحفظ محادثة بمفتاح أصفار: الخزنة الممسوحة لا تُعدّ جلسة قائد، والحفظ بالجلسة القديمة يُرفض (حتى بعد فتح جلسة جديدة)، والجلسة السليمة تحفظ.');
+}
+
+/**
+ * Hint بالعربي: ISS-052 — مسار الاستعادة عام (بلا جلسة)، وملف النسخة ومجلد الهدف من الطلب. فأي برنامج محلي يصنع
+ *               «نسخة» بمفتاحه هو، فيها أي ملفات بأي أسماء، ويكتبها باسم القائد في أي مجلد جديد.
+ */
+async function checkPublicRestoreCannotPlantFiles(passedChecks: string[]): Promise<void> {
+  const config = loadSystemConfig();
+  const base = path.join(config.paths.rootDir, 'restore-plant-sim');
+  fs.mkdirSync(base, { recursive: true });
+  // «نسخة» مصنوعة بمفتاح الدخيل نفسه (لا يعرف كلمة مرور القائد)
+  const craft = (name: string, filesMap: Record<string, string>): { file: string; pass: string } => {
+    const pass = 'Outsider-Own-Pass-0001';
+    const dek = generateDataKey();
+    const snapshot = { createdAt: new Date().toISOString(), appName: 'Second Brain', filesCount: Object.keys(filesMap).length, filesMap };
+    const backup = {
+      format: 'second-brain-backup',
+      version: 2,
+      createdAt: snapshot.createdAt,
+      filesCount: snapshot.filesCount,
+      vaultKeys: { commanderWrap: wrapDataKey(dek, pass), emergencyWrap: wrapDataKey(dek, generateEmergencyRecoveryKey()) },
+      payload: sealWithKey(JSON.stringify(snapshot), dek),
+    };
+    const file = path.join(base, `Second-Brain-Backup-${name}.enc.json`);
+    fs.writeFileSync(file, JSON.stringify(backup));
+    return { file, pass };
+  };
+  const b64 = (s: string) => Buffer.from(s).toString('base64');
+  const planted = craft('planted', { 'Obsidian-Vault/ok.md': b64('# ok'), 'evil/run-me.cmd': b64('echo pwned') });
+  const clean = craft('clean', { 'Obsidian-Vault/ok.md': b64('# ok') });
+  resetSessionStateForTests();
+  const shared = ensureTestVault();
+  const server = await startSecondBrainDesktopServer(0);
+  const port = (server.address() as AddressInfo).port;
+  try {
+    // 1. بلا جلسة، ومفتاح لا يفتح خزنة هذا الجهاز: الاستعادة الفعلية مرفوضة، ولا يُكتب شيء
+    const t1 = path.join(base, 'target-1');
+    const r1 = await postJson(port, '/api/emergency/restore', { backupFile: clean.file, key: clean.pass, targetDir: t1, dryRun: false });
+    assert.equal(fs.existsSync(t1), false, `ISS-052: نسخة مصنوعة بمفتاح الدخيل كُتبت بلا جلسة (${r1.status})`);
+    assert.equal(r1.status, 403, r1.body);
+    // 2. ملف باسم خارج هيكل النسخ مرفوض دائماً، حتى في المعاينة وحتى بجلسة قائد
+    const cookie = cookieOf((await postJson(port, '/api/vault/unlock', { key: shared.masterPassword })).headers);
+    const dry = await postJson(port, '/api/emergency/restore', { backupFile: planted.file, key: planted.pass, targetDir: path.join(base, 'target-2') });
+    assert.equal(dry.status, 400, `ISS-052: المعاينة قبلت ملفاً خارج هيكل النسخ: ${dry.body}`);
+    const t3 = path.join(base, 'target-3');
+    const r3 = await postJson(port, '/api/emergency/restore', { backupFile: planted.file, key: planted.pass, targetDir: t3, dryRun: false }, cookie);
+    assert.equal(r3.status, 400, r3.body);
+    assert.equal(fs.existsSync(path.join(t3, 'evil', 'run-me.cmd')), false, 'ISS-052: ملف خارج الهيكل كُتب');
+    // 3. بجلسة: النسخة السليمة تُستعاد
+    const t4 = path.join(base, 'target-4');
+    const r4 = await postJson(port, '/api/emergency/restore', { backupFile: clean.file, key: clean.pass, targetDir: t4, dryRun: false }, cookie);
+    assert.equal(r4.status, 200, r4.body);
+    assert.ok(fs.existsSync(path.join(t4, 'Obsidian-Vault', 'ok.md')));
+    resetSessionStateForTests();
+    // 4. بلا جلسة، لكن المفتاح يفتح خزنة هذا الجهاز (الزوجة بمفتاح الطوارئ): مسموح
+    const realBackup = createEncryptedSystemBackup(unlockVault(shared.masterPassword), { outputDir: path.join(base, 'real'), extraOutputDir: '' });
+    const t5 = path.join(base, 'target-5');
+    const r5 = await postJson(port, '/api/emergency/restore', { backupFile: realBackup.backupFilePath, key: shared.emergencyKey, targetDir: t5, dryRun: false });
+    assert.equal(r5.status, 200, r5.body);
+    // 5. نسخة حقيقية كاملة تمرّ من فحص الهيكل (لا رفض خاطئ)
+    const t6 = path.join(base, 'target-6');
+    const r6 = await postJson(port, '/api/emergency/restore', { backupFile: realBackup.backupFilePath, key: shared.masterPassword, targetDir: t6, dryRun: false });
+    assert.equal(r6.status, 200, r6.body);
+    passedChecks.push('ISS-052: الاستعادة بلا جلسة تتطلب مفتاحاً يفتح خزنة هذا الجهاز (نسخة مصنوعة بمفتاح الدخيل ← 403 بلا كتابة)، وأي ملف خارج هيكل النسخ يُرفض حتى في المعاينة وبجلسة القائد، والنسخ الحقيقية والسليمة تُستعاد.');
+  } finally {
+    resetSessionStateForTests();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    fs.rmSync(path.join(config.paths.rootDir, 'Second-Brain-System', 'data', RESTORE_TARGETS_FILE), { force: true });
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Hint بالعربي: ISS-053 — المسارات العامة كانت تعطي أي برنامج محلي بلا جلسة: مسارات المشاريع ودخلها وفواتيرها وملفاتها
+ *               الحساسة وآخر commit والذاكرة (`/api/state` وصفحة المشروع)، والمساعد بوضع القائد بسياقه الكامل وحصة مزوّده.
+ *               القرار (القائد، 3.9.10): ما يكشف سياق القائد أو يستهلك حصته يحتاج جلسة.
+ */
+async function checkPublicRoutesNeedSession(passedChecks: string[]): Promise<void> {
+  resetSessionStateForTests();
+  const shared = ensureTestVault();
+  const server = await startSecondBrainDesktopServer(0);
+  const port = (server.address() as AddressInfo).port;
+  const getState = async (cookie?: string) => JSON.parse((await rawRequest(port, { path: '/api/state', headers: cookie ? { Cookie: cookie } : {} })).body) as {
+    locked?: boolean;
+    app: Record<string, unknown>;
+    projects: Array<Record<string, unknown>>;
+    memories: unknown[];
+    memoryCount: number;
+  };
+  try {
+    const projectId = String(loadSystemConfig().watchedProjects[0].id);
+    // 1. بلا جلسة: الهوية العامة فقط
+    const locked = await getState();
+    assert.equal(locked.locked, true);
+    assert.equal(locked.projects.length, 0, 'ISS-053: /api/state يعطي المشاريع بلا جلسة');
+    assert.equal(locked.memories.length, 0);
+    assert.equal(locked.memoryCount, 0);
+    assert.equal(locked.app.commanderName, undefined, 'اسم القائد لا يُكشف بلا جلسة');
+    assert.ok(locked.app.appName && locked.app.version, 'الهوية العامة تبقى (اسم البرنامج والإصدار)');
+    assert.equal((await rawRequest(port, { path: `/api/projects/${encodeURIComponent(projectId)}` })).status, 401, 'ISS-053: صفحة المشروع بلا جلسة');
+    assert.equal((await postJson(port, '/api/projects/rescan', {})).status, 401);
+    const ask = await postJson(port, '/api/assistant', { question: 'ما دخل المشاريع؟', mode: 'commander' });
+    assert.equal(ask.status, 401, `ISS-053: المساعد بوضع القائد يجيب بلا جلسة (${ask.status})`);
+    assert.equal((await postJson(port, '/api/assistant', { question: 'سؤال', mode: 'wife_emergency' })).status, 401, 'ووضع العائلة كذلك');
+    assert.equal((await postJson(port, '/api/assistant/stream', { question: 'سؤال', mode: 'commander' })).status, 401, 'والبث كذلك');
+    // 2. جلسة العائلة: ما تحتاجه في الطوارئ فقط، والمساعد بوضع العائلة لا القائد
+    const family = cookieOf((await postJson(port, '/api/vault/unlock', { key: shared.emergencyKey })).headers);
+    const fam = await getState(family);
+    assert.equal(fam.locked, false);
+    assert.ok(fam.projects.length >= 1, 'العائلة ترى المشاريع');
+    const fp = fam.projects[0];
+    assert.ok('monthlyIncome' in fp && 'wifeSummaryAr' in fp && 'billingNotes' in fp, 'العائلة ترى الدخل والفواتير وملخص العائلة');
+    assert.equal(fp.path, '', 'العائلة لا ترى مسار المشروع');
+    assert.deepEqual(fp.criticalFiles, [], 'ولا الملفات الحساسة');
+    assert.equal(fp.lastCommitMessage, null, 'ولا آخر commit');
+    assert.equal(fam.memories.length, 0, 'ولا الذاكرة');
+    assert.equal((await postJson(port, '/api/assistant', { question: 'سؤال', mode: 'commander' }, family)).status, 403, 'العائلة لا تسأل بوضع القائد');
+    assert.equal((await postJson(port, '/api/assistant/stream', { question: 'سؤال', mode: 'commander' }, family)).status, 403);
+    assert.equal((await postJson(port, '/api/assistant', { question: 'ما الفواتير؟', mode: 'wife_emergency' }, family)).status, 200, 'العائلة تسأل بوضع العائلة');
+    assert.equal((await rawRequest(port, { path: `/api/projects/${encodeURIComponent(projectId)}`, headers: { Cookie: family } })).status, 403, 'صفحة المشروع للقائد');
+    resetSessionStateForTests();
+    // 3. جلسة القائد: كل شيء كما كان
+    const commander = cookieOf((await postJson(port, '/api/vault/unlock', { key: shared.masterPassword })).headers);
+    const full = await getState(commander);
+    assert.ok(full.projects[0].path && Array.isArray(full.projects[0].criticalFiles), 'القائد يرى كل شيء');
+    assert.ok(full.app.commanderName);
+    assert.equal((await rawRequest(port, { path: `/api/projects/${encodeURIComponent(projectId)}`, headers: { Cookie: commander } })).status, 200);
+    assert.equal((await postJson(port, '/api/assistant', { question: 'سؤال', mode: 'commander' }, commander)).status, 200);
+    passedChecks.push('ISS-053: بلا جلسة لا يكشف /api/state إلا الهوية العامة، وصفحة المشروع وإعادة الفحص والمساعد (بالوضعين وبالبث) ← 401؛ وجلسة العائلة ترى الدخل والفواتير بلا مسارات ولا ملفات حساسة ولا ذاكرة، وتسأل بوضع العائلة فقط؛ والقائد يرى كل شيء.');
+  } finally {
+    resetSessionStateForTests();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+/**
  * Hint بالعربي: ملفات JSON داخل مجلد تحمل غلاف الطوارئ بالصيغة 2 (للتحقق المستقل من سبب الخيط).
  */
 function listRestoredFilesWithWrap(dir: string): string[] {
@@ -444,7 +622,9 @@ function makeSyncDevice(baseDir: string, name: string, syncRoot: string, vaultSo
  * Hint بالعربي: معرّف حساب المستخدم الحالي على Windows (لاختبار مجلد مغلق لصاحبه).
  */
 function currentUserSid(): string {
-  const out = execFileSync('whoami', ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf-8' });
+  // المسار الكامل: في Git Bash يسبق whoami الخاص بـ Git نسخة Windows في PATH ولا يفهم /user
+  const whoami = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'whoami.exe');
+  const out = execFileSync(whoami, ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf-8' });
   const sid = out.match(/S-1-5-[\d-]+/);
   if (!sid) throw new Error('تعذّر قراءة معرّف المستخدم.');
   return sid[0];
@@ -460,5 +640,8 @@ export async function runSecurityReviewLeadsTests(): Promise<string[]> {
   await checkEmergencyRotationRotatesFamilyKey(passedChecks);
   await checkRestoredCopiesAreListed(passedChecks);
   await checkConcurrentVaultKeysMerge(passedChecks);
+  await checkStaleSessionDoesNotSealWithZeroKey(passedChecks);
+  await checkPublicRestoreCannotPlantFiles(passedChecks);
+  await checkPublicRoutesNeedSession(passedChecks);
   return passedChecks;
 }

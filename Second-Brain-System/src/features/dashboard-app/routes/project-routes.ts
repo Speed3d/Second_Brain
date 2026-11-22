@@ -82,6 +82,9 @@ export function getProjectRoutes(): RouteDefinition[] {
     {
       method: 'POST',
       path: '/api/projects/rescan',
+      // 3.9.10 (ISS-053): يعيد قائمة الملفات الحساسة ويكتب في Obsidian، فهو للقائد
+      requiresSession: true,
+      commanderOnly: true,
       handler: ({ res, session }) => {
         sendJson(res, 200, { ok: true, vaultUnlocked: Boolean(session), projects: rescanAllProjects(session?.vault) });
       },
@@ -89,6 +92,9 @@ export function getProjectRoutes(): RouteDefinition[] {
     {
       method: 'GET',
       path: PROJECT_ID_PATH,
+      // 3.9.10 (ISS-053): المسار والملفات الحساسة والذاكرة والمحادثات المؤرشفة سياق القائد
+      requiresSession: true,
+      commanderOnly: true,
       handler: ({ res, params }) => sendJson(res, 200, getProjectDetails(requireProject(params[0]))),
     },
     {
