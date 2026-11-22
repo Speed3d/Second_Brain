@@ -21,7 +21,7 @@ import { logSystemInfo } from '../../core/logger.ts';
 /** نسخة قديمة يفتحها مفتاح الطوارئ القديم */
 export interface OldFullAccessCopy {
   filePath: string;
-  kind: 'backup' | 'vault-backup' | 'sync-snapshot' | 'legacy-snapshot';
+  kind: 'backup' | 'vault-backup' | 'sync-snapshot' | 'legacy-snapshot' | 'restored-copy';
   labelAr: string;
   sizeBytes: number;
   modifiedAt: string;
@@ -33,6 +33,8 @@ export interface OldCopiesLocations {
   backupDirs: string[];
   /** مجلد Second-Brain-Sync على Drive (إن وُجد) */
   syncRoot?: string;
+  /** 3.9.5 (ISS-049): مجلدات استُعيدت إليها نسخ من قبل (مسجّلة على هذا الجهاز)، يُبحث داخلها */
+  restoreDirs?: string[];
 }
 
 const KIND_LABEL: Record<OldFullAccessCopy['kind'], string> = {
@@ -40,7 +42,61 @@ const KIND_LABEL: Record<OldFullAccessCopy['kind'], string> = {
   'vault-backup': 'نسخة سابقة من ملف الخزنة',
   'sync-snapshot': 'نسخة مزامنة كاملة قديمة على Drive',
   'legacy-snapshot': 'نسخة مزامنة بصيغة 1.9 على Drive',
+  'restored-copy': 'نسخة داخل مجلد استعادة',
 };
+
+/** اسم ملف سجل مجلدات الاستعادة (داخل data/، خاص بالجهاز، لا يُزامَن ولا يدخل النسخ) */
+export const RESTORE_TARGETS_FILE = 'restore-targets.json';
+const MAX_RESTORE_TARGETS = 50;
+
+/**
+ * Hint بالعربي: دالة تسجيل مجلد استُعيدت إليه نسخة (ISS-049): المجلد المستعاد يحمل ملف خزنة ونسخاً
+ *               بصيغتها القديمة، فيبقى المفتاح القديم يفتحها بعد أي ترقية أو تدوير. التسجيل يسمح بحصرها لاحقاً.
+ *               لا يرمي أبداً.
+ */
+export function recordRestoreTarget(targetDir: string, dataDir: string): void {
+  try {
+    const file = path.join(dataDir, RESTORE_TARGETS_FILE);
+    const list = readRestoreTargets(dataDir).filter((d) => path.resolve(d).toLowerCase() !== path.resolve(targetDir).toLowerCase());
+    list.push(path.resolve(targetDir));
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(list.slice(-MAX_RESTORE_TARGETS), null, 2), 'utf-8');
+  } catch {
+    // السجل لا يُفشل الاستعادة
+  }
+}
+
+/**
+ * Hint بالعربي: دالة قراءة مجلدات الاستعادة المسجّلة على هذا الجهاز.
+ */
+export function readRestoreTargets(dataDir: string): string[] {
+  const list = readJsonFileSafe<unknown>(path.join(dataDir, RESTORE_TARGETS_FILE), []);
+  return Array.isArray(list) ? list.filter((d): d is string => typeof d === 'string' && path.isAbsolute(d)) : [];
+}
+
+/** أسماء الملفات التي قد تحمل مغلّفات المفاتيح داخل مجلد مستعاد */
+const RESTORED_CANDIDATE = /^(vault\.aes256\.json(\.bak-\d+)?|Second-Brain-Backup-.*\.enc\.json)$/;
+const SKIP_DIRS = new Set(['node_modules', '.git', 'vendor', 'conversations', 'family-log', 'logs']);
+
+/**
+ * Hint بالعربي: دالة البحث داخل مجلد مستعاد (بعمق محدود، وبلا متابعة الروابط) عن ملفات الخزنة والنسخ.
+ */
+function listRestoredCandidates(dir: string, depth = 0, out: string[] = []): string[] {
+  if (depth > 6 || out.length > 500) return out;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of entries) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory() && !e.isSymbolicLink()) {
+      if (!SKIP_DIRS.has(e.name)) listRestoredCandidates(p, depth + 1, out);
+    } else if (e.isFile() && RESTORED_CANDIDATE.test(e.name)) out.push(p);
+  }
+  return out;
+}
 
 /**
  * Hint بالعربي: غلاف الطوارئ العائلي (fkByEmergency) في أي صيغة: ملف الخزنة v3 (family)، ونسخة الطوارئ v3
@@ -103,6 +159,10 @@ export function listOldFullAccessCopies(loc: OldCopiesLocations): OldFullAccessC
   if (loc.syncRoot) {
     for (const p of listJson(path.join(loc.syncRoot, 'snapshots-v2'), (n) => n.endsWith('.enc.json'))) push(p, 'sync-snapshot');
     for (const p of listJson(path.join(loc.syncRoot, 'snapshots'), (n) => n.endsWith('.enc.json'))) push(p, 'legacy-snapshot');
+  }
+  for (const dir of loc.restoreDirs ?? []) {
+    if (!fs.existsSync(dir)) continue;
+    for (const p of listRestoredCandidates(dir)) push(p, 'restored-copy');
   }
   return out.sort((a, b) => a.kind.localeCompare(b.kind) || b.modifiedAt.localeCompare(a.modifiedAt));
 }

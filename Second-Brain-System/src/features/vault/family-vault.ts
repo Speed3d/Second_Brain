@@ -12,7 +12,7 @@ import * as path from 'node:path';
 import type { VaultSecretItem } from '../../shared/types.ts';
 import { loadSystemConfig } from '../../core/config-manager.ts';
 import { buildSyncContext, readSyncSettings } from '../sync/sync-context.ts';
-import type { OldCopiesLocations } from '../family-emergency/old-copies.ts';
+import { readRestoreTargets, type OldCopiesLocations } from '../family-emergency/old-copies.ts';
 import { readVaultFile, vaultExists, type UnlockedVault } from './vault-manager.ts';
 
 /** اقتراح واحد في المعالج */
@@ -87,5 +87,7 @@ export function resolveOldCopiesLocations(vaultFilePath: string): OldCopiesLocat
   const sync = readSyncSettings();
   const ctx = buildSyncContext();
   const dirs = [config.paths.encryptedBackupsDir, config.security?.extraBackupDir, sync.folder ? path.join(sync.folder, 'Backups') : undefined].filter((d): d is string => Boolean(d));
-  return { vaultFilePath, backupDirs: dirs, syncRoot: ctx?.syncRoot };
+  // 3.9.5 (ISS-049): ومجلدات الاستعادة المسجّلة على هذا الجهاز
+  const restoreDirs = readRestoreTargets(path.join(config.paths.rootDir, 'Second-Brain-System', 'data'));
+  return { vaultFilePath, backupDirs: dirs, syncRoot: ctx?.syncRoot, restoreDirs };
 }

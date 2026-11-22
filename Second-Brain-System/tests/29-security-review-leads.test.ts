@@ -21,12 +21,12 @@ import { checkFolderPermissions, findBroadWindowsWriters, getFolderPermissionSta
 import { beginTwoFactorSetup, disableTwoFactor, finishTwoFactorSetup, readTwoFactor, resetTwoFactorPendingForTests } from '../src/features/auth/two-factor.ts';
 import { startSecondBrainDesktopServer } from '../src/features/dashboard-app/desktop-server.ts';
 import { resetSessionStateForTests } from '../src/features/dashboard-app/session-manager.ts';
-import { createVault, readVaultFile, rotateEmergencyKey, unlockVault, upsertVaultSecret, type VaultFileV3 } from '../src/features/vault/vault-manager.ts';
+import { createLegacyV2VaultForTests, createVault, migrateVaultToFamilyV3, readVaultFile, rotateEmergencyKey, unlockVault, upsertVaultSecret, type VaultFileV3 } from '../src/features/vault/vault-manager.ts';
 import { normalizeEmergencyKey, openWithKey, unwrapDataKey } from '../src/core/crypto-engine.ts';
 import { appendConversationTurn, getConversation, resealFamilyConversations, resolveConversationsDir } from '../src/features/conversations/conversation-store.ts';
 import { appendFamilyLog, readFamilyLog, resealFamilyLog } from '../src/features/family-emergency/family-portal.ts';
-import { createEncryptedSystemBackup, openEncryptedBackup } from '../src/features/family-emergency/backup-service.ts';
-import { listOldFullAccessCopies } from '../src/features/family-emergency/old-copies.ts';
+import { createEncryptedSystemBackup, openEncryptedBackup, restoreEncryptedBackup } from '../src/features/family-emergency/backup-service.ts';
+import { listOldFullAccessCopies, readRestoreTargets, recordRestoreTarget, removeOldFullAccessCopies, RESTORE_TARGETS_FILE } from '../src/features/family-emergency/old-copies.ts';
 import { base32Decode, totp } from '../src/shared/totp.ts';
 import { postJson, rawRequest } from './06-security.test.ts';
 import { ensureTestVault, replaceTestEmergencyKey, writeFixtureFile } from './test-environment.ts';
@@ -273,6 +273,89 @@ async function checkEmergencyRotationRotatesFamilyKey(passedChecks: string[]): P
 }
 
 /**
+ * Hint بالعربي: ISS-049 — الترحيل إلى v3 أبقى مفتاح البيانات، فنسخة v2 باقية مع مفتاح الطوارئ القديم تفتح بيانات القائد
+ *               الحالية. القرار (3.9.5): لا تدوير لمفتاح البيانات الآن (مرحلة مستقلة لاحقاً)، بل توسيع حصر النسخ القديمة:
+ *               مجلدات الاستعادة تُسجَّل ويُبحث داخلها. هذا الفحص يثبت أن نسخة مستعادة من قبل الترقية تُكتشف وتُحذف.
+ */
+async function checkRestoredCopiesAreListed(passedChecks: string[]): Promise<void> {
+  const config = loadSystemConfig();
+  const base = path.join(config.paths.rootDir, 'restored-copies-sim');
+  const vaultPath = path.join(base, 'vault', 'vault.aes256.json');
+  const backupDir = path.join(base, 'backups');
+  const restoreDir = path.join(base, 'Restored Somewhere', 'Second Brain');
+  const dataDir = path.join(base, 'data');
+  fs.mkdirSync(path.dirname(vaultPath), { recursive: true });
+  const PASS = 'Restored-Copies-Pass-001';
+  createLegacyV2VaultForTests(PASS, vaultPath);
+  const v2 = unlockVault(PASS, vaultPath);
+  const oldBackup = createEncryptedSystemBackup(v2, { outputDir: backupDir, extraOutputDir: '' });
+  try {
+    // القائد استعاد النسخة القديمة إلى مجلد ما (قبل الترقية)، ثم نقل النسخة الأصلية
+    const restored = restoreEncryptedBackup(oldBackup.backupFilePath, PASS, restoreDir);
+    assert.equal(restored.written, true);
+    recordRestoreTarget(restored.targetDir, dataDir);
+    recordRestoreTarget(restored.targetDir, dataDir);
+    assert.deepEqual(readRestoreTargets(dataDir), [path.resolve(restoreDir)], 'التسجيل بلا تكرار');
+    fs.rmSync(backupDir, { recursive: true, force: true });
+    migrateVaultToFamilyV3(v2, PASS, []);
+
+    const restoredCopies = listRestoredFilesWithWrap(restoreDir);
+    assert.ok(restoredCopies.length >= 1, 'المجلد المستعاد يحمل ملفاً بغلاف الطوارئ القديم (سبب الخيط)');
+    const without = listOldFullAccessCopies({ vaultFilePath: vaultPath, backupDirs: [] });
+    assert.ok(!without.some((c) => c.filePath.startsWith(path.resolve(restoreDir))), 'قبل 3.9.5: المجلد المستعاد خارج الحصر');
+    const loc = { vaultFilePath: vaultPath, backupDirs: [], restoreDirs: readRestoreTargets(dataDir) };
+    const found = listOldFullAccessCopies(loc).filter((c) => c.kind === 'restored-copy');
+    assert.ok(found.length >= 1, 'ISS-049: نسخة مستعادة من قبل الترقية لا تُعرض في النسخ القديمة');
+    assert.ok(found.every((c) => c.filePath.startsWith(path.resolve(restoreDir))));
+    const removed = removeOldFullAccessCopies(loc);
+    assert.ok(removed.removed >= found.length);
+    assert.equal(listOldFullAccessCopies(loc).filter((c) => c.kind === 'restored-copy').length, 0, 'حُذفت');
+    assert.equal(unlockVault(PASS, vaultPath).unlockedBy, 'commander', 'الخزنة نفسها سليمة');
+
+    // عبر الخادم: الاستعادة الفعلية تُسجّل المجلد، والمعاينة لا تسجّل شيئاً
+    const realData = path.join(config.paths.rootDir, 'Second-Brain-System', 'data');
+    const before = readRestoreTargets(realData).length;
+    const shared = ensureTestVault();
+    const sharedBackup = createEncryptedSystemBackup(shared.vault, { outputDir: path.join(base, 'shared-backups'), extraOutputDir: '' });
+    resetSessionStateForTests();
+    const server = await startSecondBrainDesktopServer(0);
+    const port = (server.address() as AddressInfo).port;
+    try {
+      const target = path.join(base, 'via-server');
+      const dry = await postJson(port, '/api/emergency/restore', { backupFile: sharedBackup.backupFilePath, key: shared.masterPassword, targetDir: target });
+      assert.equal(dry.status, 200, dry.body);
+      assert.equal(readRestoreTargets(realData).length, before, 'المعاينة لا تُسجّل');
+      const real = await postJson(port, '/api/emergency/restore', { backupFile: sharedBackup.backupFilePath, key: shared.masterPassword, targetDir: target, dryRun: false });
+      assert.equal(real.status, 200, real.body);
+      assert.ok(readRestoreTargets(realData).includes(path.resolve(target)), 'الاستعادة الفعلية تُسجّل المجلد');
+    } finally {
+      resetSessionStateForTests();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      fs.rmSync(path.join(realData, RESTORE_TARGETS_FILE), { force: true });
+    }
+    passedChecks.push('ISS-049: مجلدات الاستعادة تُسجَّل (الفعلية فقط، بلا تكرار)، ونسخة مستعادة من قبل الترقية إلى v3 تُعرض في «النسخ القديمة» وتُحذف، والخزنة سليمة.');
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Hint بالعربي: ملفات JSON داخل مجلد تحمل غلاف الطوارئ بالصيغة 2 (للتحقق المستقل من سبب الخيط).
+ */
+function listRestoredFilesWithWrap(dir: string): string[] {
+  const out: string[] = [];
+  const walk = (d: string): void => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith('.json') && fs.readFileSync(p, 'utf8').includes('"emergencyWrap"')) out.push(p);
+    }
+  };
+  walk(dir);
+  return out;
+}
+
+/**
  * Hint بالعربي: جهاز وهمي للمزامنة (نفس بنية tests/18): نسخة من الخزنة، ومجلداته داخل مجلد الاختبار.
  */
 function makeSyncDevice(baseDir: string, name: string, syncRoot: string, vaultSource: string): SyncContext {
@@ -315,5 +398,6 @@ export async function runSecurityReviewLeadsTests(): Promise<string[]> {
   await checkFolderPermissionLead(passedChecks);
   await checkSettingsAuthSecondFactor(passedChecks);
   await checkEmergencyRotationRotatesFamilyKey(passedChecks);
+  await checkRestoredCopiesAreListed(passedChecks);
   return passedChecks;
 }

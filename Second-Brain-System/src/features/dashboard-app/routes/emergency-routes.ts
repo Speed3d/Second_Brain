@@ -13,6 +13,7 @@ import { loadSystemConfig } from '../../../core/config-manager.ts';
 import { isValidEmergencyKey } from '../../../core/crypto-engine.ts';
 import { createEncryptedSystemBackup, listEncryptedBackups, restoreEncryptedBackup } from '../../family-emergency/backup-service.ts';
 import { generatePrintableEmergencyKit } from '../../family-emergency/emergency-kit-service.ts';
+import { recordRestoreTarget } from '../../family-emergency/old-copies.ts';
 import { verifyEmergencyKey } from '../../vault/vault-manager.ts';
 import { findBackupCandidates, runRestoreDrill } from '../../../tools/restore-drill.ts';
 import { readSyncSettings } from '../../sync/sync-context.ts';
@@ -119,6 +120,8 @@ export function getEmergencyRoutes(): RouteDefinition[] {
           throw err;
         }
         recordUnlockSuccess();
+        // 3.9.5 (ISS-049): المجلد المستعاد يحمل نسخاً بصيغتها القديمة؛ يُسجَّل ليظهر في «🗂️ نسخ قديمة…»
+        if (result.written) recordRestoreTarget(result.targetDir, path.join(loadSystemConfig().paths.rootDir, 'Second-Brain-System', 'data'));
         sendJson(res, 200, { ok: true, ...result, filesCount: result.files.length, files: result.files.slice(0, 200) });
       },
     },
