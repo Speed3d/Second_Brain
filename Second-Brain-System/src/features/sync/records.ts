@@ -11,6 +11,8 @@
  *               - conv:<ملف>       محادثة مشفرة واحدة
  *               - flog:<ملف>       خطوة واحدة من سجل خطوات الطوارئ (3.1.0، مختومة بالمفتاح العائلي)
  *               - obs:<مسار>       ملف واحد من Obsidian
+ *               - know:node/<id>   عقدة معرفة (4.0.0). المحتوى نصها المنطقي (JSON)، لا الملف المختوم:
+ *                 know:edge/<id>   الختم عشوائي، فالعقدة نفسها على جهازين تعطي البصمة نفسها، والدفعة مشفّرة أصلاً.
  *               كل سجل محتواه بايتات، وبصمته SHA-256. التطبيق على الجهاز يتم كمعاملة: إن فشل أي سجل
  *               تُعاد السجلات التي تغيّرت إلى ما كانت عليه.
  * ============================================================================
@@ -28,6 +30,8 @@ import { resealFamilyConversations } from '../conversations/conversation-store.t
 import { FAMILY_LOG_FILE, resealFamilyLog } from '../family-emergency/family-portal.ts';
 import { logSystemInfo } from '../../core/logger.ts';
 import type { SyncContext } from './sync-context.ts';
+import { deriveKnowledgeKey, listKnowledgeFiles, openKnowledgeRecord, removeKnowledgeRecord, writeEdge, writeNode, type KnowledgeRecordKind } from '../knowledge/knowledge-store.ts';
+import { validateEdge, validateNode } from '../knowledge/knowledge-types.ts';
 
 /** ملفات Obsidian الخاصة بواجهة كل جهاز (لا تُزامَن) */
 export const OBSIDIAN_LOCAL_ONLY = [
@@ -103,6 +107,19 @@ function familyLogDir(ctx: SyncContext): string {
   return path.join(ctx.dataDir, 'family-log');
 }
 
+function knowledgeDir(ctx: SyncContext): string {
+  return path.join(ctx.dataDir, 'knowledge');
+}
+
+/** مفتاح المعرفة من الجلسة، أو null إن لم تكن جلسة قائد (العائلة والخزنة الممسوحة) */
+function knowledgeKeyOf(vault: UnlockedVault): Buffer | null {
+  try {
+    return deriveKnowledgeKey(vault.dataKey);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Hint بالعربي: دالة جمع كل سجلات هذا الجهاز الآن. الأسرار تُقرأ من الخزنة المفتوحة (لا من الملف)،
  *               لأن الجلسة المفتوحة هي المصدر الحي الذي تحفظ عليه الواجهة.
@@ -133,6 +150,17 @@ export function readLocalRecords(ctx: SyncContext, vault: UnlockedVault): Record
   if (fs.existsSync(logDir)) {
     for (const name of fs.readdirSync(logDir)) {
       if (FAMILY_LOG_FILE.test(name)) map.set(`flog:${name}`, fs.readFileSync(path.join(logDir, name)));
+    }
+  }
+  // 4.0.0: المعرفة (جلسة القائد فقط تملك مفتاحها). ملف لا يُفتح لا يُنشر، فلا يصل تالفٌ إلى الأجهزة الأخرى
+  const kk = knowledgeKeyOf(vault);
+  if (kk) {
+    for (const f of listKnowledgeFiles(knowledgeDir(ctx))) {
+      try {
+        map.set(`know:${f.kind}/${f.id}`, json(openKnowledgeRecord(kk, f.kind, fs.readFileSync(f.file))));
+      } catch {
+        // تالف أو بمفتاح آخر: يبقى على القرص ولا يُنشر
+      }
     }
   }
   // ISS-025: المفتاح دائماً بصيغة NFC. الملف ذو الاسم المركّب يتقدّم إن وُجد اسمان للملف نفسه
@@ -307,8 +335,34 @@ function writeRecords(ctx: SyncContext, vault: UnlockedVault, writes: RecordWrit
     else writeFileAtomic(file, w.content);
   }
 
+  // 4.0.0: المعرفة: يُتحقق من كل سجل، ثم يُختم بمفتاح المعرفة ويُكتب. المعرّف في المفتاح يجب أن يطابق المحتوى
+  const knowWrites = byKind.get('know') ?? [];
+  if (knowWrites.length) {
+    const kk = knowledgeKeyOf(vault);
+    if (!kk) throw new Error('سجلات المعرفة تحتاج جلسة القائد.');
+    for (const w of knowWrites) {
+      const m = /^(node|edge)\/(.+)$/.exec(recordId(w.key));
+      if (!m) throw new Error(`مفتاح معرفة غير صالح في سجل المزامنة: ${w.key.slice(0, 80)}`);
+      const kind = m[1] as KnowledgeRecordKind;
+      if (w.content === null) {
+        removeKnowledgeRecord(kind, m[2], knowledgeDir(ctx));
+        continue;
+      }
+      const value = JSON.parse(w.content.toString('utf8')) as unknown;
+      if (kind === 'node') {
+        const node = validateNode(value);
+        if (node.id !== m[2]) throw new Error('عقدة معرفة لا تطابق معرّفها في سجل المزامنة.');
+        writeNode(kk, node, knowledgeDir(ctx));
+      } else {
+        const edge = validateEdge(value);
+        if (edge.id !== m[2]) throw new Error('علاقة معرفة لا تطابق معرّفها في سجل المزامنة.');
+        writeEdge(kk, edge, knowledgeDir(ctx));
+      }
+    }
+  }
+
   for (const kind of byKind.keys()) {
-    if (!['secret', 'vaultkeys', 'branding', 'memory', 'project', 'conv', 'flog', 'obs'].includes(kind)) {
+    if (!['secret', 'vaultkeys', 'branding', 'memory', 'project', 'conv', 'flog', 'obs', 'know'].includes(kind)) {
       throw new Error(`نوع سجل غير معروف: ${kind}`);
     }
   }

@@ -13,6 +13,8 @@ import * as crypto from 'node:crypto';
 import { loadSystemConfig } from '../../core/config-manager.ts';
 import { logSystemInfo } from '../../core/logger.ts';
 import { wipeUnlockedVault, type UnlockedVault } from '../vault/vault-manager.ts';
+import { deriveKnowledgeKey } from '../knowledge/knowledge-store.ts';
+import { migrateSharedMemoryToKnowledge } from '../knowledge/knowledge-migration.ts';
 
 /**
  * Hint بالعربي: بيانات جلسة الخزنة المفتوحة.
@@ -64,6 +66,16 @@ export function openVaultSession(vault: UnlockedVault): string {
   const token = crypto.randomBytes(32).toString('hex');
   activeSession = { token, vault, createdAt: now, lastActivityAt: now };
   logSystemInfo('SessionManager', `تم فتح جلسة خزنة جديدة (${vault.unlockedBy}).`);
+  // 4.0.0: ترحيل الذاكرة المشتركة إلى المعرفة عند كل فتح للقائد (حتمي، وما رُحّل لا يُكتب ثانية).
+  // لا يُفشل الفتح أبداً.
+  if (vault.unlockedBy === 'commander') {
+    try {
+      const r = migrateSharedMemoryToKnowledge(deriveKnowledgeKey(vault.dataKey));
+      if (r.createdNodes || r.skipped) logSystemInfo('Knowledge', `ترحيل الذاكرة إلى المعرفة: ${r.createdNodes} عقدة و${r.createdEdges} علاقة جديدة، و${r.alreadyMigrated} سجل مرحّل سابقاً، و${r.skipped} سجل تُجوهل.`);
+    } catch (err) {
+      logSystemInfo('Knowledge', `تعذّر ترحيل الذاكرة إلى المعرفة الآن: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
   return token;
 }
 

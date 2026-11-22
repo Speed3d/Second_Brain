@@ -41,6 +41,7 @@ import { runRedactionPatternTests } from './27-redaction-patterns.test.ts';
 import { runPhase2SecurityTests } from './28-phase2-security.test.ts';
 import { runMcpControlsTests } from './26-mcp-controls.test.ts';
 import { runSecurityReviewLeadsTests } from './29-security-review-leads.test.ts';
+import { runKnowledgeBaseTests } from './30-knowledge-base.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -196,6 +197,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '29. اختبارات خيوط المراجعة الأمنية المستقلة (ISS-046..ISS-053: كل خيط يُعاد إنتاجه في البيئة المعزولة ثم يبقى اختبار انحدار)',
       file: 'tests/29-security-review-leads.test.ts',
       runner: runSecurityReviewLeadsTests,
+    },
+    {
+      name: '30. اختبارات أساس المعرفة (الأنواع والتحقق، ومفتاح المعرفة المشتق، والتخزين المشفّر، والترحيل من الذاكرة المشتركة، والاستعلامات، والمزامنة بين جهازين، والنسخ الاحتياطية)',
+      file: 'tests/30-knowledge-base.test.ts',
+      runner: runKnowledgeBaseTests,
     },
   ];
 

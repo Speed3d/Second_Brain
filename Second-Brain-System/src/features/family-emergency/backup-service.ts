@@ -18,6 +18,7 @@ import { ensureDirectoryExists, formatTimestampIso, listFilesRecursive, readJson
 import { isValidEmergencyKey, normalizeEmergencyKey, openWithKey, sealWithKey, unwrapDataKey } from '../../core/crypto-engine.ts';
 import { loadSystemConfig, resolveDefaultConfigPath, resolveSettingsPath } from '../../core/config-manager.ts';
 import { logSystemInfo } from '../../core/logger.ts';
+import { listKnowledgeFiles } from '../knowledge/knowledge-store.ts';
 import { hasMainDataKey, isFamilyVaultFile, openVaultKeys, readVaultFile, resolveFamilyKey, type UnlockedVault, type VaultKeyEnvelopes } from '../vault/vault-manager.ts';
 
 /** بادئة ولاحقة اسم ملف النسخة الاحتياطية */
@@ -96,7 +97,8 @@ export function isExpectedBackupEntry(rel: string): boolean {
     /(^|\/)encrypted-vault\/[^/]+\.json$/.test(rel) ||
     /(^|\/)vault\.aes256\.json$/.test(rel) ||
     /(^|\/)data\/conversations\/[a-z0-9-]{8,64}\.enc\.json$/.test(rel) ||
-    /(^|\/)data\/family-log\/flog-[0-9]{13}-[a-f0-9]{8}\.enc\.json$/.test(rel)
+    /(^|\/)data\/family-log\/flog-[0-9]{13}-[a-f0-9]{8}\.enc\.json$/.test(rel) ||
+    /(^|\/)data\/knowledge\/(nodes\/K-[A-Za-z0-9-]{1,160}|edges\/E-[a-f0-9]{24})\.enc\.json$/.test(rel)
   );
 }
 
@@ -134,6 +136,9 @@ export function createEncryptedSystemBackup(
       if (/^[a-z0-9-]{8,64}\.enc\.json$/.test(name)) addFile(path.join(conversationsDir, name));
     }
   }
+  // 4.0.0: المعرفة (مختومة بمفتاح المعرفة المشتقّ من مفتاح البيانات، فتُفتح بكلمة المرور عند الاستعادة).
+  // في الحمولة الكاملة وحدها، لا العائلية.
+  for (const f of listKnowledgeFiles(path.join(config.paths.rootDir, 'Second-Brain-System', 'data', 'knowledge'))) addFile(f.file);
   // 3.1.0: سجل خطوات الطوارئ
   const familyLogDir = path.join(config.paths.rootDir, 'Second-Brain-System', 'data', 'family-log');
   if (fs.existsSync(familyLogDir)) {
