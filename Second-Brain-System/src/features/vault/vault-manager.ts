@@ -67,6 +67,18 @@ export interface VaultKeysRecord {
   commanderWrap: WrappedKey;
   emergencyWrap?: WrappedKey;
   family?: FamilyKeyEnvelopes;
+  /** 3.9.6 (ISS-050): وقت آخر تغيير لكل حقل، ليُدمج كل حقل وحده عند تعديلين متزامنين */
+  changedAt?: VaultKeysStamps;
+}
+
+/**
+ * Hint بالعربي: وقت آخر تغيير لكل حقل في سجل المفاتيح (ISO). commander = مغلّف كلمة المرور،
+ *               emergency = مفتاح الطوارئ (الخزنة العائلية في v3، أو emergencyWrap في v2).
+ *               الحقل الغائب = لم يتغيّر منذ 3.9.6.
+ */
+export interface VaultKeysStamps {
+  commander?: string;
+  emergency?: string;
 }
 
 /**
@@ -78,6 +90,7 @@ export interface VaultFileV2 extends VaultKeyEnvelopes {
   data: SealedData;
   createdAt: string;
   updatedAt: string;
+  keysChangedAt?: VaultKeysStamps;
 }
 
 /**
@@ -101,9 +114,17 @@ export interface VaultFileV3 {
   data: SealedData;
   createdAt: string;
   updatedAt: string;
+  keysChangedAt?: VaultKeysStamps;
 }
 
 export type VaultFile = VaultFileV2 | VaultFileV3;
+
+/**
+ * Hint بالعربي: دالة ختم وقت تغيير حقل من حقول المفاتيح في ملف الخزنة (ISS-050).
+ */
+function stampKeys(file: VaultFile, field: keyof VaultKeysStamps, at: string = new Date().toISOString()): VaultKeysStamps {
+  return { ...(file.keysChangedAt ?? {}), [field]: at };
+}
 
 /**
  * Hint بالعربي: خزنة مفتوحة في الذاكرة. لا تُحفظ على القرص أبداً.
@@ -252,20 +273,50 @@ export function readVaultFile(vaultFilePath: string): VaultFile {
  *               حتى تتطابق البصمة على كل الأجهزة.
  */
 export function vaultKeysOf(file: VaultFile): VaultKeysRecord {
+  const changedAt = normalizeStamps(file.keysChangedAt);
   if (file.version === 3) {
-    return { commanderWrap: file.commanderWrap, family: { fkByCommander: file.family.fkByCommander, fkByEmergency: file.family.fkByEmergency } };
+    return { commanderWrap: file.commanderWrap, family: { fkByCommander: file.family.fkByCommander, fkByEmergency: file.family.fkByEmergency }, changedAt };
   }
-  return { commanderWrap: file.commanderWrap, emergencyWrap: file.emergencyWrap };
+  return { commanderWrap: file.commanderWrap, emergencyWrap: file.emergencyWrap, changedAt };
 }
 
 /**
- * Hint بالعربي: دالة دمج سجلَّي مفاتيح: مغلّف القائد من الأحدث، والخزنة العائلية من أيٍّ منهما يحملها
- *               (الأحدث أولاً). وجود الخزنة العائلية يُلغي غلاف الطوارئ القديم نهائياً.
+ * Hint بالعربي: ترتيب ثابت للأختام (البصمة تتطابق على كل الأجهزة)، بلا الحقول الفارغة.
+ */
+function normalizeStamps(s: VaultKeysStamps | undefined): VaultKeysStamps {
+  return { ...(s?.commander ? { commander: s.commander } : {}), ...(s?.emergency ? { emergency: s.emergency } : {}) };
+}
+
+/**
+ * Hint بالعربي: دالة دمج سجلَّي مفاتيح.
+ *               3.9.6 (ISS-050): كل حقل يُدمج وحده بوقت تغييره، لا السجل كله من صاحب HLC الأحدث.
+ *               كان تدوير مفتاح الطوارئ على جهاز وتغيير كلمة المرور على الآخر قبل التزامن يُلغي أحدهما بصمت
+ *               (يعود مفتاح طوارئ أُبطل، أو كلمة مرور قديمة).
+ *               - سجل بلا changedAt إطلاقاً (كود أقدم من 3.9.6) ← لا يُعرف وقت حقوله، فيُعتمد ترتيب HLC كما كان.
+ *               - حقل بلا ختم في سجل يحمل changedAt ← لم يتغيّر منذ 3.9.6، فيخسر أمام حقل مختوم.
+ *               - الخزنة العائلية لا تُفقد أبداً: وجودها في أي منهما يُلغي غلاف الطوارئ القديم (3.0.0).
  */
 export function mergeVaultKeys(newer: VaultKeysRecord, older: VaultKeysRecord | null): VaultKeysRecord {
-  const family = newer.family ?? older?.family;
-  if (family) return { commanderWrap: newer.commanderWrap, family: { fkByCommander: family.fkByCommander, fkByEmergency: family.fkByEmergency } };
-  return { commanderWrap: newer.commanderWrap, emergencyWrap: newer.emergencyWrap ?? older?.emergencyWrap };
+  if (!older) return { ...newer, changedAt: normalizeStamps(newer.changedAt) };
+  const stamped = Boolean(newer.changedAt && older.changedAt);
+  const pick = (field: keyof VaultKeysStamps): 'newer' | 'older' => {
+    if (!stamped) return 'newer';
+    const a = newer.changedAt?.[field] ?? '';
+    const b = older.changedAt?.[field] ?? '';
+    return b > a ? 'older' : 'newer';
+  };
+  const commanderFrom = pick('commander') === 'newer' ? newer : older;
+  const emergencySide = pick('emergency');
+  const changedAt = normalizeStamps({
+    commander: (commanderFrom.changedAt ?? {}).commander,
+    emergency: ((emergencySide === 'newer' ? newer : older).changedAt ?? {}).emergency,
+  });
+  const familyPreferred = emergencySide === 'newer' ? newer.family ?? older.family : older.family ?? newer.family;
+  if (familyPreferred) {
+    return { commanderWrap: commanderFrom.commanderWrap, family: { fkByCommander: familyPreferred.fkByCommander, fkByEmergency: familyPreferred.fkByEmergency }, changedAt };
+  }
+  const emergencyWrap = emergencySide === 'newer' ? newer.emergencyWrap ?? older.emergencyWrap : older.emergencyWrap ?? newer.emergencyWrap;
+  return { commanderWrap: commanderFrom.commanderWrap, emergencyWrap, changedAt };
 }
 
 /** نتيجة فتح سجل المفاتيح */
@@ -436,7 +487,7 @@ export function changeMasterPassword(vault: UnlockedVault, currentPassword: stri
     throw new Error('كلمة المرور الحالية غير صحيحة.');
   }
   assertStrongMasterPassword(newPassword);
-  const updated: VaultFile = { ...file, commanderWrap: wrapDataKey(vault.dataKey, newPassword), updatedAt: formatTimestampIso() };
+  const updated: VaultFile = { ...file, commanderWrap: wrapDataKey(vault.dataKey, newPassword), keysChangedAt: stampKeys(file, 'commander'), updatedAt: formatTimestampIso() };
   writeFileAtomic(vault.vaultFilePath, JSON.stringify(updated, null, 2), VAULT_FILE_BACKUPS);
   logSystemInfo('VaultManager', 'تم تغيير كلمة المرور الرئيسية للخزنة.');
 }
@@ -460,7 +511,7 @@ export function rotateEmergencyKey(vault: UnlockedVault, masterPassword: string)
   const newKey = generateEmergencyRecoveryKey();
   const updatedAt = formatTimestampIso();
   if (!isFamilyVaultFile(file)) {
-    const updated: VaultFile = { ...file, emergencyWrap: wrapDataKey(vault.dataKey, newKey), updatedAt };
+    const updated: VaultFile = { ...file, emergencyWrap: wrapDataKey(vault.dataKey, newKey), keysChangedAt: stampKeys(file, 'emergency'), updatedAt };
     writeFileAtomic(vault.vaultFilePath, JSON.stringify(updated, null, 2), VAULT_FILE_BACKUPS);
     logSystemInfo('VaultManager', 'تم تدوير مفتاح الطوارئ وإبطال المفتاح السابق.');
     return { emergencyRecoveryKey: newKey, previousFamilyKey: null };
@@ -476,6 +527,7 @@ export function rotateEmergencyKey(vault: UnlockedVault, masterPassword: string)
       fkByEmergency: wrapDataKey(familyKey, newKey),
       ...sealFamilySection(vault.secrets, familyKey),
     },
+    keysChangedAt: stampKeys(file, 'emergency'),
     updatedAt,
   };
   writeFileAtomic(vault.vaultFilePath, JSON.stringify(updated, null, 2), VAULT_FILE_BACKUPS);
@@ -518,6 +570,7 @@ export function migrateVaultToFamilyV3(vault: UnlockedVault, masterPassword: str
     data: sealWithKey(JSON.stringify(vault.secrets), vault.dataKey),
     createdAt: file.createdAt,
     updatedAt: now,
+    keysChangedAt: stampKeys(file, 'emergency'),
   };
   writeFileAtomic(vault.vaultFilePath, JSON.stringify(upgraded, null, 2), VAULT_FILE_BACKUPS);
   vault.familyKey = familyKey;
@@ -550,6 +603,8 @@ export function adoptFamilyKeys(vault: UnlockedVault, keys: VaultKeysRecord): { 
     data: file.data,
     createdAt: file.createdAt,
     updatedAt: now,
+    // ISS-050: أختام الحقول تُحفظ مع المفاتيح المعتمدة، فيبقى الدمج التالي صحيحاً
+    ...(keys.changedAt ? { keysChangedAt: normalizeStamps(keys.changedAt) } : {}),
   };
   writeFileAtomic(vault.vaultFilePath, JSON.stringify(upgraded, null, 2), VAULT_FILE_BACKUPS);
   vault.familyKey = familyKey;

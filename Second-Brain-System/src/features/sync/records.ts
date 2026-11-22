@@ -241,7 +241,7 @@ function writeRecords(ctx: SyncContext, vault: UnlockedVault, writes: RecordWrit
       const logMoved = resealFamilyLog(vault, previousFamilyKey, familyLogDir(ctx));
       if (upgraded || previousFamilyKey) logSystemInfo('Sync', `${upgraded ? 'رُقّيت الخزنة هنا إلى الخزنة العائلية (v3) بمفاتيح وصلت بالمزامنة' : 'اعتُمد مفتاح عائلي جديد وصل بالمزامنة'}، ونُقلت ${moved} محادثة عائلية و${logMoved} خطوة من سجل الطوارئ.`);
     } else {
-      writeFileAtomic(ctx.vaultFile, JSON.stringify({ ...file, commanderWrap: keys.commanderWrap, emergencyWrap: keys.emergencyWrap }, null, 2), 5);
+      writeFileAtomic(ctx.vaultFile, JSON.stringify({ ...file, commanderWrap: keys.commanderWrap, emergencyWrap: keys.emergencyWrap, ...(keys.changedAt ? { keysChangedAt: keys.changedAt } : {}) }, null, 2), 5);
     }
   }
 

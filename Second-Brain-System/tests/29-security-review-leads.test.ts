@@ -21,7 +21,7 @@ import { checkFolderPermissions, findBroadWindowsWriters, getFolderPermissionSta
 import { beginTwoFactorSetup, disableTwoFactor, finishTwoFactorSetup, readTwoFactor, resetTwoFactorPendingForTests } from '../src/features/auth/two-factor.ts';
 import { startSecondBrainDesktopServer } from '../src/features/dashboard-app/desktop-server.ts';
 import { resetSessionStateForTests } from '../src/features/dashboard-app/session-manager.ts';
-import { createLegacyV2VaultForTests, createVault, migrateVaultToFamilyV3, readVaultFile, rotateEmergencyKey, unlockVault, upsertVaultSecret, type VaultFileV3 } from '../src/features/vault/vault-manager.ts';
+import { changeMasterPassword, createLegacyV2VaultForTests, createVault, migrateVaultToFamilyV3, readVaultFile, rotateEmergencyKey, unlockVault, upsertVaultSecret, vaultKeysOf, type VaultFileV3 } from '../src/features/vault/vault-manager.ts';
 import { normalizeEmergencyKey, openWithKey, unwrapDataKey } from '../src/core/crypto-engine.ts';
 import { appendConversationTurn, getConversation, resealFamilyConversations, resolveConversationsDir } from '../src/features/conversations/conversation-store.ts';
 import { appendFamilyLog, readFamilyLog, resealFamilyLog } from '../src/features/family-emergency/family-portal.ts';
@@ -340,6 +340,66 @@ async function checkRestoredCopiesAreListed(passedChecks: string[]): Promise<voi
 }
 
 /**
+ * Hint بالعربي: ISS-050 — دمج سجل المفاتيح (vaultkeys) عند تعديلين متزامنين كان يأخذ كل حقل من صاحب HLC الأحدث:
+ *               تدوير مفتاح الطوارئ على جهاز وتغيير كلمة المرور على الآخر قبل التزامن ← يُلغى أحدهما بصمت
+ *               (يعود مفتاح طوارئ أُبطل، أو تعود كلمة مرور قديمة). الفحص في الترتيبين.
+ */
+async function checkConcurrentVaultKeysMerge(passedChecks: string[]): Promise<void> {
+  const base = path.join(loadSystemConfig().paths.rootDir, 'vaultkeys-merge-sim');
+  const PASS = 'Vault-Keys-Merge-Pass-01';
+  const NEW_PASS = 'Vault-Keys-Merge-Pass-02';
+  try {
+    for (const rotateLast of [false, true]) {
+      const dir = path.join(base, rotateLast ? 'rotate-last' : 'password-last');
+      const syncRoot = path.join(dir, 'Drive', 'Second-Brain-Sync');
+      fs.mkdirSync(syncRoot, { recursive: true });
+      const seed = path.join(dir, 'seed', 'vault.aes256.json');
+      fs.mkdirSync(path.dirname(seed), { recursive: true });
+      const { emergencyRecoveryKey: oldKey } = createVault(PASS, seed);
+      const A = makeSyncDevice(dir, 'Asus', syncRoot, seed);
+      const B = makeSyncDevice(dir, 'Mac', syncRoot, seed);
+      const vA = unlockVault(PASS, A.vaultFile);
+      const vB = unlockVault(PASS, B.vaultFile);
+      let clock = Date.now();
+      const cycle = (ctx: SyncContext, v: typeof vA) => runSyncCycle(ctx, v, { now: (clock += 1000) });
+      upsertVaultSecret(vA, { id: 'K1', category: 'password', title: 'x', secretValue: 'x', notesForCommanderAr: '', notesForWifeAr: '', familyVisible: true });
+      cycle(A, vA);
+      cycle(B, vB);
+      // تعديلان متزامنان: لم يرَ أيٌّ منهما الآخر. الترتيب الزمني يحدد صاحب HLC الأحدث
+      let newKey = '';
+      const rotate = () => (newKey = rotateEmergencyKey(vA, PASS).emergencyRecoveryKey);
+      const change = () => changeMasterPassword(vB, PASS, NEW_PASS);
+      if (rotateLast) {
+        change();
+        cycle(B, vB);
+        rotate();
+        cycle(A, vA);
+      } else {
+        rotate();
+        cycle(A, vA);
+        change();
+        cycle(B, vB);
+      }
+      for (let i = 0; i < 3; i++) {
+        cycle(A, vA);
+        cycle(B, vB);
+      }
+      const label = rotateLast ? '(التدوير أحدث)' : '(تغيير كلمة المرور أحدث)';
+      for (const [name, ctx] of [['أ', A], ['ب', B]] as const) {
+        assert.throws(() => unlockVault(oldKey, ctx.vaultFile), `ISS-050 ${label}: مفتاح الطوارئ الملغى عاد يفتح الخزنة على ${name}`);
+        assert.equal(unlockVault(newKey, ctx.vaultFile).unlockedBy, 'wife_emergency', `ISS-050 ${label}: مفتاح الطوارئ الجديد لا يعمل على ${name}`);
+        assert.throws(() => unlockVault(PASS, ctx.vaultFile), `ISS-050 ${label}: كلمة المرور القديمة عادت تعمل على ${name}`);
+        assert.equal(unlockVault(NEW_PASS, ctx.vaultFile).unlockedBy, 'commander', `ISS-050 ${label}: كلمة المرور الجديدة لا تعمل على ${name}`);
+      }
+      assert.deepEqual(vaultKeysOf(readVaultFile(A.vaultFile)), vaultKeysOf(readVaultFile(B.vaultFile)), `ISS-050 ${label}: الجهازان لم يتفقا على المفاتيح`);
+    }
+    passedChecks.push('ISS-050: تدوير مفتاح الطوارئ على جهاز وتغيير كلمة المرور على الآخر قبل التزامن (في الترتيبين) يبقيان معاً: المفتاح الملغى وكلمة المرور القديمة مرفوضان على الجهازين، والجهازان يتفقان على المفاتيح.');
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+}
+
+/**
  * Hint بالعربي: ملفات JSON داخل مجلد تحمل غلاف الطوارئ بالصيغة 2 (للتحقق المستقل من سبب الخيط).
  */
 function listRestoredFilesWithWrap(dir: string): string[] {
@@ -399,5 +459,6 @@ export async function runSecurityReviewLeadsTests(): Promise<string[]> {
   await checkSettingsAuthSecondFactor(passedChecks);
   await checkEmergencyRotationRotatesFamilyKey(passedChecks);
   await checkRestoredCopiesAreListed(passedChecks);
+  await checkConcurrentVaultKeysMerge(passedChecks);
   return passedChecks;
 }

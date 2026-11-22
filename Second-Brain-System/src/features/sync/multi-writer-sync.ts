@@ -54,7 +54,8 @@ import {
  */
 export const CHANGE_FORMAT = 3;
 /** أقل إصدار يفهم ما ينشره هذا الإصدار بأمان؛ يُكتب في manifest.json، والأجهزة الأقدم تتوقف (من 2.2.0 فصاعداً) */
-export const MIN_SYNC_APP_VERSION = '3.1.0';
+// 3.9.6 (ISS-050): سجل المفاتيح يحمل أختام الحقول (changedAt)، والكود الأقدم يدمجه كاملاً ويسقط الأختام
+export const MIN_SYNC_APP_VERSION = '3.9.6';
 /** ISS-028: حدّ الأمان: حذف هذا العدد أو أكثر دفعة واحدة لا يُنشر ولا يُطبَّق بلا تأكيد القائد */
 export const MASS_DELETE_THRESHOLD = 10;
 /** مجلد فيه هذا العدد أو أكثر اختفى كله دفعة واحدة = حذف جماعي */
@@ -754,6 +755,7 @@ export function bootstrapFromSnapshotV2(ctx: SyncContext, masterPassword: string
       data: sealWithKey(JSON.stringify([]), dataKey),
       createdAt: nowIso,
       updatedAt: nowIso,
+      ...(snap.vaultKeys.changedAt ? { keysChangedAt: snap.vaultKeys.changedAt } : {}),
     };
   } else {
     emptyVault = {
@@ -764,6 +766,7 @@ export function bootstrapFromSnapshotV2(ctx: SyncContext, masterPassword: string
       data: sealWithKey(JSON.stringify([]), dataKey),
       createdAt: nowIso,
       updatedAt: nowIso,
+      ...(snap.vaultKeys.changedAt ? { keysChangedAt: snap.vaultKeys.changedAt } : {}),
     };
   }
   writeFileAtomic(ctx.vaultFile, JSON.stringify(emptyVault, null, 2));
