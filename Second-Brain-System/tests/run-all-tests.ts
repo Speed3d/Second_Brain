@@ -45,6 +45,7 @@ import { runKnowledgeBaseTests } from './30-knowledge-base.test.ts';
 import { runKnowledgeMcpReviewTests } from './31-knowledge-mcp-review.test.ts';
 import { runKnowledgeExtractionTests } from './32-knowledge-extraction.test.ts';
 import { runKnowledgeObsidianExportTests } from './33-knowledge-obsidian-export.test.ts';
+import { runKnowledgeAssistantTests } from './34-knowledge-assistant.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -220,6 +221,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '33. اختبارات تصدير المعرفة إلى Obsidian (المشاريع المختارة فقط وبلا الحساس، والروابط والفهرس، والحتمية، والحذف والملاحظة اليدوية، والمسار والخيار)',
       file: 'tests/33-knowledge-obsidian-export.test.ts',
       runner: runKnowledgeObsidianExportTests,
+    },
+    {
+      name: '34. اختبارات استرجاع المساعد من المعرفة (سياق السؤال بالقرار ومحادثته وما استبدله، وقسم المعرفة في وضع القائد وحده داخل وسم البيانات، ومن البداية للنهاية بمزوّد وهمي)',
+      file: 'tests/34-knowledge-assistant.test.ts',
+      runner: runKnowledgeAssistantTests,
     },
   ];
 

@@ -19,6 +19,8 @@ import { logSystemInfo } from '../../core/logger.ts';
 import { querySharedAIMemory } from '../ai-memory/shared-memory-service.ts';
 import { scanAndAnalyzeProject } from '../project-indexer/project-scanner.ts';
 import type { UnlockedVault } from '../vault/vault-manager.ts';
+import { buildKnowledgeContextForAssistant } from '../knowledge/knowledge-query.ts';
+import { deriveKnowledgeKey, readKnowledgeGraph } from '../knowledge/knowledge-store.ts';
 import type { ChatTurn } from './providers/provider-types.ts';
 import { buildProviders, resolveProviderKeys, runProvidersWithFallback, type ProviderAttempt } from './providers/provider-registry.ts';
 
@@ -50,6 +52,8 @@ export interface AssistantReply {
   providerUsed: AIProviderId;
   model: string;
   referencedProjects: string[];
+  /** 4.0.4: عُقد المعرفة التي أُعطيت للمساعد في هذا السؤال */
+  referencedKnowledge?: string[];
   attempts: ProviderAttempt[];
 }
 
@@ -76,7 +80,8 @@ export function buildAssistantSystemPrompt(
   reports: ProjectScanReport[],
   memories: SharedAIMemoryEntry[],
   profile: string,
-  familyPortalText = ''
+  familyPortalText = '',
+  knowledgeText = ''
 ): string {
   const today = new Date().toISOString().slice(0, 10);
   let prompt: string;
@@ -134,7 +139,11 @@ ${wrapUntrusted('ملف القائد في Obsidian', profile || '(غير متو�
 ${wrapUntrusted('فحص المشاريع و Git', projects || '- لا توجد مشاريع مسجلة بعد.')}
 
 آخر سجلات الذاكرة المشتركة (تكتبها أدوات ذكاء أخرى):
-${wrapUntrusted('الذاكرة المشتركة', memoryLines || '- لا توجد سجلات بعد.')}`;
+${wrapUntrusted('الذاكرة المشتركة', memoryLines || '- لا توجد سجلات بعد.')}${knowledgeText ? `
+
+من المعرفة المترابطة (قرارات وحقائق اعتمدها ${config.commanderName}، مختارة حسب السؤال):
+${wrapUntrusted('المعرفة المترابطة', knowledgeText)}
+عند سؤال «لماذا…» أو «ماذا قررنا في…»، أجب من هذه العُقد أولاً: اذكر القرار بعنوانه وتاريخه، والمحادثة التي اتُّخذ فيها باسمها، ومعرّف العقدة بين قوسين ليرجع إليها القائد. وإن كان القرار «مُستبدَلاً» فقل ذلك واذكر ما استبدله. ولا تنسب إلى المعرفة ما ليس فيها.` : ''}`;
   }
   return redactSecrets(prompt).text;
 }
@@ -221,6 +230,8 @@ export async function askSecondBrainAssistant(
 
   const history = sanitizeHistory(options.history);
   const messages: ChatTurn[] = [...history, { role: 'user', content: redactSecrets(question).text }];
+  // 4.0.4: المعرفة في وضع القائد وحده، وبجلسة القائد وحدها (المفتاح من مفتاح البيانات). لا تُفشل السؤال أبداً
+  const knowledge = mode === 'commander' ? knowledgeContextFor(options.vault, question) : { text: '', nodeIds: [] };
   const result = await runProvidersWithFallback(
     providers,
     {
@@ -231,7 +242,8 @@ export async function askSecondBrainAssistant(
         memories,
         mode === 'commander' ? readCommanderProfile(config) : '',
         // 3.1.0: المساعد العائلي يعرف جهات الاتصال وتعليمات القائد (بلا أي قيمة سرية)
-        mode === 'wife_emergency' && options.vault ? describePortalForAssistant(buildFamilyPortal(options.vault, config)) : ''
+        mode === 'wife_emergency' && options.vault ? describePortalForAssistant(buildFamilyPortal(options.vault, config)) : '',
+        knowledge.text
       ),
       messages,
       question,
@@ -247,6 +259,19 @@ export async function askSecondBrainAssistant(
     providerUsed: result.providerUsed,
     model: result.model,
     referencedProjects: config.watchedProjects.map((p) => p.name),
+    referencedKnowledge: knowledge.nodeIds,
     attempts: result.attempts,
   };
+}
+
+/**
+ * Hint بالعربي: دالة سياق المعرفة للسؤال (4.0.4). بلا جلسة قائد (مفتاح بيانات) لا معرفة. لا ترمي أبداً.
+ */
+export function knowledgeContextFor(vault: UnlockedVault | null | undefined, question: string): { text: string; nodeIds: string[] } {
+  if (!vault || vault.unlockedBy !== 'commander') return { text: '', nodeIds: [] };
+  try {
+    return buildKnowledgeContextForAssistant(readKnowledgeGraph(deriveKnowledgeKey(vault.dataKey)), question);
+  } catch {
+    return { text: '', nodeIds: [] };
+  }
 }
