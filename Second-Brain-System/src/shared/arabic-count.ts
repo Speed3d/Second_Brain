@@ -37,6 +37,8 @@ export const AR_COUNT = {
   proposal: { one: 'اقتراح واحد', two: 'اقتراحان', few: 'اقتراحات', many: 'اقتراحاً', single: 'اقتراح' },
   conversation: { one: 'محادثة واحدة', two: 'محادثتان', few: 'محادثات', many: 'محادثة', single: 'محادثة' },
   note: { one: 'ملاحظة واحدة', two: 'ملاحظتان', few: 'ملاحظات', many: 'ملاحظة', single: 'ملاحظة' },
+  // 4.1.0
+  decision: { one: 'قرار واحد', two: 'قراران', few: 'قرارات', many: 'قراراً', single: 'قرار' },
 } satisfies Record<string, ArabicCountForms>;
 
 /**

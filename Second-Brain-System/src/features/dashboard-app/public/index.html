@@ -13,6 +13,7 @@
   <link rel="icon" type="image/svg+xml" href="/assets/icon.svg" />
   <link rel="stylesheet" href="/assets/styles.css" />
   <script src="/assets/hologram.js" defer></script>
+  <script src="/assets/graph-view.js" defer></script>
   <script src="/assets/app.js" defer></script>
 </head>
 <body>
@@ -46,6 +47,7 @@
       <button type="button" class="nav-btn" data-action="view" data-view="projects"><span aria-hidden="true">📡</span><span>المشاريع</span></button>
       <button type="button" class="nav-btn" data-action="view" data-view="vault"><span aria-hidden="true">🔐</span><span>الخزنة</span></button>
       <button type="button" class="nav-btn" data-action="view" data-view="memory"><span aria-hidden="true">🧠</span><span>الذاكرة</span></button>
+      <button type="button" class="nav-btn" data-action="view" data-view="knowledge"><span aria-hidden="true">🕸️</span><span>المعرفة</span></button>
       <button type="button" class="nav-btn" data-action="view" data-view="emergency"><span aria-hidden="true">🛡️</span><span>الطوارئ</span></button>
       <button type="button" class="nav-btn" data-action="view" data-view="connect"><span aria-hidden="true">🔌</span><span>الربط</span></button>
       <button type="button" class="nav-btn" data-action="view" data-view="sync"><span aria-hidden="true">🔄</span><span>المزامنة</span></button>
@@ -493,6 +495,44 @@
         </div>
         <label class="filters"><span class="sr-only">بحث</span><input type="search" id="memorySearch" placeholder="🔎 بحث في الذاكرة…" /></label>
         <div class="list" id="memoryList"></div>
+      </section>
+
+      <!-- المعرفة (4.1.0): المخطط التفاعلي والخط الزمني، للقائد وحده -->
+      <section class="view" data-panel="knowledge" aria-labelledby="h-knowledge" hidden>
+        <div class="view-head">
+          <h1 id="h-knowledge">🧠 المعرفة المترابطة</h1>
+          <div class="toolbar">
+            <button type="button" class="btn btn-ghost" data-action="knowledge-to-review">🧾 قائمة المراجعة <span class="badge" id="knowledgePendingBadge">0</span></button>
+          </div>
+        </div>
+        <p class="muted">القرارات والحقائق والمهام وما يربطها، من محادثاتك وأدوات الذكاء. الضغط على عقدة يعرض تفاصيلها وعلاقاتها.</p>
+        <div class="empty-state" id="knowledgeLockedNote">🔒 افتح الخزنة بكلمة المرور الرئيسية لعرض المعرفة (هي سياقك أنت، ومشفّرة بمفتاحك).</div>
+        <div data-commander-only data-shown-when="0" id="knowledgeBody" hidden>
+          <div class="filters">
+            <label class="small">المشروع <select id="knowledgeProject"><option value="">كل المشاريع</option></select></label>
+            <label class="small">النوع <select id="knowledgeType"><option value="">كل الأنواع</option></select></label>
+            <label class="grow"><span class="sr-only">بحث في المخطط</span><input type="search" id="knowledgeSearch" placeholder="🔎 ابحث بعنوان العقدة…" /></label>
+          </div>
+          <div class="knowledge-layout">
+            <div class="graph-wrap">
+              <canvas id="knowledgeCanvas" tabindex="0" aria-label="مخطط المعرفة: العجلة أو + و - للتقريب، والسحب للتحريك، والضغط على عقدة لتفاصيلها. القائمة النصية في الخط الزمني أسفله."></canvas>
+              <div class="graph-tools">
+                <button type="button" class="icon-btn" data-action="graph-zoom" data-factor="1.25" title="تقريب">＋</button>
+                <button type="button" class="icon-btn" data-action="graph-zoom" data-factor="0.8" title="تبعيد">－</button>
+                <button type="button" class="icon-btn" data-action="graph-reset" title="إظهار الكل">⤢</button>
+              </div>
+              <div class="graph-legend small" id="knowledgeLegend"></div>
+            </div>
+            <aside class="card knowledge-detail" id="knowledgeDetail" aria-live="polite">
+              <p class="small muted">اضغط على عقدة في المخطط أو في الخط الزمني لعرض تفاصيلها.</p>
+            </aside>
+          </div>
+          <p class="small muted" id="knowledgeGraphSummary"></p>
+          <div class="card">
+            <h2>🕰️ سجل الحياة الرقمية <span class="small muted" id="knowledgeTimelineSummary"></span></h2>
+            <div class="timeline" id="knowledgeTimeline"></div>
+          </div>
+        </div>
       </section>
 
       <!-- الطوارئ -->

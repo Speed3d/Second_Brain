@@ -195,6 +195,7 @@
     }
     if (view === 'sync') loadSync();
     if (view === 'memory') loadKnowledge();
+    if (view === 'knowledge') loadKnowledgeView();
   }
 
   // ===================== المزامنة (2.0: الكتابة من كل الأجهزة) =====================
@@ -620,6 +621,9 @@
         ]
       : [el('p', { className: 'small muted', text: 'المشروع ليس مستودع Git.' })];
 
+    const decisionBox = el('div', { className: 'stack', children: [el('p', { className: 'small muted', text: '⏳ جارٍ تحميل سجل القرارات…' })] });
+    if (commander) loadDecisionLog(p.id, decisionBox);
+
     $('#projectBody').replaceChildren(
       projectSection('📌 ما هو؟', [
         tags,
@@ -640,6 +644,7 @@
         plainList(r.criticalFiles, (c) => el('li', { children: [el('span', { className: 'mono', text: c.path }), el('div', { className: 'muted', text: c.reasonAr + ' — ' + c.stateAr })] }), 'لم تُكتشف ملفات حساسة.'),
       ]),
       projectSection('📜 آخر التغييرات', [plainList(d.changelog, (c) => el('li', { text: c }), 'لا يوجد سجل تغييرات بعد.')]),
+      ...(commander ? [projectSection('🗳️ سجل القرارات', [decisionBox])] : []),
       projectSection('🧠 القرارات والذاكرة', [
         plainList(
           d.memories,
@@ -785,7 +790,10 @@
     }
     // 3.9.10 (ISS-053): بيانات المشاريع والذاكرة تتبع الجلسة، فتُعاد قراءتها عند الفتح والقفل
     const after = state.vault.unlocked ? state.vault.unlockedBy : null;
-    if (before !== after) loadState();
+    if (before !== after) {
+      loadState();
+      if (state.view === 'knowledge') loadKnowledgeView();
+    }
     state.autoLockAt = state.vault.unlocked ? Date.now() + (state.vault.secondsUntilAutoLock || 0) * 1000 : null;
     renderVaultChrome();
     if (state.vault.unlocked) await loadSecrets();
@@ -1269,6 +1277,241 @@
             })
           )
         : [el('p', { className: 'muted small', text: 'لا اقتراحات تنتظر مراجعتك.' })])
+    );
+  }
+
+  // ===================== 4.1.0: لوحة «🧠 المعرفة» (المخطط والخط الزمني) =====================
+  const kv = { graph: null, data: null, selected: null, pendingFocus: null, pendingMarks: null, fitTimer: null };
+
+  function knowledgeQuery() {
+    const params = new URLSearchParams();
+    const project = $('#knowledgeProject').value;
+    const type = $('#knowledgeType').value;
+    if (project) params.set('project', project);
+    if (type) params.set('type', type);
+    const q = params.toString();
+    return q ? '?' + q : '';
+  }
+
+  function resetKnowledgeDetail() {
+    kv.selected = null;
+    $('#knowledgeDetail').replaceChildren(el('p', { className: 'small muted', text: 'اضغط على عقدة في المخطط أو في الخط الزمني لعرض تفاصيلها.' }));
+  }
+
+  function fillSelect(sel, first, options) {
+    const keep = sel.value;
+    sel.replaceChildren(el('option', { text: first, attrs: { value: '' } }), ...options.map((o) => el('option', { text: o.label, attrs: { value: o.value } })));
+    sel.value = options.some((o) => o.value === keep) ? keep : '';
+  }
+
+  /** يضبط التقريب على الكل حين تهدأ الحركة (ومرة فوراً حتى لا يبدأ العرض فارغاً) */
+  function fitGraphWhenSettled() {
+    clearTimeout(kv.fitTimer);
+    const started = Date.now();
+    const step = () => {
+      if (!kv.graph) return;
+      kv.graph.reset();
+      if (!kv.graph.isSettled() && Date.now() - started < 6000) kv.fitTimer = setTimeout(step, 400);
+      else if (kv.pendingFocus) {
+        const id = kv.pendingFocus;
+        kv.pendingFocus = null;
+        kv.graph.focusOn(id);
+        if (kv.pendingMarks) kv.graph.highlight(kv.pendingMarks);
+        kv.pendingMarks = null;
+        showKnowledgeNode(id);
+      }
+    };
+    step();
+  }
+
+  async function loadKnowledgeView() {
+    const ok = isCommander();
+    showWhen($('#knowledgeBody'), ok);
+    showWhen($('#knowledgeLockedNote'), !ok);
+    if (!ok) {
+      if (kv.graph) kv.graph.setData([], []);
+      kv.data = null;
+      resetKnowledgeDetail();
+      $('#knowledgeTimeline').replaceChildren();
+      $('#knowledgePendingBadge').textContent = '—'; // لا يبقى عدد قديم بعد القفل
+      return;
+    }
+    if (kv.pendingFocus) {
+      $('#knowledgeProject').value = '';
+      $('#knowledgeType').value = '';
+    }
+    if (!kv.graph && window.SBGraphView) {
+      kv.graph = window.SBGraphView.create($('#knowledgeCanvas'), { onSelect: (id) => (id ? showKnowledgeNode(id) : resetKnowledgeDetail()) });
+    }
+    const q = knowledgeQuery();
+    let g;
+    let t;
+    let st;
+    try {
+      [g, t, st] = await Promise.all([api('/api/knowledge/graph' + q), api('/api/knowledge/timeline' + q), api('/api/knowledge/status')]);
+    } catch (err) {
+      toast('❌ ' + err.message, 'error');
+      return;
+    }
+    kv.data = g;
+    fillSelect($('#knowledgeProject'), 'كل المشاريع', g.projects.map((p) => ({ value: p.id, label: p.name })).concat([{ value: 'none', label: 'عامة (بلا مشروع)' }]));
+    fillSelect($('#knowledgeType'), 'كل الأنواع', g.types.map((x) => ({ value: x.id, label: x.labelAr + ' (' + x.count + ')' })));
+    $('#knowledgePendingBadge').textContent = String(st.pendingReview);
+    $('#knowledgeGraphSummary').textContent = g.nodes.length ? '🕸️ ' + g.summaryAr + '.' : '';
+    const colors = (window.SBGraphView && window.SBGraphView.TYPE_COLORS) || {};
+    const present = new Set(g.nodes.map((n) => n.type));
+    $('#knowledgeLegend').replaceChildren(
+      ...g.types
+        .filter((x) => present.has(x.id))
+        .map((x) => {
+          const dot = el('span', { className: 'legend-dot', attrs: { 'aria-hidden': 'true' } });
+          dot.style.background = colors[x.id] || '#8fa9c4';
+          return el('span', { className: 'legend-item', children: [dot, el('span', { text: x.labelAr })] });
+        })
+    );
+    if (kv.graph) {
+      kv.graph.setData(g.nodes, g.edges);
+      if (kv.selected && !g.nodes.some((n) => n.id === kv.selected)) resetKnowledgeDetail();
+      else if (kv.selected) kv.graph.select(kv.selected, false);
+      applyKnowledgeSearch();
+      fitGraphWhenSettled();
+    }
+    renderKnowledgeTimeline(t, g.totalNodes);
+  }
+
+  function renderKnowledgeTimeline(t, totalNodes) {
+    $('#knowledgeTimelineSummary').textContent = t.total ? '— ' + t.summaryAr : '';
+    if (!t.items.length) {
+      $('#knowledgeTimeline').replaceChildren(
+        el('p', { className: 'muted small', text: totalNodes ? 'لا شيء يطابق التصفية.' : 'المعرفة فارغة بعد. اعتمد اقتراحات من قائمة المراجعة، أو استخرج من محادثاتك في قسم «الذاكرة».' })
+      );
+      return;
+    }
+    const groups = [];
+    let current = null;
+    t.items.forEach((it) => {
+      const month = it.createdAt.slice(0, 7);
+      if (!current || current.month !== month) groups.push((current = { month, items: [] }));
+      current.items.push(it);
+    });
+    $('#knowledgeTimeline').replaceChildren(
+      ...groups.map((grp) =>
+        el('section', {
+          className: 'timeline-month',
+          children: [
+            el('h3', { text: new Date(grp.month + '-01T00:00:00Z').toLocaleDateString('ar', { year: 'numeric', month: 'long', timeZone: 'UTC' }) }),
+            el('ul', {
+              className: 'plain-list',
+              children: grp.items.map((it) => {
+                const b = button('', 'btn-ghost timeline-item', () => {
+                  openKnowledgeNode(it.id);
+                  // الخط الزمني تحت المخطط: نصعد إليه حتى يرى القائد العقدة وتفاصيلها
+                  $('.knowledge-layout').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+                b.replaceChildren(
+                  el('span', { className: 'badge', text: it.typeAr }),
+                  el('span', { className: 'timeline-title', text: it.title }),
+                  el('span', { className: 'muted small', text: formatDateAr(it.createdAt) + (it.status !== 'active' ? ' · ' + it.statusAr : '') + (it.links ? ' · 🔗 ' + it.links : '') })
+                );
+                if (it.status !== 'active') b.classList.add('is-faded');
+                return el('li', { children: [b] });
+              }),
+            }),
+          ],
+        })
+      )
+    );
+  }
+
+  /** من الخط الزمني أو من علاقة: يحرّك المخطط إلى العقدة ويعرض تفاصيلها */
+  function openKnowledgeNode(id) {
+    if (kv.graph) kv.graph.focusOn(id);
+    showKnowledgeNode(id);
+  }
+
+  /** من صفحة المشروع: يفتح لوحة المعرفة على العقدة */
+  function openKnowledgeAt(id, marks) {
+    kv.pendingFocus = id;
+    kv.pendingMarks = marks && marks.length > 1 ? marks : null;
+    $('#knowledgeSearch').value = '';
+    setView('knowledge');
+    window.scrollTo({ top: 0 }); // صفحة المشروع طويلة، والمخطط أعلى اللوحة
+  }
+
+  async function showKnowledgeNode(id) {
+    kv.selected = id;
+    let d;
+    try {
+      d = (await api('/api/knowledge/node?id=' + encodeURIComponent(id))).node;
+    } catch (err) {
+      toast('❌ ' + err.message, 'error');
+      return;
+    }
+    if (kv.selected !== id) return; // ضغطة أحدث سبقت هذا الرد
+    const project = kv.data && d.projectId ? kv.data.projects.find((p) => p.id.toLowerCase() === d.projectId.toLowerCase()) : null;
+    const meta = [d.statusAr, d.confidenceAr, d.sourceAr, d.projectId ? 'مشروع: ' + (project ? project.name : d.projectId) : 'عامة', formatDateAr(d.createdAt)];
+    // replaceChildren يحوّل null إلى النص «null»، فتُصفّى العناصر الغائبة أولاً
+    const parts = [
+      el('div', { children: [el('span', { className: 'badge', text: d.typeAr }), d.status !== 'active' ? el('span', { className: 'badge warn', text: d.statusAr }) : null] }),
+      el('h3', { text: d.title }),
+      d.body && d.body !== d.title ? el('p', { className: 'small knowledge-body', text: d.body }) : null,
+      el('p', { className: 'small muted', text: meta.join(' · ') }),
+      el('p', { className: 'small muted mono', text: d.id, attrs: { dir: 'ltr' } }),
+      el('h4', { text: d.links.length ? '🔗 العلاقات (' + d.links.length + ')' : '🔗 لا علاقات بعد' }),
+      d.links.length
+        ? el('ul', {
+            className: 'plain-list knowledge-links',
+            children: d.links.map((l) => {
+              const b = button('', 'btn-ghost btn-sm', () => openKnowledgeNode(l.node.id));
+              b.replaceChildren(el('span', { className: 'muted', text: l.relationAr + ' ' }), el('span', { text: '«' + l.node.title + '»' }), el('span', { className: 'muted small', text: ' · ' + l.node.typeAr }));
+              return el('li', { children: [b] });
+            }),
+          })
+        : null,
+    ];
+    $('#knowledgeDetail').replaceChildren(...parts.filter(Boolean));
+  }
+
+  function applyKnowledgeSearch() {
+    if (!kv.graph || !kv.data) return [];
+    const q = $('#knowledgeSearch').value.trim().toLowerCase();
+    if (!q) {
+      kv.graph.highlight(null);
+      return [];
+    }
+    const ids = kv.data.nodes.filter((n) => n.title.toLowerCase().includes(q) || n.id.toLowerCase() === q).map((n) => n.id);
+    kv.graph.highlight(ids.length ? ids : ['__none__']);
+    return ids;
+  }
+
+  // 4.1.0: سجل قرارات المشروع (متى، وماذا، ولماذا، ومن أين، وما استبدله وما استُبدل به)
+  async function loadDecisionLog(projectId, box) {
+    let d;
+    try {
+      d = await api('/api/knowledge/decisions?project=' + encodeURIComponent(projectId));
+    } catch (err) {
+      box.replaceChildren(el('p', { className: 'small muted', text: '⚠️ ' + err.message }));
+      return;
+    }
+    if (state.projectId !== projectId) return;
+    const titles = (list) => list.map((n) => '«' + n.title + '»').join('، ');
+    box.replaceChildren(
+      el('p', { className: 'small muted', text: d.summaryAr + (d.items.length ? '، الأحدث أولاً، والمُستبدَل يبقى للتاريخ.' : ' اعتمد اقتراحات من قائمة المراجعة، أو استخرج من محادثات المشروع.') }),
+      ...d.items.map((it) =>
+        el('div', {
+          className: 'list-item decision-item' + (it.status !== 'active' ? ' is-faded' : ''),
+          children: [
+            el('div', { children: [el('strong', { text: it.title }), it.status !== 'active' ? el('span', { className: 'badge warn', text: it.statusAr }) : null] }),
+            it.body && it.body !== it.title ? el('p', { className: 'small', children: [el('strong', { text: 'لماذا: ' }), el('span', { text: it.body })] }) : null,
+            el('p', { className: 'small muted', text: '🕒 ' + formatDateAr(it.createdAt) + ' · ' + it.sourceAr + ' · ' + it.confidenceAr }),
+            it.decidedIn.length ? el('p', { className: 'small', text: '💬 اتُّخذ في: ' + it.decidedIn.map((n) => '«' + n.title + '» (' + formatDateAr(n.createdAt) + ')').join('، ') }) : null,
+            it.supersedes.length ? el('p', { className: 'small', text: '↩️ استبدل: ' + titles(it.supersedes) }) : null,
+            it.supersededBy.length ? el('p', { className: 'small', text: '⏭️ استُبدل بـ: ' + titles(it.supersededBy) }) : null,
+            it.affects.length ? el('p', { className: 'small', text: '🎯 أثّر على: ' + titles(it.affects) }) : null,
+            el('div', { className: 'card-actions', children: [button('🕸️ في المخطط', 'btn-ghost btn-sm', () => openKnowledgeAt(it.id))] }),
+          ],
+        })
+      )
     );
   }
 
@@ -1920,6 +2163,11 @@
       if (result.meta) {
         const who = PROVIDER_NAMES[result.meta.providerUsed] || result.meta.providerUsed;
         reply.appendChild(el('span', { className: 'msg-meta', text: '— ' + who + (result.meta.providerUsed !== 'local' && result.meta.model ? ' (' + result.meta.model + ')' : '') }));
+        // 4.1.0: العُقد التي استند إليها الرد تُفتح في مخطط المعرفة
+        const refs = Array.isArray(result.meta.referencedKnowledge) ? result.meta.referencedKnowledge : [];
+        if (refs.length && mode === 'commander' && isCommander()) {
+          reply.appendChild(el('div', { className: 'card-actions', children: [button('🧠 استند إلى ' + refs.length + ' من المعرفة: اعرضها في المخطط', 'btn-ghost btn-sm', () => openKnowledgeAt(refs[0], refs))] }));
+        }
         if (result.meta.conversationId) state.conversationId[mode] = result.meta.conversationId;
         else if (result.meta.saved === false && !state.unsavedWarned[mode]) {
           state.unsavedWarned[mode] = true;
@@ -2851,6 +3099,9 @@
       if (d) d.close();
     },
     'back-to-projects': () => setView('projects'),
+    'knowledge-to-review': () => setView('memory'),
+    'graph-zoom': (b) => kv.graph && kv.graph.zoomBy(Number(b.dataset.factor) || 1),
+    'graph-reset': () => kv.graph && kv.graph.reset(),
     'test-provider': (b) => testProvider(b),
     'refresh-providers-guide': () => {
       loadProvidersGuide();
@@ -2972,6 +3223,16 @@
 
     $('[data-form="setup"]').elements.masterPassword.addEventListener('input', (e) => updateStrength(e.target.value));
     $('#secretSearch').addEventListener('input', renderSecrets);
+    // 4.1.0: تصفية المخطط وبحثه
+    $('#knowledgeProject').addEventListener('change', loadKnowledgeView);
+    $('#knowledgeType').addEventListener('change', loadKnowledgeView);
+    $('#knowledgeSearch').addEventListener('input', applyKnowledgeSearch);
+    $('#knowledgeSearch').addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const ids = applyKnowledgeSearch();
+      if (ids.length) openKnowledgeNode(ids[0]);
+    });
     $('#secretFilter').addEventListener('change', renderSecrets);
     // 4.0.2: مزوّد الاستخراج (يُحفظ لكل جهاز فوراً)
     $('#extractProvider').addEventListener('change', async (e) => {

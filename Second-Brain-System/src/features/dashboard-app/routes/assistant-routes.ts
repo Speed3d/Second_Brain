@@ -143,7 +143,8 @@ export function getAssistantRoutes(): RouteDefinition[] {
             onReset: () => writeSseEvent(ctx, 'reset', {}),
           });
           const conversationId = saveAssistantTurn(ctx.session, input, reply);
-          writeSseEvent(ctx, 'done', { providerUsed: reply.providerUsed, model: reply.model, attempts: reply.attempts, conversationId, saved: Boolean(conversationId), saveBlockedAr: unsavedReasonAr(ctx.session, conversationId) });
+          // 4.1.0: معرّفات العُقد التي استند إليها الرد (وضع القائد وحده، وإلا فارغة)، لزر «في المخطط»
+          writeSseEvent(ctx, 'done', { providerUsed: reply.providerUsed, model: reply.model, attempts: reply.attempts, referencedKnowledge: reply.referencedKnowledge ?? [], conversationId, saved: Boolean(conversationId), saveBlockedAr: unsavedReasonAr(ctx.session, conversationId) });
         } catch (err) {
           writeSseEvent(ctx, 'error', { error: err instanceof Error ? err.message : 'حدث خطأ غير متوقع' });
         }

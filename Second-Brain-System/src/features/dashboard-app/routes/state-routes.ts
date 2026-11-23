@@ -39,6 +39,7 @@ export const STATIC_ASSETS: Record<string, string> = {
   'styles.css': 'text/css; charset=utf-8',
   'app.js': 'text/javascript; charset=utf-8',
   'hologram.js': 'text/javascript; charset=utf-8',
+  'graph-view.js': 'text/javascript; charset=utf-8', // 4.1.0: مخطط المعرفة
   'icon.svg': 'image/svg+xml',
 };
 

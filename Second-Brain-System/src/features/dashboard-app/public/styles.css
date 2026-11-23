@@ -405,3 +405,33 @@ details.advanced-ai > .form-grid { margin-top: .6rem; }
 .block {
   display: block;
 }
+
+/* ===================== 4.1.0: لوحة المعرفة (المخطط والخط الزمني) وسجل القرارات ===================== */
+.knowledge-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 14px; margin-top: 12px; }
+.graph-wrap { position: relative; min-height: 460px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--bg); }
+#knowledgeCanvas { display: block; width: 100%; height: 520px; touch-action: none; }
+#knowledgeCanvas:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
+.graph-tools { position: absolute; top: 10px; inset-inline-start: 10px; display: flex; flex-direction: column; gap: 6px; }
+.graph-legend { position: absolute; bottom: 8px; inset-inline-start: 10px; inset-inline-end: 10px; display: flex; flex-wrap: wrap; gap: 4px 12px; pointer-events: none; color: var(--muted); }
+.legend-item { display: inline-flex; align-items: center; gap: 5px; background: rgba(5, 10, 18, 0.7); padding: 1px 6px; border-radius: 999px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.knowledge-detail { margin: 0; max-height: 520px; overflow: auto; }
+.card + .knowledge-detail, .knowledge-detail + .card { margin-top: 0; }
+.knowledge-detail h3 { margin: 8px 0 6px; overflow-wrap: anywhere; }
+.knowledge-detail h4 { margin: 12px 0 6px; font-size: 0.9rem; }
+.knowledge-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.knowledge-links .btn { text-align: start; white-space: normal; height: auto; }
+.timeline-month + .timeline-month { margin-top: 12px; }
+.timeline-month h3 { font-size: 0.9rem; color: var(--cyan); margin: 0 0 6px; }
+.timeline-item { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; width: 100%; text-align: start; white-space: normal; height: auto; }
+.timeline-title { flex: 1 1 200px; overflow-wrap: anywhere; }
+.timeline .plain-list, .knowledge-links { gap: 2px; }
+.timeline .plain-list li, .knowledge-links li { padding: 0; border: 0; white-space: normal; }
+.is-faded { opacity: 0.62; }
+.decision-item + .decision-item { margin-top: 8px; }
+.decision-item .badge.warn { margin-inline-start: 6px; }
+@media (max-width: 900px) {
+  .knowledge-layout { grid-template-columns: 1fr; }
+  #knowledgeCanvas { height: 400px; }
+  .knowledge-detail { max-height: none; }
+}

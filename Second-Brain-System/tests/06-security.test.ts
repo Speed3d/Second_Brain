@@ -170,7 +170,7 @@ export async function runSecurityTests(): Promise<string[]> {
   // الواجهة تعرض كل البيانات عبر textContent: نتحقق ثابتاً أن ملفاتها لا تحتوي أي إدراج HTML خام أو تنفيذ نصوص،
   // وأن الصفحة نفسها بلا سكربتات أو أحداث أو أنماط مضمّنة (حتى تعمل سياسة CSP الصارمة).
   const publicDir = path.join(getSystemRootDir(), 'src', 'features', 'dashboard-app', 'public');
-  for (const file of ['app.js', 'hologram.js']) {
+  for (const file of ['app.js', 'hologram.js', 'graph-view.js']) {
     const code = fs.readFileSync(path.join(publicDir, file), 'utf-8');
     for (const forbidden of [/\.innerHTML\s*=/, /\.outerHTML\s*=/, /insertAdjacentHTML/, /document\.write/, /\beval\s*\(/, /new Function\s*\(/]) {
       assert.ok(!forbidden.test(code), `${file} يجب ألا يحتوي ${forbidden}`);

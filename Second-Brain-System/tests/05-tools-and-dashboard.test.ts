@@ -58,7 +58,7 @@ export async function runToolsAndDashboardTests(): Promise<string[]> {
   assert.ok(homeHtml.includes('data-panel="vault"') && homeHtml.includes('data-panel="settings"'), 'يجب أن تحتوي الأقسام الجانبية');
   assert.ok(homeHtml.includes('id="familyShell"'), 'يجب أن تحتوي الواجهة على وضع العائلة');
 
-  for (const [asset, type] of [['app.js', 'text/javascript'], ['hologram.js', 'text/javascript'], ['styles.css', 'text/css']]) {
+  for (const [asset, type] of [['app.js', 'text/javascript'], ['hologram.js', 'text/javascript'], ['graph-view.js', 'text/javascript'], ['styles.css', 'text/css']]) {
     const r = await fetch(`http://127.0.0.1:${port}/assets/${asset}`);
     assert.equal(r.status, 200, `يجب خدمة ${asset}`);
     assert.ok(String(r.headers.get('content-type')).startsWith(type));

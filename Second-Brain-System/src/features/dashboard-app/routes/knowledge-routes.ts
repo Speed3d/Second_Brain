@@ -12,13 +12,19 @@
  *               - POST /api/knowledge/extract/provider  { choice: auto | claude-cli | claude | gemini | ollama }
  *               - POST /api/knowledge/extract/start     { limit? }  مهمة في الخلفية، تتوقف إن قُفلت الخزنة.
  *               - POST /api/knowledge/extract/cancel
+ *               4.1.0، لوحة «🧠 المعرفة» وسجل القرارات (التصفية: ?project=<معرّف أو none>&type=<نوع>):
+ *               - GET  /api/knowledge/graph       العُقد والعلاقات للمخطط، وقوائم المشاريع والأنواع.
+ *               - GET  /api/knowledge/node?id=    عقدة بنصها وعلاقاتها.
+ *               - GET  /api/knowledge/timeline    الخط الزمني (سجل الحياة الرقمية) بالأحدث.
+ *               - GET  /api/knowledge/decisions?project=  سجل قرارات مشروع.
  * ============================================================================
  */
 
 import * as fs from 'node:fs';
 import { isKnowledgeDeviceKeyEnabled, decideReviewItem, readDeviceKnowledgeKey, setKnowledgeDeviceKeyEnabled } from '../../knowledge/knowledge-access.ts';
 import { deriveKnowledgeKey, readKnowledgeGraph, resolveKnowledgeDir } from '../../knowledge/knowledge-store.ts';
-import { EDGE_TYPE_LABELS_AR, NODE_TYPE_LABELS_AR, REVIEW_ID } from '../../knowledge/knowledge-types.ts';
+import { EDGE_TYPE_LABELS_AR, NODE_ID, NODE_TYPE_LABELS_AR, REVIEW_ID } from '../../knowledge/knowledge-types.ts';
+import { decisionLogView, graphView, nodeDetail, readKnowledgeFilter, timelineView } from '../../knowledge/knowledge-view.ts';
 import { syncTick } from '../../sync/sync-service.ts';
 import { refreshKnowledgeExport } from '../../knowledge/obsidian-export.ts';
 import { AR_COUNT, countAr } from '../../../shared/arabic-count.ts';
@@ -66,6 +72,61 @@ export function getKnowledgeRoutes(): RouteDefinition[] {
           summaryAr: `🧠 في المعرفة: ${countAr(g.nodes.size, AR_COUNT.node)} و${countAr(g.edges.size, AR_COUNT.edge)}${g.unreadable ? `، و ⚠️ ${countAr(g.unreadable, AR_COUNT.file)} لا يُقرأ` : ''}.`,
           deviceKey: { enabled: isKnowledgeDeviceKeyEnabled(), present: Boolean(device && device.equals(kk)), dirExists: fs.existsSync(resolveKnowledgeDir()) },
         });
+      },
+    },
+    // ===================== 4.1.0: لوحة المعرفة وسجل القرارات =====================
+    {
+      method: 'GET',
+      path: '/api/knowledge/graph',
+      requiresSession: true,
+      commanderOnly: true,
+      handler: ({ res, query, session }) => {
+        const view = graphView(readKnowledgeGraph(kkOf(session)), readKnowledgeFilter(query));
+        const names = new Map(loadSystemConfig().watchedProjects.map((p) => [p.id.toLowerCase(), p.name]));
+        sendJson(res, 200, {
+          ...view,
+          projects: view.projects.map((id) => ({ id, name: names.get(id.toLowerCase()) ?? id })),
+          summaryAr:
+            `${countAr(view.nodes.length, AR_COUNT.node)} و${countAr(view.edges.length, AR_COUNT.edge)}` +
+            (view.nodes.length < view.totalNodes ? ` من أصل ${countAr(view.totalNodes, AR_COUNT.node)}` : '') +
+            (view.omitted ? ` (والأقدم ${countAr(view.omitted, AR_COUNT.node)} لا تُرسم؛ ضيّق التصفية)` : ''),
+        });
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/knowledge/node',
+      requiresSession: true,
+      commanderOnly: true,
+      handler: ({ res, query, session }) => {
+        const id = query.get('id') ?? '';
+        if (!NODE_ID.test(id)) throw new HttpError(400, 'معرّف العقدة غير صالح.');
+        const detail = nodeDetail(readKnowledgeGraph(kkOf(session)), id);
+        if (!detail) throw new HttpError(404, 'العقدة غير موجودة (ربما حُذفت أو لم تصل بالمزامنة بعد).');
+        sendJson(res, 200, { node: detail });
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/knowledge/timeline',
+      requiresSession: true,
+      commanderOnly: true,
+      handler: ({ res, query, session }) => {
+        const limit = Number.parseInt(query.get('limit') ?? '', 10);
+        const view = timelineView(readKnowledgeGraph(kkOf(session)), readKnowledgeFilter(query), Number.isFinite(limit) ? limit : 300);
+        sendJson(res, 200, { ...view, summaryAr: view.items.length < view.total ? `آخر ${countAr(view.items.length, AR_COUNT.node)} من ${view.total}` : countAr(view.total, AR_COUNT.node) });
+      },
+    },
+    {
+      method: 'GET',
+      path: '/api/knowledge/decisions',
+      requiresSession: true,
+      commanderOnly: true,
+      handler: ({ res, query, session }) => {
+        const projectId = (query.get('project') ?? '').trim();
+        if (!projectId || projectId.length > 200) throw new HttpError(400, 'حدّد المشروع.');
+        const items = decisionLogView(readKnowledgeGraph(kkOf(session)), projectId);
+        sendJson(res, 200, { items, summaryAr: items.length ? countAr(items.length, AR_COUNT.decision) : 'لا قرارات في المعرفة لهذا المشروع بعد.' });
       },
     },
     {

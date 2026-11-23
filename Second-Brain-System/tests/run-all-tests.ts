@@ -46,6 +46,7 @@ import { runKnowledgeMcpReviewTests } from './31-knowledge-mcp-review.test.ts';
 import { runKnowledgeExtractionTests } from './32-knowledge-extraction.test.ts';
 import { runKnowledgeObsidianExportTests } from './33-knowledge-obsidian-export.test.ts';
 import { runKnowledgeAssistantTests } from './34-knowledge-assistant.test.ts';
+import { runKnowledgeUiTests } from './35-knowledge-ui.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -226,6 +227,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '34. اختبارات استرجاع المساعد من المعرفة (سياق السؤال بالقرار ومحادثته وما استبدله، وقسم المعرفة في وضع القائد وحده داخل وسم البيانات، ومن البداية للنهاية بمزوّد وهمي)',
       file: 'tests/34-knowledge-assistant.test.ts',
       runner: runKnowledgeAssistantTests,
+    },
+    {
+      name: '35. اختبارات واجهة المعرفة (التصفية وتفاصيل العقدة والخط الزمني وسجل القرارات، ورسم القوى على 1500 عقدة بلا متصفح، والمسارات للقائد وحده، والصفحة)',
+      file: 'tests/35-knowledge-ui.test.ts',
+      runner: runKnowledgeUiTests,
     },
   ];
 
