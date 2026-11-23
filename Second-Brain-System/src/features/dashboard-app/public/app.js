@@ -1214,6 +1214,7 @@
     }
     if (!card) return;
     showWhen(card, true);
+    loadExtraction();
     $('#knowledgeReviewCount').textContent = String(review.items.length);
     $('#knowledgeStatusLine').textContent = status.summaryAr;
     $('#knowledgeReviewList').replaceChildren(
@@ -1238,6 +1239,61 @@
           )
         : [el('p', { className: 'muted small', text: 'لا اقتراحات تنتظر مراجعتك.' })])
     );
+  }
+
+  // 4.0.2: الاستخراج بالذكاء (بزر يدوي، والمزوّد يُختار ويُغيَّر في أي وقت)
+  let extractPoll = null;
+  async function loadExtraction() {
+    if (!isCommander() || !$('#extractProvider')) return;
+    let d;
+    try {
+      d = await api('/api/knowledge/extract');
+    } catch (e) {
+      return;
+    }
+    const sel = $('#extractProvider');
+    if (!sel.options.length || sel.dataset.loaded !== '1') {
+      sel.replaceChildren(...d.providers.map((p) => el('option', { text: p.labelAr + (p.configured ? '' : ' — غير مهيّأ'), attrs: { value: p.id } })));
+      sel.dataset.loaded = '1';
+    }
+    sel.value = d.choice;
+    renderExtractionJob(d.job, d);
+    if (d.job.running && !extractPoll) extractPoll = setInterval(pollExtraction, 2000);
+  }
+
+  function renderExtractionJob(job, d) {
+    const running = job.running;
+    $('[data-action="extract-start"]').disabled = running;
+    $('[data-action="extract-cancel"]').hidden = !running;
+    $('#extractProvider').disabled = running;
+    const lines = [];
+    if (running) lines.push('⏳ يستخرج: ' + job.done + ' من ' + job.total + (job.current ? ' — «' + job.current + '»' : '') + ' · اقتراحات حتى الآن: ' + job.proposals);
+    else if (job.finishedAt) {
+      lines.push((job.cancelled ? '⏹️ أُوقف' : '✅ انتهى') + ': ' + job.done + ' من ' + job.total + ' · اقتراحات جديدة: ' + job.proposals + (job.conflicts ? ' · ⚠️ تعارض مع قرارات أقدم: ' + job.conflicts : '') + (job.duplicates ? ' · مكرر لم يُقترح: ' + job.duplicates : ''));
+      // الأخطاء المتطابقة سطر واحد بعددها
+      const grouped = {};
+      job.errors.forEach((e) => (grouped[e.messageAr] = (grouped[e.messageAr] || 0) + 1));
+      Object.keys(grouped).forEach((m) => lines.push('⚠️ ' + (grouped[m] > 1 ? '(' + grouped[m] + ' مرات) ' : '') + m));
+    }
+    if (d) lines.push(d.counts.new + d.counts.changed ? '📥 بانتظار الاستخراج: ' + d.pendingAr + '.' : 'لا محادثات جديدة للاستخراج منها.');
+    $('#extractInfo').replaceChildren(...lines.map((l) => el('span', { className: 'block', text: l })));
+  }
+
+  async function pollExtraction() {
+    let d;
+    try {
+      d = await api('/api/knowledge/extract');
+    } catch (e) {
+      clearInterval(extractPoll);
+      extractPoll = null;
+      return;
+    }
+    renderExtractionJob(d.job, d);
+    if (!d.job.running) {
+      clearInterval(extractPoll);
+      extractPoll = null;
+      await loadKnowledge();
+    }
   }
 
   async function decideKnowledge(id, decision, btn) {
@@ -2827,6 +2883,18 @@
       });
     },
     'open-settings-auth': () => openSettingsAuth(),
+    'extract-start': async (b) => {
+      await busy(b, async () => {
+        const d = await api('/api/knowledge/extract/start', {});
+        toast(d.messageAr, 'ok', 8000);
+        renderExtractionJob(d.job);
+        if (d.job.running && !extractPoll) extractPoll = setInterval(pollExtraction, 2000);
+      });
+    },
+    'extract-cancel': async () => {
+      const d = await api('/api/knowledge/extract/cancel', {});
+      toast(d.messageAr, 'ok');
+    },
     'cancel-settings-auth': () => {
       $('#authDialog').close();
       setView('command');
@@ -2873,6 +2941,17 @@
     $('[data-form="setup"]').elements.masterPassword.addEventListener('input', (e) => updateStrength(e.target.value));
     $('#secretSearch').addEventListener('input', renderSecrets);
     $('#secretFilter').addEventListener('change', renderSecrets);
+    // 4.0.2: مزوّد الاستخراج (يُحفظ لكل جهاز فوراً)
+    $('#extractProvider').addEventListener('change', async (e) => {
+      const sel = e.currentTarget;
+      try {
+        const d = await api('/api/knowledge/extract/provider', { choice: sel.value });
+        toast(d.messageAr, 'ok');
+      } catch (err) {
+        toast('❌ ' + err.message, 'error');
+        loadExtraction();
+      }
+    });
     // 4.0.1: النسخة المحلية من مفتاح المعرفة لأدوات الذكاء على هذا الجهاز
     $('#knowledgeDeviceKey').addEventListener('change', async (e) => {
       const input = e.currentTarget;

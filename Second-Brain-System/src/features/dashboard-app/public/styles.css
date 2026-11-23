@@ -400,3 +400,8 @@ details.advanced-ai > .form-grid { margin-top: .6rem; }
 .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.35rem 1rem; margin: 0.5rem 0; }
 .kv dt { color: var(--muted, inherit); opacity: 0.8; }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
+
+/* 4.0.2: سطور الحالة المتتالية (الاستخراج) */
+.block {
+  display: block;
+}

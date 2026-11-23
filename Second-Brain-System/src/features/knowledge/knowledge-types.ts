@@ -68,8 +68,11 @@ export interface KnowledgeNode {
   confidence: KnowledgeConfidence;
   createdAt: string;
   updatedAt: string;
-  /** من أين جاءت (مثلاً سجل الذاكرة المشتركة الذي رُحّلت منه) */
-  origin?: { memoryId?: string };
+  /**
+   * من أين جاءت: سجل الذاكرة الذي رُحّلت منه، أو (4.0.2) مصدر الاستخراج وبصمة محتواه
+   * (sourceRef مثل obs:02-Projects/…/x.md أو chat:<id>)، فلا يُعاد استخراج ما لم يتغيّر.
+   */
+  origin?: { memoryId?: string; sourceRef?: string; contentHash?: string };
 }
 
 /** علاقة مسمّاة بين عقدتين (من ← إلى) */
@@ -134,7 +137,13 @@ export function validateNode(value: unknown): KnowledgeNode {
     updatedAt: v.updatedAt,
   };
   const origin = v.origin as Record<string, unknown> | undefined;
-  if (origin && typeof origin === 'object' && typeof origin.memoryId === 'string' && origin.memoryId.length <= 120) node.origin = { memoryId: origin.memoryId };
+  if (origin && typeof origin === 'object') {
+    const clean: NonNullable<KnowledgeNode['origin']> = {};
+    if (typeof origin.memoryId === 'string' && origin.memoryId.length <= 120) clean.memoryId = origin.memoryId;
+    if (typeof origin.sourceRef === 'string' && origin.sourceRef.length <= 600) clean.sourceRef = origin.sourceRef;
+    if (typeof origin.contentHash === 'string' && /^[a-f0-9]{8,64}$/.test(origin.contentHash)) clean.contentHash = origin.contentHash;
+    if (Object.keys(clean).length) node.origin = clean;
+  }
   return node;
 }
 

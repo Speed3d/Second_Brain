@@ -331,7 +331,9 @@ function openKnowledgeForMcp(): KnowledgeGraph {
  * Hint بالعربي: تلخيص عقدة بشكل مضغوط لأداة الذكاء.
  */
 export function compactNode(n: KnowledgeNode): Record<string, unknown> {
-  return { id: n.id, type: n.type, title: n.title, body: n.body.length > 2000 ? `${n.body.slice(0, 2000)}…` : n.body, projectId: n.projectId, status: n.status, confidence: n.confidence, source: n.source, date: n.createdAt };
+  // 4.0.2: المتن الذي يطابق العنوان لا يُرسل مرتين (القرار القصير)
+  const body = n.body.trim() === n.title.trim() ? undefined : n.body.length > 2000 ? `${n.body.slice(0, 2000)}…` : n.body;
+  return { id: n.id, type: n.type, title: n.title, ...(body ? { body } : {}), projectId: n.projectId, status: n.status, confidence: n.confidence, source: n.source, date: n.createdAt };
 }
 
 /**

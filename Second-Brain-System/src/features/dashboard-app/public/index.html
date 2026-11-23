@@ -480,6 +480,14 @@
         <div class="card" data-commander-only data-shown-when="0" id="knowledgeReviewCard" hidden>
           <h2>🧾 قائمة مراجعة المعرفة <span class="badge" id="knowledgeReviewCount"></span></h2>
           <p class="small muted">قرارات اقترحتها أدوات الذكاء. لا يدخل شيء إلى المعرفة إلا باعتمادك، والمرفوض لا يُقترح ثانية.</p>
+          <div class="stack" id="knowledgeExtract">
+            <div class="form-actions">
+              <label class="small">المزوّد <select id="extractProvider"></select></label>
+              <button type="button" class="btn btn-primary btn-sm" data-action="extract-start">🧠 استخرج من المحادثات الجديدة</button>
+              <button type="button" class="btn btn-ghost btn-sm" data-action="extract-cancel" hidden>⏹️ إيقاف</button>
+            </div>
+            <p class="small muted" id="extractInfo"></p>
+          </div>
           <div class="list compact" id="knowledgeReviewList"></div>
           <p class="small muted" id="knowledgeStatusLine"></p>
         </div>

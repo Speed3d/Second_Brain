@@ -43,6 +43,7 @@ import { runMcpControlsTests } from './26-mcp-controls.test.ts';
 import { runSecurityReviewLeadsTests } from './29-security-review-leads.test.ts';
 import { runKnowledgeBaseTests } from './30-knowledge-base.test.ts';
 import { runKnowledgeMcpReviewTests } from './31-knowledge-mcp-review.test.ts';
+import { runKnowledgeExtractionTests } from './32-knowledge-extraction.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -208,6 +209,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '31. اختبارات المعرفة مع MCP وقائمة المراجعة (النسخة المحلية من المفتاح، والاقتراحات والاعتماد والرفض، وأدوات MCP الجديدة، والمسارات، ومزامنة القرار)',
       file: 'tests/31-knowledge-mcp-review.test.ts',
       runner: runKnowledgeMcpReviewTests,
+    },
+    {
+      name: '32. اختبارات الاستخراج بالذكاء وكشف التعارض (قراءة الرد وبناء الطلب، والمصادر وحالتها، والاقتراحات بلا تكرار و«استبدل القرار»، والمهمة والإلغاء، واختيار المزوّد)',
+      file: 'tests/32-knowledge-extraction.test.ts',
+      runner: runKnowledgeExtractionTests,
     },
   ];
 

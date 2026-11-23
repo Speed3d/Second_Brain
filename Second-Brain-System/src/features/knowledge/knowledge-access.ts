@@ -103,7 +103,14 @@ export function decideReviewItem(kk: Buffer, id: string, decision: 'approve' | '
   if (item.status !== 'pending') throw new Error(item.status === 'approved' ? 'اعتُمد هذا الاقتراح من قبل.' : 'رُفض هذا الاقتراح من قبل.');
   if (decision === 'approve') {
     writeNode(kk, item.proposal.node, dir);
-    for (const e of item.proposal.edges) writeEdge(kk, e, dir);
+    for (const e of item.proposal.edges) {
+      writeEdge(kk, e, dir);
+      // 4.0.2: القرار الجديد يستبدل قديماً ← القديم «مُستبدَل» (يبقى في التاريخ ولا يُحذف)
+      if (e.type === 'supersedes' && e.from === item.proposal.node.id) {
+        const old = graph.nodes.get(e.to);
+        if (old && old.status !== 'superseded') writeNode(kk, { ...old, status: 'superseded', updatedAt: now.toISOString() }, dir);
+      }
+    }
   }
   return writeReviewItem(kk, { ...item, status: decision === 'approve' ? 'approved' : 'rejected', decidedAt: now.toISOString() }, dir);
 }
