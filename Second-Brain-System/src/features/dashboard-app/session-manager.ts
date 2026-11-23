@@ -16,6 +16,7 @@ import { wipeUnlockedVault, type UnlockedVault } from '../vault/vault-manager.ts
 import { deriveKnowledgeKey } from '../knowledge/knowledge-store.ts';
 import { migrateSharedMemoryToKnowledge } from '../knowledge/knowledge-migration.ts';
 import { syncKnowledgeDeviceKey } from '../knowledge/knowledge-access.ts';
+import { refreshKnowledgeExport } from '../knowledge/obsidian-export.ts';
 import { AR_COUNT, countAr } from '../../shared/arabic-count.ts';
 
 /**
@@ -81,6 +82,8 @@ export function openVaultSession(vault: UnlockedVault): string {
           `ترحيل الذاكرة إلى المعرفة: ${countAr(r.createdNodes, AR_COUNT.node)} و${countAr(r.createdEdges, AR_COUNT.edge)} و${countAr(r.createdReviews, AR_COUNT.proposal)} جديدة، و${countAr(r.alreadyMigrated, AR_COUNT.record)} مرحّلة سابقاً، و${countAr(r.skipped, AR_COUNT.record)} تُجوهلت.`
         );
       }
+      // 4.0.3: التصدير إلى Obsidian للمشاريع المختارة (حتمي، ولا يستهلك مزوّداً)
+      refreshKnowledgeExport(kk);
       const device = syncKnowledgeDeviceKey(kk);
       if (device === 'written' || device === 'removed') logSystemInfo('Knowledge', device === 'written' ? 'كُتبت النسخة المحلية من مفتاح المعرفة لخادم MCP.' : 'حُذفت النسخة المحلية من مفتاح المعرفة (معطّلة على هذا الجهاز).');
     } catch (err) {

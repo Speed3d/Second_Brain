@@ -32,6 +32,8 @@ import { FAMILY_LOG_FILE, resealFamilyLog } from '../family-emergency/family-por
 import { logSystemInfo } from '../../core/logger.ts';
 import type { SyncContext } from './sync-context.ts';
 import { deriveKnowledgeKey, listKnowledgeFiles, openKnowledgeRecord, removeKnowledgeRecord, validateKnowledgeValue, writeKnowledgeValue, type KnowledgeRecordKind } from '../knowledge/knowledge-store.ts';
+import { refreshKnowledgeExport } from '../knowledge/obsidian-export.ts';
+import type { WatchedProjectConfig } from '../../shared/types.ts';
 
 /** ملفات Obsidian الخاصة بواجهة كل جهاز (لا تُزامَن) */
 export const OBSIDIAN_LOCAL_ONLY = [
@@ -46,7 +48,8 @@ export const OBSIDIAN_LOCAL_ONLY = [
  *               الأحدث يُعتمد بصمت، والأخرى تذهب إلى السلة 30 يوماً (ISS-026).
  */
 export function isGeneratedProjectDoc(key: string): boolean {
-  return /^obs:02-Projects\/[^/]+\/0[1-6]-[^/]+\.md$/.test(key);
+  // 4.0.3: ومعها ملاحظات المعرفة المُصدَّرة (05-Knowledge) — حتمية، فالتعارض فيها توقيت لا محتوى
+  return /^obs:02-Projects\/[^/]+\/0[1-6]-[^/]+\.md$/.test(key) || /^obs:05-Knowledge\/[^/]+\/[^/]+\.md$/.test(key);
 }
 
 /**
@@ -352,6 +355,16 @@ function writeRecords(ctx: SyncContext, vault: UnlockedVault, writes: RecordWrit
       if (value.id !== m[2]) throw new Error('سجل معرفة لا يطابق معرّفه في سجل المزامنة.');
       writeKnowledgeValue(kk, kind, value, knowledgeDir(ctx));
     }
+  }
+
+  // 4.0.3: معرفة أو مشاريع وصلت من جهاز آخر ← تحديث التصدير إلى Obsidian هنا (المحتوى حتمي، فيطابق ما كتبه الآخر)
+  if (knowWrites.length || projectWrites.length) {
+    const kk = knowledgeKeyOf(vault);
+    const settings = readJsonFileSafe<Record<string, unknown>>(ctx.settingsPath, {});
+    const projects = (Array.isArray(settings.watchedProjects) ? settings.watchedProjects : []).filter(
+      (p): p is WatchedProjectConfig => Boolean(p) && typeof (p as WatchedProjectConfig).id === 'string' && typeof (p as WatchedProjectConfig).name === 'string'
+    );
+    if (kk) refreshKnowledgeExport(kk, { projects, obsidianDir: ctx.obsidianDir, knowledgeDir: knowledgeDir(ctx) });
   }
 
   for (const kind of byKind.keys()) {

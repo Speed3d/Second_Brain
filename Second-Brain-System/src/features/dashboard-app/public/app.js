@@ -628,6 +628,7 @@
         el('p', { className: 'small', children: [el('strong', { text: '💰 الدخل: ' }), el('span', { text: p.monthlyIncome || '—' }), el('strong', { text: '  🧾 الفواتير: ' }), el('span', { text: p.billingNotes || '—' })] }),
       ]),
       projectSection('🧭 الخلاصة: ماذا يخدم وكيف يعمل', [summaryBox, el('div', { className: 'card-actions', children: [genBtn] })]),
+      ...(commander ? [projectSection('📤 المعرفة في Obsidian', [knowledgeExportToggle(p)])] : []),
       el('div', {
         className: 'card-grid two',
         children: [
@@ -665,6 +666,36 @@
       ]),
       el('p', { className: 'small muted', text: 'آخر فحص: ' + String(r.scannedAt).slice(0, 16).replace('T', ' ') })
     );
+  }
+
+  // 4.0.3: تصدير معرفة المشروع غير الحساسة إلى Obsidian (05-Knowledge)، معطّل افتراضياً
+  function knowledgeExportToggle(p) {
+    const input = el('input', { attrs: Object.assign({ type: 'checkbox' }, p.knowledgeExport ? { checked: 'checked' } : {}) });
+    input.addEventListener('change', async () => {
+      input.disabled = true;
+      try {
+        const d = await api('/api/knowledge/export', { projectId: p.id, enabled: input.checked });
+        p.knowledgeExport = input.checked;
+        toast(d.messageAr, 'ok', 8000);
+      } catch (err) {
+        input.checked = !input.checked;
+        toast('❌ ' + err.message, 'error');
+      } finally {
+        input.disabled = false;
+      }
+    });
+    return el('label', {
+      className: 'check',
+      children: [
+        input,
+        el('span', {
+          children: [
+            el('strong', { text: 'صدّر معرفة هذا المشروع إلى Obsidian' }),
+            el('span', { className: 'muted small block', text: 'ملاحظة لكل قرار وحقيقة ومهمة في 05-Knowledge، بروابط تعمل في مخطط Obsidian. الأشخاص والعقود والفواتير لا تُصدَّر أبداً. ⚠️ ملفات Obsidian نص غير مشفّر على القرص.' }),
+          ],
+        }),
+      ],
+    });
   }
 
   async function generateSummary(btn) {
@@ -1267,15 +1298,16 @@
     $('[data-action="extract-cancel"]').hidden = !running;
     $('#extractProvider').disabled = running;
     const lines = [];
-    if (running) lines.push('⏳ يستخرج: ' + job.done + ' من ' + job.total + (job.current ? ' — «' + job.current + '»' : '') + ' · اقتراحات حتى الآن: ' + job.proposals);
+    // «في هذه الدفعة»: كل ضغطة تقرأ 50 محادثة على الأكثر، والباقي في الضغطة التالية
+    if (running) lines.push('⏳ يستخرج: ' + job.done + ' من ' + job.total + ' في هذه الدفعة' + (job.current ? ' — «' + job.current + '»' : '') + ' · اقتراحات حتى الآن: ' + job.proposals);
     else if (job.finishedAt) {
-      lines.push((job.cancelled ? '⏹️ أُوقف' : '✅ انتهى') + ': ' + job.done + ' من ' + job.total + ' · اقتراحات جديدة: ' + job.proposals + (job.conflicts ? ' · ⚠️ تعارض مع قرارات أقدم: ' + job.conflicts : '') + (job.duplicates ? ' · مكرر لم يُقترح: ' + job.duplicates : ''));
+      lines.push((job.cancelled ? '⏹️ أُوقف' : '✅ انتهى') + ': ' + job.done + ' من ' + job.total + ' في هذه الدفعة · اقتراحات جديدة: ' + job.proposals + (job.conflicts ? ' · ⚠️ تعارض مع قرارات أقدم: ' + job.conflicts : '') + (job.duplicates ? ' · مكرر لم يُقترح: ' + job.duplicates : ''));
       // الأخطاء المتطابقة سطر واحد بعددها
       const grouped = {};
       job.errors.forEach((e) => (grouped[e.messageAr] = (grouped[e.messageAr] || 0) + 1));
       Object.keys(grouped).forEach((m) => lines.push('⚠️ ' + (grouped[m] > 1 ? '(' + grouped[m] + ' مرات) ' : '') + m));
     }
-    if (d) lines.push(d.counts.new + d.counts.changed ? '📥 بانتظار الاستخراج: ' + d.pendingAr + '.' : 'لا محادثات جديدة للاستخراج منها.');
+    if (d) lines.push(d.counts.new + d.counts.changed ? '📥 بانتظار الاستخراج: ' + d.pendingAr + ' (كل ضغطة تقرأ 50 على الأكثر).' : 'لا محادثات جديدة للاستخراج منها.');
     $('#extractInfo').replaceChildren(...lines.map((l) => el('span', { className: 'block', text: l })));
   }
 

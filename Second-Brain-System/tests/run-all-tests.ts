@@ -44,6 +44,7 @@ import { runSecurityReviewLeadsTests } from './29-security-review-leads.test.ts'
 import { runKnowledgeBaseTests } from './30-knowledge-base.test.ts';
 import { runKnowledgeMcpReviewTests } from './31-knowledge-mcp-review.test.ts';
 import { runKnowledgeExtractionTests } from './32-knowledge-extraction.test.ts';
+import { runKnowledgeObsidianExportTests } from './33-knowledge-obsidian-export.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -214,6 +215,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '32. اختبارات الاستخراج بالذكاء وكشف التعارض (قراءة الرد وبناء الطلب، والمصادر وحالتها، والاقتراحات بلا تكرار و«استبدل القرار»، والمهمة والإلغاء، واختيار المزوّد)',
       file: 'tests/32-knowledge-extraction.test.ts',
       runner: runKnowledgeExtractionTests,
+    },
+    {
+      name: '33. اختبارات تصدير المعرفة إلى Obsidian (المشاريع المختارة فقط وبلا الحساس، والروابط والفهرس، والحتمية، والحذف والملاحظة اليدوية، والمسار والخيار)',
+      file: 'tests/33-knowledge-obsidian-export.test.ts',
+      runner: runKnowledgeObsidianExportTests,
     },
   ];
 

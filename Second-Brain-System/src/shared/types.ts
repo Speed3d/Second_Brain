@@ -99,6 +99,8 @@ export interface WatchedProjectConfig {
   billingNotes: string;
   /** ملخص "ما هذا المشروع وماذا يخدم" (يولّده المساعد ويمكن تعديله يدوياً) */
   summaryAr?: string;
+  /** 4.0.3: تصدير معرفة المشروع غير الحساسة إلى Obsidian (05-Knowledge). معطّل افتراضياً، ويُزامَن مع المشروع */
+  knowledgeExport?: boolean;
 }
 
 /**

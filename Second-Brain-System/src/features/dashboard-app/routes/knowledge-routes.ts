@@ -20,8 +20,9 @@ import { isKnowledgeDeviceKeyEnabled, decideReviewItem, readDeviceKnowledgeKey, 
 import { deriveKnowledgeKey, readKnowledgeGraph, resolveKnowledgeDir } from '../../knowledge/knowledge-store.ts';
 import { EDGE_TYPE_LABELS_AR, NODE_TYPE_LABELS_AR, REVIEW_ID } from '../../knowledge/knowledge-types.ts';
 import { syncTick } from '../../sync/sync-service.ts';
+import { refreshKnowledgeExport } from '../../knowledge/obsidian-export.ts';
 import { AR_COUNT, countAr } from '../../../shared/arabic-count.ts';
-import { loadSystemConfig } from '../../../core/config-manager.ts';
+import { loadSystemConfig, registerWatchedProject } from '../../../core/config-manager.ts';
 import { isActiveVaultSession } from '../session-manager.ts';
 import {
   cancelExtractionJob,
@@ -107,6 +108,7 @@ export function getKnowledgeRoutes(): RouteDefinition[] {
         } catch (err) {
           throw new HttpError(400, err instanceof Error ? err.message : String(err));
         }
+        refreshKnowledgeExport(kkOf(session)); // 4.0.3
         syncTick(session!.vault); // يصل القرار إلى الجهاز الآخر
         sendJson(res, 200, { ok: true, status: item.status, messageAr: decision === 'approve' ? '✅ اعتُمد ودخل المعرفة.' : '❌ رُفض، ولن يُقترح ثانية.' });
       },
@@ -187,7 +189,9 @@ export function getKnowledgeRoutes(): RouteDefinition[] {
           throw new HttpError(409, err instanceof Error ? err.message : String(err));
         }
         started.finished.then(() => {
-          if (isActiveVaultSession(session)) syncTick(vault); // الاقتراحات تصل إلى الجهاز الآخر
+          // عقد «المحادثة» الجديدة تُصدَّر (4.0.3)، والاقتراحات تصل إلى الجهاز الآخر
+          refreshKnowledgeExport(kk);
+          if (isActiveVaultSession(session)) syncTick(vault);
         }).catch(() => undefined);
         sendJson(res, 200, { ok: true, job: started.state, messageAr: started.state.total ? `🧠 بدأ الاستخراج من ${countAr(started.state.total, AR_COUNT.conversation)}.` : 'لا محادثات جديدة للاستخراج منها.' });
       },
@@ -199,6 +203,30 @@ export function getKnowledgeRoutes(): RouteDefinition[] {
       commanderOnly: true,
       handler: ({ res }) => {
         sendJson(res, 200, { ok: true, cancelled: cancelExtractionJob(), messageAr: '⏹️ يتوقف الاستخراج بعد المحادثة الحالية.' });
+      },
+    },
+    // ===================== 4.0.3: التصدير إلى Obsidian (لكل مشروع، معطّل افتراضياً) =====================
+    {
+      method: 'POST',
+      path: '/api/knowledge/export',
+      requiresSession: true,
+      commanderOnly: true,
+      handler: ({ res, body, session }) => {
+        const projectId = readString(body, 'projectId', 200);
+        if (typeof body.enabled !== 'boolean') throw new HttpError(400, 'الحقل enabled يجب أن يكون true أو false.');
+        const project = loadSystemConfig().watchedProjects.find((p) => p.id === projectId);
+        if (!project) throw new HttpError(404, 'المشروع غير موجود.');
+        const { knowledgeExport: _old, ...rest } = project;
+        registerWatchedProject(body.enabled ? { ...rest, knowledgeExport: true } : rest);
+        const result = refreshKnowledgeExport(kkOf(session));
+        syncTick(session!.vault); // الخيار يصل إلى الجهاز الآخر مع المشروع
+        sendJson(res, 200, {
+          ok: true,
+          enabled: body.enabled,
+          messageAr: body.enabled
+            ? `📤 صُدّرت معرفة «${project.name}» إلى Obsidian (05-Knowledge): ${countAr((result?.written ?? 0) + (result?.unchanged ?? 0), AR_COUNT.note)}.`
+            : `🗑️ أُوقف التصدير، وحُذفت من Obsidian ${countAr(result?.removed ?? 0, AR_COUNT.note)} مُصدَّرة لـ «${project.name}».`,
+        });
       },
     },
     {

@@ -96,6 +96,7 @@ export function getProjectDetails(project: WatchedProjectConfig): Record<string,
       monthlyIncome: project.monthlyIncome,
       billingNotes: project.billingNotes,
       summaryAr: project.summaryAr ?? '',
+      knowledgeExport: project.knowledgeExport === true,
     },
     report: {
       stack: report.detectedStack,

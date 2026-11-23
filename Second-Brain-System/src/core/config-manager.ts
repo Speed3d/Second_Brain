@@ -232,6 +232,7 @@ export function normalizeSystemConfig(raw: Record<string, unknown>): { config: S
           monthlyIncome: str(o.monthlyIncome, 'غير محدد بعد'),
           billingNotes: str(o.billingNotes, ''),
           ...(typeof o.summaryAr === 'string' && o.summaryAr.trim() ? { summaryAr: o.summaryAr } : {}),
+          ...(o.knowledgeExport === true ? { knowledgeExport: true } : {}),
         });
       } else {
         warnings.push('تم تجاهل مشروع ناقص البيانات في قائمة المشاريع.');
