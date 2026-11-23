@@ -162,6 +162,7 @@ node tests/run-all-tests.ts
 
 | الوثيقة | المحتوى |
 | :--- | :--- |
+| **[`docs/17-NEW-SESSION-HANDOFF.md`](./docs/17-NEW-SESSION-HANDOFF.md)** | **ابدأ من هنا في أي محادثة جديدة مع Claude Code: الحالة الآن، وطريقة العمل، وما تبقّى بالضبط** (و [`CLAUDE.md`](./CLAUDE.md) يُقرأ تلقائياً ويشير إليها) |
 | **[`docs/00-INDEX-AND-FULL-DETAILS.md`](./docs/00-INDEX-AND-FULL-DETAILS.md)** | **الفهرس والتفاصيل الدقيقة: الشرح الكامل لكل شيء في البرنامج (ابدأ من هنا)** |
 | [`CONSTITUTION-AND-RULES.md`](./CONSTITUTION-AND-RULES.md) | القوانين التسعة وقواعد الأمان الملزمة |
 | [`00-Master-Implementation-Plan.md`](./00-Master-Implementation-Plan.md) | الرؤية والخطة الشاملة |
@@ -178,6 +179,8 @@ node tests/run-all-tests.ts
 | **[`docs/12-EXECUTION-PLAN.md`](./docs/12-EXECUTION-PLAN.md)** | **خطة التنفيذ التفصيلية المعتمدة (المراحل 0–7) وحالة كل مرحلة** |
 | [`docs/13-ISSUES-AND-SOLUTIONS-REFERENCE.md`](./docs/13-ISSUES-AND-SOLUTIONS-REFERENCE.md) | مرجع الأعطال والحلول: لكل عطل سببه وإصلاحه واختباره والدرس منه |
 | [`docs/14-MAC-SYNC-2.0-HANDOFF.md`](./docs/14-MAC-SYNC-2.0-HANDOFF.md) | تسليم الماك: ترحيل المزامنة إلى 2.0 وتشخيص التعارضات وقائمة التحقق |
+| [`docs/15-PASSKEYS-MEASUREMENT-HANDOFF.md`](./docs/15-PASSKEYS-MEASUREMENT-HANDOFF.md) | تسليم قياس Passkeys و PRF على الجهازين (مكتمل) |
+| [`docs/16-PHASE-2-VERIFICATION-CHECKLIST.md`](./docs/16-PHASE-2-VERIFICATION-CHECKLIST.md) | قائمة التحقق للمرحلة 2 على الجهازين (مكتملة) |
 | [`docs/11-IDEAS-DISCUSSION-DECISIONS.md`](./docs/11-IDEAS-DISCUSSION-DECISIONS.md) | قرارات نقاش الأفكار الجديدة (المزامنة متعددة الكتابة، والأمان، والمعرفة، والأتمتة، والأجهزة، و«سندس»، و Android)، وأساس خطة التنفيذ القادمة |
 | [`CHANGELOG.md`](./CHANGELOG.md) | سجل الإصدارات: ما الجديد في كل إصدار |
 

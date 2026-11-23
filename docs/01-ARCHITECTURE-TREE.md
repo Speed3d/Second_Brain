@@ -1,7 +1,7 @@
 # 🌳 الهيكلية الشجرية المتفرعة للمشروع (Strict Modular Architecture Tree)
 
 > **تطبيقاً للقانونين (2) و (3):** هذه الوثيقة تحدد الشجرة الفعلية للمشروع في `D:\Second Brain` وتمنع خلط الملفات أو الأقسام.
-> **آخر مراجعة:** `2026-11-17` (الإصدار 2.0.0) — مطابقة للملفات المتتبعة في Git. الشرح التفصيلي لكل جزء في [`00-INDEX-AND-FULL-DETAILS.md`](00-INDEX-AND-FULL-DETAILS.md).
+> **آخر مراجعة:** `2026-11-23` (الإصدار 4.1.1) — مطابقة للملفات المتتبعة في Git. الشرح التفصيلي لكل جزء في [`00-INDEX-AND-FULL-DETAILS.md`](00-INDEX-AND-FULL-DETAILS.md).
 > 🔒 = ملف/مجلد شخصي **لا يُرفع إلى GitHub** (انظر `.gitignore`).
 
 ---
@@ -15,6 +15,7 @@
 ├── 📄 00-Master-Implementation-Plan.md         # الرؤية والخطة الهندسية الشاملة (القانون 1)
 ├── 📄 CONSTITUTION-AND-RULES.md                # الدستور والقوانين التسعة الملزمة
 ├── 📄 CHANGELOG.md                             # سجل الإصدارات: ما الجديد في كل إصدار (القانون 9)
+├── 📄 CLAUDE.md                                # يُقرأ تلقائياً في كل جلسة Claude Code: القواعد، ويشير إلى docs/17
 ├── 📄 Launch-Second-Brain.bat                  # مشغّل يدوي بديل (يعمل من أي قرص، ويفتح المتصفح بعد جاهزية الخادم)
 ├── 📄 .gitignore                               # ما لا يُرفع أبداً (البيانات، الإعدادات الحقيقية، المحتوى الشخصي، vendor)
 ├── 📄 .gitattributes                           # نهايات الأسطر: LF لسكربتات الماك، CRLF لسكربتات Windows
@@ -37,6 +38,7 @@
 │   ├── 📄 14-MAC-SYNC-2.0-HANDOFF.md          # تسليم الماك: ترحيل المزامنة 2.0 والتشخيص
 │   ├── 📄 15-PASSKEYS-MEASUREMENT-HANDOFF.md  # تسليم قياس Passkeys و PRF على الجهازين (مكتمل)
 │   ├── 📄 16-PHASE-2-VERIFICATION-CHECKLIST.md # قائمة التحقق الشاملة للمرحلة 2 على الجهازين، وجدول النتائج
+│   ├── 📄 17-NEW-SESSION-HANDOFF.md           # ابدأ من هنا في أي محادثة جديدة: الحالة، وطريقة العمل، وما تبقّى بالضبط
 │   └── 📁 archive\                             # وثائق ونماذج تاريخية لم تعد مستخدمة
 │
 ├── 📁 Obsidian-Vault\                          # العقل المعرفي (يُفتح ببرنامج Obsidian)
@@ -45,7 +47,8 @@
 │   ├── 📁 01-Commander-Profile\                # AI-Coding-Standards.md (مرفوع) + About-Commander.md 🔒
 │   ├── 📁 02-Projects\ 🔒                      # ستة ملفات لكل مشروع + AI-Conversations (تُحدَّث آلياً)
 │   ├── 📁 03-AI-Shared-Memory\                 # Memory-Index.md (مرفوع) + Memory-Stream.md 🔒 + *-Sessions\ 🔒
-│   └── 📁 04-Family-Emergency-Guide\ 🔒        # دليل العائلة، جدول المشاريع والفواتير، والتشغيل على جهاز جديد
+│   ├── 📁 04-Family-Emergency-Guide\ 🔒        # دليل العائلة، جدول المشاريع والفواتير، والتشغيل على جهاز جديد
+│   └── 📁 05-Knowledge\ 🔒                     # (4.0.3) معرفة المشاريع المختارة غير الحساسة، مولّدة آلياً بروابط [[...]]
 │
 └── 📁 Second-Brain-System\                     # النظام البرمجي (Node.js 24 + TypeScript، بلا أي حزم خارجية)
     ├── 📄 package.json                         # أوامر: start / test / scan:code / mcp
@@ -66,6 +69,8 @@
     │   ├── 📁 core\                            # [CORE] لا يعتمد إلا على shared
     │   │   ├── 📄 config-manager.ts            # الإعدادات: الفصل، الترحيل، التحقق، المسارات النسبية
     │   │   ├── 📄 crypto-engine.ts             # AES-256-GCM + scrypt (N=2^17)، تغليف المفاتيح، مفتاح الطوارئ بخانة تحقق
+    │   │   ├── 📄 folder-permissions.ts        # (ISS-046) فحص صلاحيات مجلد البرنامج: هل يكتب فيه حساب آخر على الجهاز؟
+    │   │   ├── 📄 runtime-version.ts           # (ISS-032) هل الكود العامل هو كود القرص؟ وإلا «يحتاج إعادة تشغيل»
     │   │   └── 📄 logger.ts                    # سجل التشغيل
     │   │
     │   ├── 📁 features\                        # [FEATURES] كل ميزة في مجلدها
@@ -100,6 +105,15 @@
     │   │   │   ├── 📄 backup-service.ts        # النسخ بالصيغة 3 (حمولة كاملة وحمولة عائلية) والاستعادة إلى مجلد جديد
     │   │   │   ├── 📄 old-copies.ts            # حصر وحذف النسخ القديمة التي يفتحها مفتاح الطوارئ القديم
     │   │   │   └── 📄 family-portal.ts         # بوابة العائلة: جهات الاتصال والتعليمات والفواتير، وسجل خطوات الطوارئ بالمفتاح العائلي
+    │   │   ├── 📁 knowledge\                  # المرحلة 3: المعرفة المترابطة (4.0.0 – 4.1.0)
+    │   │   │   ├── 📄 knowledge-types.ts       # 12 نوع عقدة، و 6 علاقات مسمّاة، والحالة والثقة والمصدر، والتحقق
+    │   │   │   ├── 📄 knowledge-store.ts       # مفتاح المعرفة KK (HKDF من مفتاح البيانات)، وملفات مشفّرة في data/knowledge/
+    │   │   │   ├── 📄 knowledge-migration.ts   # الترحيل الحتمي من الذاكرة المشتركة
+    │   │   │   ├── 📄 knowledge-query.ts       # البحث، والجيران، والمسار، وسجل القرارات، والخط الزمني، وسياق المساعد
+    │   │   │   ├── 📄 knowledge-access.ts      # نسخة KK المحلية لـ MCP، واعتماد اقتراحات المراجعة أو رفضها
+    │   │   │   ├── 📄 extraction-service.ts    # الاستخراج بالذكاء من المحادثات (بزر)، وكشف التعارض، والمهمة في الخلفية
+    │   │   │   ├── 📄 obsidian-export.ts       # التصدير إلى Obsidian/05-Knowledge لكل مشروع مختار، بلا الحساس
+    │   │   │   └── 📄 knowledge-view.ts        # ما تعرضه الواجهة: المخطط، وتفاصيل العقدة، والخط الزمني، وسجل القرارات
     │   │   ├── 📁 conversations\
     │   │   │   └── 📄 conversation-store.ts    # حفظ المحادثات مشفّرة (العائلية بالمفتاح العائلي)، الفتح والحذف، ونقلها بعد الترقية
     │   │   ├── 📁 sync\                       # المزامنة بين الأجهزة (2.0: الكتابة من كل الأجهزة)
@@ -121,8 +135,8 @@
     │   │       ├── 📄 desktop-server.ts        # الموجّه على 127.0.0.1 + طبقات الحماية + تشغيل المراقب
     │   │       ├── 📄 http-utils.ts            # الرد، حد الطلب، الكوكيز، Host/CSRF، رؤوس الأمان
     │   │       ├── 📄 session-manager.ts       # جلسة الخزنة، القفل التلقائي، تأخير المحاولات
-    │   │       ├── 📁 routes\                  # state، vault، project، memory، assistant، emergency، portal (بوابة العائلة)، auth (قياس Passkeys والدخول بها)، mcp (أدوات MCP وسجلها)، maintenance، conversation، voice، sync
-    │   │       └── 📁 public\                  # index.html، styles.css، app.js، hologram.js (CSP صارمة)
+    │   │       ├── 📁 routes\                  # state، vault، project، memory، assistant، emergency، portal (بوابة العائلة)، auth (قياس Passkeys والدخول بها)، mcp (أدوات MCP وسجلها)، maintenance، conversation، voice، sync، knowledge (المعرفة، للقائد وحده)، و second-factor-gate (بوابة المصادقة الثنائية)
+    │   │       └── 📁 public\                  # index.html، styles.css، app.js، hologram.js، graph-view.js (مخطط المعرفة بالقوى، بلا مكتبة)، icon.svg (CSP صارمة: الملفات المسموحة في STATIC_ASSETS)
     │   │
     │   ├── 📁 shared\                          # [SHARED] لا يعتمد على أي طبقة أخرى
     │   │   ├── 📄 types.ts
@@ -134,7 +148,7 @@
     │   │   └── 📄 qr-code.ts                   # مولّد باركود QR يدوي (Byte، M، الإصدارات 1–10) ورسم SVG: الكتيب، والمصادقة الثنائية، وإضافة جهاز
     │   │
     │   └── 📁 tools\                           # [TOOLS] أدوات مستقلة
-    │       ├── 📄 mcp-memory-server.ts         # خادم MCP (6 أدوات) لـ Claude Code و Antigravity
+    │       ├── 📄 mcp-memory-server.ts         # خادم MCP (8 أدوات، منها البحث في المعرفة وسجل القرارات) لـ Claude Code و Antigravity
     │       ├── 📄 code-registry-scanner.ts     # مولّد فهرس الدوال
     │       ├── 📄 install-arabic-voice.ts      # تنزيل Piper والصوت Kareem (Windows) أو التحقق من Majed (الماك)
     │       ├── 📄 install-xtts-voice.ts        # تثبيت XTTS-v2 في vendor (بعد قبول الرخصة)
@@ -170,7 +184,14 @@
         ├── 📄 25-log-redaction.test.ts         # السجلات: أسرار متعمّدة لا تُكتب، والتدوير، ومخرجات الطرفية ورسائل الأعطال
         ├── 📄 26-mcp-controls.test.ts          # أدوات MCP: المفاتيح، والسجل بلا محتوى، وعملية خادم حقيقية عبر stdio، والمسارات
         ├── 📄 27-redaction-patterns.test.ts    # التنقيح: الأنماط الجديدة، و JSON، والمقسوم على سطرين، وكتل الكود، والحذف الخاطئ، والأعداد
-        └── 📄 28-phase2-security.test.ts       # الجامعة للمرحلة 2: جدول الصلاحيات، وكل مسار محمي، وحدود المفاتيح، ولا نص صريح لأي سرّ
+        ├── 📄 28-phase2-security.test.ts       # الجامعة للمرحلة 2: جدول الصلاحيات، وكل مسار محمي، وحدود المفاتيح، ولا نص صريح لأي سرّ
+        ├── 📄 29-security-review-leads.test.ts # خيوط المراجعة الأمنية ISS-046 حتى ISS-053
+        ├── 📄 30-knowledge-base.test.ts        # أساس المعرفة: المفتاح، والتخزين، والترحيل، والاستعلامات، والمزامنة
+        ├── 📄 31-knowledge-mcp-review.test.ts  # المعرفة مع MCP، والنسخة المحلية، وقائمة المراجعة، والمسارات
+        ├── 📄 32-knowledge-extraction.test.ts  # الاستخراج بالذكاء وكشف التعارض بمزوّد وهمي
+        ├── 📄 33-knowledge-obsidian-export.test.ts # التصدير إلى Obsidian، و .gitignore يستبعد 05-Knowledge
+        ├── 📄 34-knowledge-assistant.test.ts   # المساعد يجيب من المعرفة في وضع القائد وحده
+        └── 📄 35-knowledge-ui.test.ts          # واجهة المعرفة: التصفية، ورسم القوى على 1500 عقدة، والمسارات، والصفحة
 ```
 
 ---
@@ -191,6 +212,8 @@
 | الأسرار وكلمات المرور ومفاتيح API | `data/encrypted-vault/vault.aes256.json` (مشفرة) | ❌ |
 | النسخ الاحتياطية | `data/encrypted-backups/` (+ مجلد إضافي اختياري) | ❌ |
 | المشاريع والدخل والفواتير | `config/settings.json` و `Obsidian-Vault/02-Projects/` | ❌ |
+| المعرفة المترابطة (العُقد والعلاقات والاقتراحات) | `data/knowledge/` (مشفّرة بمفتاح المعرفة)، ونسخة المفتاح المحلية `data/knowledge/device-key.json` (لا تُزامَن ولا تُنسخ) | ❌ |
+| المعرفة المُصدَّرة إلى Obsidian (بالاختيار) | `Obsidian-Vault/05-Knowledge/` (نص غير مشفّر) | ❌ |
 | المحادثات المؤرشفة والذاكرة | `Obsidian-Vault/03-AI-Shared-Memory/*-Sessions/` و `Memory-Stream.md` و `data/ai-memory-store.json` | ❌ |
 | دليل العائلة وملف القائد | `Obsidian-Vault/04-Family-Emergency-Guide/` و `About-Commander.md` | ❌ |
 | الكود والوثائق والثيم | بقية المشروع | ✅ |
