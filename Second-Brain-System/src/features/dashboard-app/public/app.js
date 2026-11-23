@@ -194,6 +194,7 @@
       loadMcpTools();
     }
     if (view === 'sync') loadSync();
+    if (view === 'memory') loadKnowledge();
   }
 
   // ===================== المزامنة (2.0: الكتابة من كل الأجهزة) =====================
@@ -1190,7 +1191,65 @@
    */
   const MCP_RESULT_AR = { ok: '✅ نجحت', error: '⚠️ خطأ', disabled: '⛔ معطّلة', invalid: '❓ معاملات غير صالحة', unknown_tool: '❓ أداة غير معروفة' };
 
+  // ===================== 4.0.1: المعرفة (قائمة المراجعة والنسخة المحلية لـ MCP) =====================
+  async function loadKnowledge() {
+    const card = $('#knowledgeReviewCard');
+    const row = $('#knowledgeDeviceKeyRow');
+    if (!isCommander()) {
+      showWhen(card, false);
+      showWhen(row, false);
+      return;
+    }
+    let status;
+    let review;
+    try {
+      status = await api('/api/knowledge/status');
+      review = await api('/api/knowledge/review');
+    } catch (e) {
+      return;
+    }
+    if (row) {
+      showWhen(row, true);
+      $('#knowledgeDeviceKey').checked = status.deviceKey.enabled;
+    }
+    if (!card) return;
+    showWhen(card, true);
+    $('#knowledgeReviewCount').textContent = String(review.items.length);
+    $('#knowledgeStatusLine').textContent = status.summaryAr;
+    $('#knowledgeReviewList').replaceChildren(
+      ...(review.items.length
+        ? review.items.map((it) =>
+            el('div', {
+              className: 'list-item',
+              children: [
+                el('div', { children: [el('span', { className: 'badge', text: it.node.typeAr }), el('strong', { text: ' ' + it.node.title })] }),
+                it.node.body && it.node.body !== it.node.title ? el('p', { className: 'small', text: it.node.body.slice(0, 600) }) : null,
+                el('p', { className: 'small muted', text: it.reasonAr + (it.node.projectId ? ' · مشروع: ' + it.node.projectId : '') + ' · ' + formatDateAr(it.createdAt) }),
+                it.links.length ? el('p', { className: 'small muted', text: it.links.map((l) => '↔ ' + l.relationAr + ': ' + l.title).join(' · ') }) : null,
+                el('div', {
+                  className: 'card-actions',
+                  children: [
+                    button('✅ اعتماد', 'btn-primary btn-sm', (e) => decideKnowledge(it.id, 'approve', e.currentTarget)),
+                    button('❌ رفض', 'btn-ghost btn-sm', (e) => decideKnowledge(it.id, 'reject', e.currentTarget)),
+                  ],
+                }),
+              ],
+            })
+          )
+        : [el('p', { className: 'muted small', text: 'لا اقتراحات تنتظر مراجعتك.' })])
+    );
+  }
+
+  async function decideKnowledge(id, decision, btn) {
+    await busy(btn, async () => {
+      const d = await api('/api/knowledge/review/decide', { id: id, decision: decision });
+      toast(d.messageAr, 'ok');
+      await loadKnowledge();
+    });
+  }
+
   async function loadMcpTools() {
+    loadKnowledge();
     const box = $('#mcpTools');
     if (!box || !isCommander()) return;
     let r;
@@ -2814,6 +2873,20 @@
     $('[data-form="setup"]').elements.masterPassword.addEventListener('input', (e) => updateStrength(e.target.value));
     $('#secretSearch').addEventListener('input', renderSecrets);
     $('#secretFilter').addEventListener('change', renderSecrets);
+    // 4.0.1: النسخة المحلية من مفتاح المعرفة لأدوات الذكاء على هذا الجهاز
+    $('#knowledgeDeviceKey').addEventListener('change', async (e) => {
+      const input = e.currentTarget;
+      input.disabled = true;
+      try {
+        const d = await api('/api/knowledge/device-key', { enabled: input.checked });
+        toast(d.messageAr, 'ok', 8000);
+      } catch (err) {
+        input.checked = !input.checked;
+        toast('❌ ' + err.message, 'error');
+      } finally {
+        input.disabled = false;
+      }
+    });
     $('#voiceSpeaker').addEventListener('change', (e) => {
       store.set('ttsSpeaker', e.target.value);
       toast('🔊 الصوت المختار: ' + e.target.value, 'ok');

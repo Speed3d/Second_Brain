@@ -8,6 +8,9 @@
  *               - يتفاوض على إصدار البروتوكول، ويدعم ping.
  *               - أخطاء JSON-RPC صحيحة (-32700 / -32600 / -32601 / -32602)، وأخطاء الأدوات تُعاد بـ isError.
  *               - لا يطبع أي شيء على stdout غير رسائل البروتوكول، ولا يصل إلى الخزنة إطلاقاً.
+ *               - 4.0.1: يقرأ المعرفة ويكتب فيها بالنسخة المحلية من مفتاح المعرفة (لا مفتاح البيانات)،
+ *                 وأداتان جديدتان: second_brain_search_knowledge و second_brain_get_decision_log.
+ *                 وتسجيل الذاكرة ينشئ عقدة محادثة، وقراراته اقتراحات تنتظر موافقة القائد.
  *               - 3.8.0: مفتاح تشغيل لكل أداة (المعطّلة لا تظهر وتُرفض)، وسجل عمليات بلا محتوى (mcp-controls.ts).
  *               - 3.8.2 (ISS-043): يُعلن listChanged ويرسل notifications/tools/list_changed عند تغيّر الأدوات المعطّلة،
  *                 فتظهر الأداة المعادة في المحادثة المفتوحة بلا محادثة جديدة.
@@ -24,6 +27,11 @@ import { querySharedAIMemory, recordSharedAIMemory } from '../features/ai-memory
 import { scanAndAnalyzeProject } from '../features/project-indexer/project-scanner.ts';
 import { checkWriteAccess } from '../features/sync/sync-context.ts';
 import { appendMcpAudit, isMcpToolEnabled, readDisabledMcpTools, type McpAuditResult } from '../features/ai-memory/mcp-controls.ts';
+import { readDeviceKnowledgeKey } from '../features/knowledge/knowledge-access.ts';
+import { conversationNodeId, migrateSharedMemoryToKnowledge } from '../features/knowledge/knowledge-migration.ts';
+import { decisionLog, neighborsOf, searchKnowledge } from '../features/knowledge/knowledge-query.ts';
+import { readKnowledgeGraph, type KnowledgeGraph } from '../features/knowledge/knowledge-store.ts';
+import { NODE_TYPES, type KnowledgeNode, type KnowledgeNodeType } from '../features/knowledge/knowledge-types.ts';
 
 /** إصدارات البروتوكول المدعومة (الأحدث أولاً) */
 export const SUPPORTED_MCP_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
@@ -239,11 +247,91 @@ export function buildMcpTools(): ToolDefinition[] {
           title: requiredString(args, 'title', 300),
           summaryAr: requiredString(args, 'summaryAr', 20000),
           keyDecisionsAr: ((decisions as string[] | undefined) ?? []).slice(0, 50).map((d) => d.slice(0, 2000)),
+          // 4.0.1: القرارات اقتراحات في قائمة المراجعة، لا تدخل المعرفة إلا بموافقة القائد
+          knowledgeReview: true,
         });
-        return JSON.stringify({ ok: true, id: saved.id, createdAt: saved.createdAt });
+        // عقدة المحادثة واقتراحات القرارات الآن إن وُجدت النسخة المحلية من مفتاح المعرفة، وإلا عند فتح القائد التالي
+        const kk = readDeviceKnowledgeKey();
+        let knowledge: Record<string, unknown> = { added: false, noteAr: 'تُضاف إلى المعرفة عند فتح الخزنة التالي على هذا الجهاز.' };
+        if (kk) {
+          const r = migrateSharedMemoryToKnowledge(kk, [saved]);
+          knowledge = { added: true, conversationNode: conversationNodeId(saved.id), pendingReview: r.createdReviews, noteAr: 'القرارات تنتظر موافقة القائد في «قائمة مراجعة المعرفة».' };
+        }
+        return JSON.stringify({ ok: true, id: saved.id, createdAt: saved.createdAt, knowledge });
+      },
+    },
+    {
+      name: 'second_brain_search_knowledge',
+      title: 'بحث في المعرفة المترابطة',
+      description: 'يبحث في عُقد المعرفة (القرارات، والحقائق، والمحادثات، والمهام…) بالعربية والإنجليزية. الساري أولاً، والمُستبدَل لا يظهر إلا بطلب. كل عقدة بمعرّفها وجيرانها المباشرين.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'الكلمات المطلوبة' },
+          type: { type: 'string', enum: [...NODE_TYPES], description: 'نوع العقدة (اختياري)' },
+          projectId: { type: 'string', description: 'معرّف المشروع (اختياري)' },
+          includeSuperseded: { type: 'boolean', description: 'إظهار القرارات المُستبدَلة أيضاً' },
+          limit: limitSchema,
+        },
+        required: ['query'],
+        additionalProperties: false,
+      },
+      run: (args) => {
+        const query = requiredString(args, 'query', 500);
+        const type = optionalString(args, 'type', 40);
+        if (type && !(NODE_TYPES as readonly string[]).includes(type)) throw new McpInvalidParamsError(`type يجب أن يكون أحد: ${NODE_TYPES.join(', ')}`);
+        if (args.includeSuperseded !== undefined && typeof args.includeSuperseded !== 'boolean') throw new McpInvalidParamsError('includeSuperseded يجب أن يكون true أو false.');
+        const graph = openKnowledgeForMcp();
+        const hits = searchKnowledge(graph, query, {
+          types: type ? [type as KnowledgeNodeType] : undefined,
+          projectId: optionalString(args, 'projectId', 200),
+          includeSuperseded: args.includeSuperseded === true,
+          limit: readLimit(args),
+        });
+        return JSON.stringify(
+          hits.map((h) => ({ ...compactNode(h.node), score: h.score, neighbors: neighborsOf(graph, h.node.id).slice(0, 10).map((n) => ({ relation: n.edge.type, direction: n.direction, id: n.node.id, type: n.node.type, title: n.node.title })) })),
+          null,
+          2
+        );
+      },
+    },
+    {
+      name: 'second_brain_get_decision_log',
+      title: 'سجل القرارات',
+      description: 'يعيد سجل القرارات لمشروع (أو لكل المشاريع): الأحدث أولاً، ولكل قرار المحادثة التي اتُّخذ فيها، وما استبدله وما استُبدل به، وما أثّر عليه. المُستبدَل يبقى بحالته.',
+      inputSchema: {
+        type: 'object',
+        properties: { projectId: { type: 'string', description: 'معرّف المشروع (اختياري)' }, limit: limitSchema },
+        additionalProperties: false,
+      },
+      run: (args) => {
+        const log = decisionLog(openKnowledgeForMcp(), optionalString(args, 'projectId', 200)).slice(0, readLimit(args));
+        const brief = (n: KnowledgeNode) => ({ id: n.id, title: n.title, date: n.createdAt });
+        return JSON.stringify(
+          log.map((l) => ({ ...compactNode(l.decision), decidedIn: l.decidedIn.map(brief), supersedes: l.supersedes.map(brief), supersededBy: l.supersededBy.map(brief), affects: l.affects.map(brief) })),
+          null,
+          2
+        );
       },
     },
   ];
+}
+
+/**
+ * Hint بالعربي: دالة فتح المعرفة لخادم MCP بالنسخة المحلية من مفتاحها (بلا جلسة الخزنة).
+ *               ترمي برسالة واضحة إن لم تتوفر، فتصل إلى أداة الذكاء خطأً مفهوماً.
+ */
+function openKnowledgeForMcp(): KnowledgeGraph {
+  const kk = readDeviceKnowledgeKey();
+  if (!kk) throw new Error('المعرفة غير متاحة الآن على هذا الجهاز: افتح الخزنة مرة في Second Brain، أو فعّل «المعرفة لأدوات الذكاء والخزنة مقفلة» في بطاقة «🧩 أدوات MCP».');
+  return readKnowledgeGraph(kk);
+}
+
+/**
+ * Hint بالعربي: تلخيص عقدة بشكل مضغوط لأداة الذكاء.
+ */
+export function compactNode(n: KnowledgeNode): Record<string, unknown> {
+  return { id: n.id, type: n.type, title: n.title, body: n.body.length > 2000 ? `${n.body.slice(0, 2000)}…` : n.body, projectId: n.projectId, status: n.status, confidence: n.confidence, source: n.source, date: n.createdAt };
 }
 
 /**

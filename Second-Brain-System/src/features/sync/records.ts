@@ -13,6 +13,7 @@
  *               - obs:<مسار>       ملف واحد من Obsidian
  *               - know:node/<id>   عقدة معرفة (4.0.0). المحتوى نصها المنطقي (JSON)، لا الملف المختوم:
  *                 know:edge/<id>   الختم عشوائي، فالعقدة نفسها على جهازين تعطي البصمة نفسها، والدفعة مشفّرة أصلاً.
+ *                 know:review/<id> عنصر في قائمة مراجعة المعرفة (4.0.1)، فالموافقة على جهاز تصل إلى الآخر.
  *               كل سجل محتواه بايتات، وبصمته SHA-256. التطبيق على الجهاز يتم كمعاملة: إن فشل أي سجل
  *               تُعاد السجلات التي تغيّرت إلى ما كانت عليه.
  * ============================================================================
@@ -30,8 +31,7 @@ import { resealFamilyConversations } from '../conversations/conversation-store.t
 import { FAMILY_LOG_FILE, resealFamilyLog } from '../family-emergency/family-portal.ts';
 import { logSystemInfo } from '../../core/logger.ts';
 import type { SyncContext } from './sync-context.ts';
-import { deriveKnowledgeKey, listKnowledgeFiles, openKnowledgeRecord, removeKnowledgeRecord, writeEdge, writeNode, type KnowledgeRecordKind } from '../knowledge/knowledge-store.ts';
-import { validateEdge, validateNode } from '../knowledge/knowledge-types.ts';
+import { deriveKnowledgeKey, listKnowledgeFiles, openKnowledgeRecord, removeKnowledgeRecord, validateKnowledgeValue, writeKnowledgeValue, type KnowledgeRecordKind } from '../knowledge/knowledge-store.ts';
 
 /** ملفات Obsidian الخاصة بواجهة كل جهاز (لا تُزامَن) */
 export const OBSIDIAN_LOCAL_ONLY = [
@@ -341,23 +341,16 @@ function writeRecords(ctx: SyncContext, vault: UnlockedVault, writes: RecordWrit
     const kk = knowledgeKeyOf(vault);
     if (!kk) throw new Error('سجلات المعرفة تحتاج جلسة القائد.');
     for (const w of knowWrites) {
-      const m = /^(node|edge)\/(.+)$/.exec(recordId(w.key));
+      const m = /^(node|edge|review)\/(.+)$/.exec(recordId(w.key));
       if (!m) throw new Error(`مفتاح معرفة غير صالح في سجل المزامنة: ${w.key.slice(0, 80)}`);
       const kind = m[1] as KnowledgeRecordKind;
       if (w.content === null) {
         removeKnowledgeRecord(kind, m[2], knowledgeDir(ctx));
         continue;
       }
-      const value = JSON.parse(w.content.toString('utf8')) as unknown;
-      if (kind === 'node') {
-        const node = validateNode(value);
-        if (node.id !== m[2]) throw new Error('عقدة معرفة لا تطابق معرّفها في سجل المزامنة.');
-        writeNode(kk, node, knowledgeDir(ctx));
-      } else {
-        const edge = validateEdge(value);
-        if (edge.id !== m[2]) throw new Error('علاقة معرفة لا تطابق معرّفها في سجل المزامنة.');
-        writeEdge(kk, edge, knowledgeDir(ctx));
-      }
+      const value = validateKnowledgeValue(kind, JSON.parse(w.content.toString('utf8')) as unknown);
+      if (value.id !== m[2]) throw new Error('سجل معرفة لا يطابق معرّفه في سجل المزامنة.');
+      writeKnowledgeValue(kk, kind, value, knowledgeDir(ctx));
     }
   }
 

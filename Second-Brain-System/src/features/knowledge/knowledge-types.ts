@@ -81,9 +81,24 @@ export interface KnowledgeEdge {
   createdAt: string;
 }
 
-/** معرّف عقدة أو علاقة: حروف وأرقام وشرطات، ويبدأ بـ K- للعقدة و E- للعلاقة */
+/**
+ * عنصر في قائمة المراجعة (4.0.1): عقدة مقترحة مع علاقاتها، لا تدخل المعرفة إلا بموافقة القائد
+ * (docs/11: «لا يدخل شيء دون موافقته»). المرفوض يبقى بحالته، فلا يُقترح ثانية.
+ */
+export interface KnowledgeReviewItem {
+  id: string;
+  proposal: { node: KnowledgeNode; edges: KnowledgeEdge[] };
+  reasonAr: string;
+  createdAt: string;
+  status: 'pending' | 'approved' | 'rejected';
+  decidedAt?: string;
+}
+
+/** معرّف عقدة أو علاقة أو عنصر مراجعة: حروف وأرقام وشرطات، ويبدأ بـ K- للعقدة و E- للعلاقة و R- للمراجعة */
 export const NODE_ID = /^K-[A-Za-z0-9-]{1,160}$/;
 export const EDGE_ID = /^E-[a-f0-9]{24}$/;
+export const REVIEW_ID = /^R-[A-Za-z0-9-]{1,160}$/;
+const REVIEW_STATUSES = ['pending', 'approved', 'rejected'] as const;
 
 const MAX_TITLE = 300;
 const MAX_BODY = 20000;
@@ -135,6 +150,25 @@ export function validateEdge(value: unknown): KnowledgeEdge {
   const id = edgeIdFor(v.type, v.from, v.to);
   if (v.id !== id) throw new Error('معرّف العلاقة لا يطابق نوعها وطرفيها.');
   return { id, type: v.type, from: v.from, to: v.to, createdAt: v.createdAt };
+}
+
+/**
+ * Hint بالعربي: دالة التحقق من عنصر مراجعة: العقدة المقترحة وعلاقاتها تُفحص كما لو كُتبت فعلاً،
+ *               وكل علاقة يجب أن تمسّ العقدة المقترحة (فلا يُدسّ ربط بين عُقد أخرى).
+ */
+export function validateReviewItem(value: unknown): KnowledgeReviewItem {
+  const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  if (typeof v.id !== 'string' || !REVIEW_ID.test(v.id)) throw new Error('معرّف عنصر المراجعة غير صالح.');
+  const proposal = (v.proposal && typeof v.proposal === 'object' ? v.proposal : {}) as Record<string, unknown>;
+  const node = validateNode(proposal.node);
+  if (!Array.isArray(proposal.edges) || proposal.edges.length > 20) throw new Error('علاقات الاقتراح غير صالحة.');
+  const edges = proposal.edges.map(validateEdge);
+  if (edges.some((e) => e.from !== node.id && e.to !== node.id)) throw new Error('علاقة في الاقتراح لا تمسّ العقدة المقترحة.');
+  if (typeof v.reasonAr !== 'string' || v.reasonAr.length > 2000) throw new Error('سبب الاقتراح غير صالح.');
+  if (!isIso(v.createdAt)) throw new Error('تاريخ الاقتراح غير صالح.');
+  if (!oneOf(REVIEW_STATUSES, v.status)) throw new Error('حالة الاقتراح غير معروفة.');
+  if (v.decidedAt !== undefined && !isIso(v.decidedAt)) throw new Error('تاريخ القرار غير صالح.');
+  return { id: v.id, proposal: { node, edges }, reasonAr: v.reasonAr, createdAt: v.createdAt, status: v.status, ...(v.decidedAt ? { decidedAt: v.decidedAt as string } : {}) };
 }
 
 /**

@@ -17,15 +17,17 @@ import type { SealedData } from '../../shared/types.ts';
 import { openWithKey, sealWithKey } from '../../core/crypto-engine.ts';
 import { loadSystemConfig } from '../../core/config-manager.ts';
 import { ensureDirectoryExists, removePathSync, writeFileAtomic } from '../../shared/file-helpers.ts';
-import { validateEdge, validateNode, type KnowledgeEdge, type KnowledgeNode } from './knowledge-types.ts';
+import { validateEdge, validateNode, validateReviewItem, type KnowledgeEdge, type KnowledgeNode, type KnowledgeReviewItem } from './knowledge-types.ts';
 
 /** ثابت الاشتقاق: تغييره يعني مفتاحاً جديداً، فلا يُغيَّر إلا مع ترحيل */
 const KK_INFO = Buffer.from('second-brain/knowledge/v1');
 const FILE_FORMAT = 'second-brain-knowledge';
 
-/** نوعا السجل ومجلداهما */
-export type KnowledgeRecordKind = 'node' | 'edge';
-const SUBDIR: Record<KnowledgeRecordKind, string> = { node: 'nodes', edge: 'edges' };
+/** أنواع السجل ومجلداتها (المراجعة منذ 4.0.1) */
+export type KnowledgeRecordKind = 'node' | 'edge' | 'review';
+const SUBDIR: Record<KnowledgeRecordKind, string> = { node: 'nodes', edge: 'edges', review: 'review' };
+const PREFIX: Record<KnowledgeRecordKind, string> = { node: 'K-', edge: 'E-', review: 'R-' };
+type KnowledgeValue = KnowledgeNode | KnowledgeEdge | KnowledgeReviewItem;
 
 /** الملف على القرص */
 interface KnowledgeFile {
@@ -38,6 +40,8 @@ interface KnowledgeFile {
 export interface KnowledgeGraph {
   nodes: Map<string, KnowledgeNode>;
   edges: Map<string, KnowledgeEdge>;
+  /** قائمة المراجعة (كل الحالات، فالمرفوض لا يُقترح ثانية) */
+  reviews: Map<string, KnowledgeReviewItem>;
   /** ملفات لم تُفتح بهذا المفتاح أو تالفة (تُعدّ ولا تُحذف) */
   unreadable: number;
 }
@@ -59,7 +63,7 @@ export function resolveKnowledgeDir(): string {
 }
 
 /** اسم ملف سجل المعرفة */
-export const KNOWLEDGE_FILE = /^(K-[A-Za-z0-9-]{1,160}|E-[a-f0-9]{24})\.enc\.json$/;
+export const KNOWLEDGE_FILE = /^(K-[A-Za-z0-9-]{1,160}|E-[a-f0-9]{24}|R-[A-Za-z0-9-]{1,160})\.enc\.json$/;
 
 function fileFor(dir: string, kind: KnowledgeRecordKind, id: string): string {
   const name = `${id}.enc.json`;
@@ -70,7 +74,7 @@ function fileFor(dir: string, kind: KnowledgeRecordKind, id: string): string {
 /**
  * Hint بالعربي: دالة ختم سجل (عقدة أو علاقة) بمحتواه كما يُكتب على القرص.
  */
-export function sealKnowledgeRecord(kk: Buffer, value: KnowledgeNode | KnowledgeEdge): string {
+export function sealKnowledgeRecord(kk: Buffer, value: KnowledgeValue): string {
   const file: KnowledgeFile = { format: FILE_FORMAT, version: 1, sealed: sealWithKey(JSON.stringify(value), kk) };
   return JSON.stringify(file);
 }
@@ -78,11 +82,38 @@ export function sealKnowledgeRecord(kk: Buffer, value: KnowledgeNode | Knowledge
 /**
  * Hint بالعربي: دالة فتح ملف سجل والتحقق من شكله. ترمي إن لم يُفتح أو لم يكن صالحاً.
  */
-export function openKnowledgeRecord(kk: Buffer, kind: KnowledgeRecordKind, raw: string | Buffer): KnowledgeNode | KnowledgeEdge {
+export function openKnowledgeRecord(kk: Buffer, kind: KnowledgeRecordKind, raw: string | Buffer): KnowledgeValue {
   const file = JSON.parse(raw.toString()) as Partial<KnowledgeFile>;
   if (file.format !== FILE_FORMAT || file.version !== 1 || !file.sealed) throw new Error('ملف معرفة بصيغة غير معروفة.');
   const value = JSON.parse(openWithKey(file.sealed, kk).toString('utf8')) as unknown;
-  return kind === 'node' ? validateNode(value) : validateEdge(value);
+  return validateKnowledgeValue(kind, value);
+}
+
+/**
+ * Hint بالعربي: التحقق من قيمة حسب نوع سجلها (للقرص وللمزامنة).
+ */
+export function validateKnowledgeValue(kind: KnowledgeRecordKind, value: unknown): KnowledgeValue {
+  return kind === 'node' ? validateNode(value) : kind === 'edge' ? validateEdge(value) : validateReviewItem(value);
+}
+
+/**
+ * Hint بالعربي: دالة كتابة عنصر مراجعة (بعد التحقق منه).
+ */
+export function writeReviewItem(kk: Buffer, item: KnowledgeReviewItem, dir: string = resolveKnowledgeDir()): KnowledgeReviewItem {
+  const clean = validateReviewItem(item);
+  const file = fileFor(dir, 'review', clean.id);
+  ensureDirectoryExists(path.dirname(file));
+  writeFileAtomic(file, sealKnowledgeRecord(kk, clean));
+  return clean;
+}
+
+/**
+ * Hint بالعربي: دالة كتابة أي سجل حسب نوعه (للمزامنة).
+ */
+export function writeKnowledgeValue(kk: Buffer, kind: KnowledgeRecordKind, value: unknown, dir: string = resolveKnowledgeDir()): KnowledgeValue {
+  if (kind === 'node') return writeNode(kk, value as KnowledgeNode, dir);
+  if (kind === 'edge') return writeEdge(kk, value as KnowledgeEdge, dir);
+  return writeReviewItem(kk, value as KnowledgeReviewItem, dir);
 }
 
 /**
@@ -124,13 +155,13 @@ export function removeKnowledgeRecord(kind: KnowledgeRecordKind, id: string, dir
  */
 export function listKnowledgeFiles(dir: string = resolveKnowledgeDir()): Array<{ kind: KnowledgeRecordKind; id: string; file: string }> {
   const out: Array<{ kind: KnowledgeRecordKind; id: string; file: string }> = [];
-  for (const kind of ['node', 'edge'] as const) {
+  for (const kind of ['node', 'edge', 'review'] as const) {
     const sub = path.join(dir, SUBDIR[kind]);
     if (!fs.existsSync(sub)) continue;
     for (const name of fs.readdirSync(sub)) {
       if (!KNOWLEDGE_FILE.test(name)) continue;
       const id = name.slice(0, -'.enc.json'.length);
-      if ((kind === 'node') !== id.startsWith('K-')) continue;
+      if (!id.startsWith(PREFIX[kind])) continue;
       out.push({ kind, id, file: path.join(sub, name) });
     }
   }
@@ -141,13 +172,14 @@ export function listKnowledgeFiles(dir: string = resolveKnowledgeDir()): Array<{
  * Hint بالعربي: دالة قراءة المعرفة كلها بمفتاحها. ملف لا يُفتح يُعدّ ولا يُسقط القراءة.
  */
 export function readKnowledgeGraph(kk: Buffer, dir: string = resolveKnowledgeDir()): KnowledgeGraph {
-  const graph: KnowledgeGraph = { nodes: new Map(), edges: new Map(), unreadable: 0 };
+  const graph: KnowledgeGraph = { nodes: new Map(), edges: new Map(), reviews: new Map(), unreadable: 0 };
   for (const f of listKnowledgeFiles(dir)) {
     try {
       const value = openKnowledgeRecord(kk, f.kind, fs.readFileSync(f.file));
       if (value.id !== f.id) throw new Error('اسم الملف لا يطابق المعرّف');
       if (f.kind === 'node') graph.nodes.set(value.id, value as KnowledgeNode);
-      else graph.edges.set(value.id, value as KnowledgeEdge);
+      else if (f.kind === 'edge') graph.edges.set(value.id, value as KnowledgeEdge);
+      else graph.reviews.set(value.id, value as KnowledgeReviewItem);
     } catch {
       graph.unreadable += 1;
     }

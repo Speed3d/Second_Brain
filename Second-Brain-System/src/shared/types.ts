@@ -225,6 +225,8 @@ export interface SharedAIMemoryEntry {
   summaryAr: string;
   keyDecisionsAr: string[];
   createdAt: string;
+  /** 4.0.1: حُفظ عبر MCP بعد أساس المعرفة، فقراراته تذهب إلى قائمة المراجعة لا إلى المعرفة مباشرة */
+  knowledgeReview?: boolean;
 }
 
 /**

@@ -310,6 +310,10 @@
           <h2>🧩 أدوات MCP على هذا الجهاز، وسجل عملياتها</h2>
           <p class="small muted">ما يستطيع Claude Code و Antigravity فعله بذاكرتك. الأداة المعطّلة لا تظهر لهما وتُرفض فوراً، بلا إعادة تشغيل. الإعداد خاص بهذا الجهاز. السجل يحفظ: الوقت، والبرنامج، والأداة، والمشروع، والنتيجة، <strong>بلا أي محتوى</strong>.</p>
           <div class="list compact" id="mcpTools"></div>
+          <label class="check list-item" data-commander-only data-shown-when="0" id="knowledgeDeviceKeyRow" hidden>
+            <input type="checkbox" id="knowledgeDeviceKey" />
+            <span><strong>🧠 المعرفة لأدوات الذكاء والخزنة مقفلة</strong> <span class="muted small">نسخة من مفتاح المعرفة على هذا الجهاز فقط، لا يقرؤها غيرك ولا تُزامَن. بلا علامة: تصل أدوات الذكاء إلى المعرفة بعد فتح الخزنة فقط.</span></span>
+          </label>
           <h3>📜 آخر العمليات</h3>
           <div class="list compact" id="mcpAudit"></div>
         </div>
@@ -473,6 +477,12 @@
         </div>
         <p class="muted">قرارات وملخصات العمل التي تحفظها أدوات الذكاء (Claude Code و Antigravity) عبر خادم الذاكرة، وأرشيف المحادثات في Obsidian.</p>
         <div class="report" id="memoryReport" hidden></div>
+        <div class="card" data-commander-only data-shown-when="0" id="knowledgeReviewCard" hidden>
+          <h2>🧾 قائمة مراجعة المعرفة <span class="badge" id="knowledgeReviewCount"></span></h2>
+          <p class="small muted">قرارات اقترحتها أدوات الذكاء. لا يدخل شيء إلى المعرفة إلا باعتمادك، والمرفوض لا يُقترح ثانية.</p>
+          <div class="list compact" id="knowledgeReviewList"></div>
+          <p class="small muted" id="knowledgeStatusLine"></p>
+        </div>
         <label class="filters"><span class="sr-only">بحث</span><input type="search" id="memorySearch" placeholder="🔎 بحث في الذاكرة…" /></label>
         <div class="list" id="memoryList"></div>
       </section>

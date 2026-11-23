@@ -13,7 +13,7 @@
 
 import type { SharedAIMemoryEntry } from '../../shared/types.ts';
 import { querySharedAIMemory } from '../ai-memory/shared-memory-service.ts';
-import { readKnowledgeGraph, resolveKnowledgeDir, writeEdge, writeNode } from './knowledge-store.ts';
+import { readKnowledgeGraph, resolveKnowledgeDir, writeEdge, writeNode, writeReviewItem } from './knowledge-store.ts';
 import { edgeIdFor, NODE_SOURCES, validateEdge, validateNode, type KnowledgeNode, type KnowledgeSource } from './knowledge-types.ts';
 
 /** معرّف عقدة المحادثة المرحّلة من سجل ذاكرة */
@@ -31,6 +31,8 @@ export interface MigrationResult {
   entries: number;
   createdNodes: number;
   createdEdges: number;
+  /** اقتراحات أُضيفت إلى قائمة المراجعة (سجلات 4.0.1 فما بعد) */
+  createdReviews: number;
   alreadyMigrated: number;
   skipped: number;
 }
@@ -79,7 +81,7 @@ export function migrateSharedMemoryToKnowledge(
   entries: SharedAIMemoryEntry[] = querySharedAIMemory(),
   dir: string = resolveKnowledgeDir()
 ): MigrationResult {
-  const result: MigrationResult = { entries: entries.length, createdNodes: 0, createdEdges: 0, alreadyMigrated: 0, skipped: 0 };
+  const result: MigrationResult = { entries: entries.length, createdNodes: 0, createdEdges: 0, createdReviews: 0, alreadyMigrated: 0, skipped: 0 };
   const existing = readKnowledgeGraph(kk, dir);
   for (const entry of entries) {
     let built;
@@ -105,20 +107,36 @@ export function migrateSharedMemoryToKnowledge(
       result.skipped += 1;
       continue;
     }
-    for (const d of built.decisions) {
-      if (!existing.nodes.has(d.id)) {
-        writeNode(kk, d, dir);
-        result.createdNodes += 1;
+    if (entry.knowledgeReview) {
+      // 4.0.1: سجل حُفظ عبر MCP بعد أساس المعرفة: القرارات اقتراحات تنتظر موافقة القائد، لا عُقد مباشرة
+      built.decisions.forEach((d, i) => {
+        const id = reviewItemId(entry.id, i + 1);
+        if (existing.reviews.has(id) || existing.nodes.has(d.id)) return;
+        writeReviewItem(kk, { id, proposal: { node: d, edges: [edges[i]] }, reasonAr: `قرار من ${d.source} في «${built.conversation.title}»`, createdAt: entry.createdAt, status: 'pending' }, dir);
+        result.createdReviews += 1;
+      });
+    } else {
+      // سجلات ما قبل 4.0.1: كانت القرارات معتمدة في الذاكرة أصلاً، فتُرحَّل عُقداً مباشرة
+      for (const d of built.decisions) {
+        if (!existing.nodes.has(d.id)) {
+          writeNode(kk, d, dir);
+          result.createdNodes += 1;
+        }
       }
-    }
-    for (const e of edges) {
-      if (!existing.edges.has(e.id)) {
-        writeEdge(kk, e, dir);
-        result.createdEdges += 1;
+      for (const e of edges) {
+        if (!existing.edges.has(e.id)) {
+          writeEdge(kk, e, dir);
+          result.createdEdges += 1;
+        }
       }
     }
     writeNode(kk, built.conversation, dir);
     result.createdNodes += 1;
   }
   return result;
+}
+
+/** معرّف اقتراح القرار رقم n (من 1) في سجل ذاكرة */
+export function reviewItemId(memoryId: string, n: number): string {
+  return `R-DEC-${memoryId.replace(/[^A-Za-z0-9-]/g, '-').slice(0, 140)}-${n}`;
 }

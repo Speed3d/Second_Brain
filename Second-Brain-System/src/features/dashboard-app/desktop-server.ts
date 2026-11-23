@@ -42,6 +42,7 @@ import { getVaultRoutes } from './routes/vault-routes.ts';
 import { getPortalRoutes } from './routes/portal-routes.ts';
 import { getAuthRoutes } from './routes/auth-routes.ts';
 import { getMcpRoutes } from './routes/mcp-routes.ts';
+import { getKnowledgeRoutes } from './routes/knowledge-routes.ts';
 import { getStateRoutes } from './routes/state-routes.ts';
 import { getVaultSession, peekActiveVault } from './session-manager.ts';
 
@@ -88,6 +89,7 @@ export function buildRouteTable(): RouteDefinition[] {
     ...getPortalRoutes(),
     ...getAuthRoutes(),
     ...getMcpRoutes(),
+    ...getKnowledgeRoutes(),
     ...getMaintenanceRoutes(),
     ...getConversationRoutes(),
     ...getVoiceRoutes(),

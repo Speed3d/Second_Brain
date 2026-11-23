@@ -42,6 +42,7 @@ import { runPhase2SecurityTests } from './28-phase2-security.test.ts';
 import { runMcpControlsTests } from './26-mcp-controls.test.ts';
 import { runSecurityReviewLeadsTests } from './29-security-review-leads.test.ts';
 import { runKnowledgeBaseTests } from './30-knowledge-base.test.ts';
+import { runKnowledgeMcpReviewTests } from './31-knowledge-mcp-review.test.ts';
 import { setupIsolatedTestEnvironment } from './test-environment.ts';
 
 /**
@@ -202,6 +203,11 @@ export async function executeAllSystemTests(): Promise<void> {
       name: '30. اختبارات أساس المعرفة (الأنواع والتحقق، ومفتاح المعرفة المشتق، والتخزين المشفّر، والترحيل من الذاكرة المشتركة، والاستعلامات، والمزامنة بين جهازين، والنسخ الاحتياطية)',
       file: 'tests/30-knowledge-base.test.ts',
       runner: runKnowledgeBaseTests,
+    },
+    {
+      name: '31. اختبارات المعرفة مع MCP وقائمة المراجعة (النسخة المحلية من المفتاح، والاقتراحات والاعتماد والرفض، وأدوات MCP الجديدة، والمسارات، ومزامنة القرار)',
+      file: 'tests/31-knowledge-mcp-review.test.ts',
+      runner: runKnowledgeMcpReviewTests,
     },
   ];
 

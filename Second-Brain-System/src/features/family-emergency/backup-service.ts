@@ -98,7 +98,7 @@ export function isExpectedBackupEntry(rel: string): boolean {
     /(^|\/)vault\.aes256\.json$/.test(rel) ||
     /(^|\/)data\/conversations\/[a-z0-9-]{8,64}\.enc\.json$/.test(rel) ||
     /(^|\/)data\/family-log\/flog-[0-9]{13}-[a-f0-9]{8}\.enc\.json$/.test(rel) ||
-    /(^|\/)data\/knowledge\/(nodes\/K-[A-Za-z0-9-]{1,160}|edges\/E-[a-f0-9]{24})\.enc\.json$/.test(rel)
+    /(^|\/)data\/knowledge\/(nodes\/K-[A-Za-z0-9-]{1,160}|edges\/E-[a-f0-9]{24}|review\/R-[A-Za-z0-9-]{1,160})\.enc\.json$/.test(rel)
   );
 }
 

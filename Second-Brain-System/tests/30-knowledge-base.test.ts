@@ -135,7 +135,7 @@ export async function runKnowledgeBaseTests(): Promise<string[]> {
       { ...memoryEntry('MEM-3-CCCC', ['قرار']), createdAt: 'تاريخ تالف' },
     ];
     const r1 = migrateSharedMemoryToKnowledge(kk, entries, mdir);
-    assert.deepEqual({ ...r1 }, { entries: 3, createdNodes: 4, createdEdges: 2, alreadyMigrated: 0, skipped: 1 }, 'محادثتان، وقراران (الفارغ لا يُحسب)، والتالف يُتجاهل');
+    assert.deepEqual({ ...r1 }, { entries: 3, createdNodes: 4, createdEdges: 2, createdReviews: 0, alreadyMigrated: 0, skipped: 1 }, 'محادثتان، وقراران (الفارغ لا يُحسب)، والتالف يُتجاهل');
     const mg = readKnowledgeGraph(kk, mdir);
     assert.equal(mg.nodes.get(conversationNodeId('MEM-1-AAAA'))?.body, entries[0].summaryAr, 'الملخص كاملاً');
     assert.equal(mg.nodes.get(decisionNodeId('MEM-1-AAAA', 2))?.body, 'القرار الثاني');

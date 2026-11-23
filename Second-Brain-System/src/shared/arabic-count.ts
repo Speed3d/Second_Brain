@@ -31,6 +31,10 @@ export const AR_COUNT = {
   file: { one: 'ملف واحد', two: 'ملفان', few: 'ملفات', many: 'ملفاً', single: 'ملف' },
   name: { one: 'اسم واحد', two: 'اسمان', few: 'أسماء', many: 'اسماً', single: 'اسم' },
   entry: { one: 'مدخل واحد', two: 'مدخلان', few: 'مدخلات', many: 'مدخلاً', single: 'مدخل' },
+  // 4.0.1: المعرفة
+  node: { one: 'عقدة واحدة', two: 'عقدتان', few: 'عُقد', many: 'عقدة', single: 'عقدة' },
+  edge: { one: 'علاقة واحدة', two: 'علاقتان', few: 'علاقات', many: 'علاقة', single: 'علاقة' },
+  proposal: { one: 'اقتراح واحد', two: 'اقتراحان', few: 'اقتراحات', many: 'اقتراحاً', single: 'اقتراح' },
 } satisfies Record<string, ArabicCountForms>;
 
 /**

@@ -270,7 +270,7 @@ export async function runIntegrationTests(): Promise<string[]> {
   assert.equal(lines.length, 2, 'ردّان فقط (initialize و tools/list) ولا رد على الإشعار');
   const parsed = lines.map((l) => JSON.parse(l));
   assert.deepEqual(parsed.map((p) => p.id), [1, 2]);
-  assert.equal(parsed[1].result.tools.length, 6);
+  assert.equal(parsed[1].result.tools.length, 8, 'الأدوات الثماني (منذ 4.0.1)');
   passedChecks.push('اختبار بروتوكول MCP (الإشعارات، ping، التفاوض على الإصدار، رموز الأخطاء، البحث، وتشغيل فعلي عبر stdio بمخرجات نظيفة) بنجاح.');
 
   // 5. Git + سجل التغييرات عند التغيّر فقط + حماية الملاحظات اليدوية

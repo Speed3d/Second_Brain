@@ -45,7 +45,7 @@ export async function runMcpControlsTests(): Promise<string[]> {
   // ===================== 1. المفاتيح =====================
   handleMcpJsonRpcRequest({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', clientInfo: { name: 'claude-code', version: '9.9.9' } } });
   const list = (): string[] => ((handleMcpJsonRpcRequest({ jsonrpc: '2.0', id: 2, method: 'tools/list' }) as { result: { tools: Array<{ name: string }> } }).result.tools.map((t) => t.name));
-  assert.equal(list().length, 6, 'الأدوات الست مفعّلة افتراضياً');
+  assert.equal(list().length, 8, 'الأدوات الثماني مفعّلة افتراضياً');
   setMcpToolEnabled('second_brain_record_shared_memory', false);
   assert.equal(isMcpToolEnabled('second_brain_record_shared_memory'), false);
   assert.ok(!list().includes('second_brain_record_shared_memory'), 'المعطّلة لا تظهر');
@@ -56,7 +56,7 @@ export async function runMcpControlsTests(): Promise<string[]> {
   assert.deepEqual([...readDisabledMcpTools()].sort(), ['second_brain_get_commander_profile', 'second_brain_record_shared_memory']);
   setMcpToolEnabled('second_brain_record_shared_memory', true);
   setMcpToolEnabled('second_brain_get_commander_profile', true);
-  assert.equal(list().length, 6, 'التفعيل يعيدها فوراً');
+  assert.equal(list().length, 8, 'التفعيل يعيدها فوراً');
   passedChecks.push('اختبار مفاتيح الأدوات (الست مفعّلة افتراضياً، والمعطّلة لا تظهر وتُرفض برسالة واضحة، والتفعيل يعيدها فوراً بلا إعادة تشغيل) بنجاح.');
 
   // ===================== 2. السجل بلا محتوى =====================
@@ -143,7 +143,7 @@ export async function runMcpControlsTests(): Promise<string[]> {
     send({ jsonrpc: '2.0', method: 'notifications/initialized' });
     send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
     await waitFor(() => toolsReply(2) !== undefined, 5000, 'القائمة الأولى');
-    assert.equal(toolsReply(2)!.length, 6);
+    assert.equal(toolsReply(2)!.length, 8);
     setMcpToolEnabled('second_brain_search_memory', false);
     await waitFor(() => notices() === 1, 5000, 'إشعار التعطيل من العملية');
     send({ jsonrpc: '2.0', id: 3, method: 'tools/list' });
@@ -170,7 +170,7 @@ export async function runMcpControlsTests(): Promise<string[]> {
     const { masterPassword, emergencyKey } = ensureTestVault();
     const cookie = String((await postJson(port, '/api/vault/unlock', { key: masterPassword })).headers['set-cookie'] ?? '').split(';')[0];
     const got = JSON.parse((await rawRequest(port, { path: '/api/mcp/tools', headers: { Cookie: cookie } })).body) as { tools: Array<{ name: string; enabled: boolean }>; audit: unknown[] };
-    assert.equal(got.tools.length, 6);
+    assert.equal(got.tools.length, 8);
     assert.ok(got.tools.every((t) => t.enabled));
     assert.equal(got.audit.length, 1);
     assert.equal((await postJson(port, '/api/mcp/tools', { name: 'second_brain_search_memory', enabled: false }, cookie)).status, 200);
